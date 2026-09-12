@@ -78,8 +78,8 @@ namespace CustomRadioStations
             config.SetValue<Control>(INI_SECTION_KEYBOARD_CONTROLS, "Volume Down", KB_Volume_Down);
 
             config.SetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Toggle: D-Pad Left +", GP_Toggle);
-            config.SetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Skip Track", Control.VehicleHandbrake);
-            config.SetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Volume Up", GP_Skip_Track);
+            config.SetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Skip Track", GP_Skip_Track);
+            config.SetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Volume Up", GP_Volume_Up);
             config.SetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Volume Down", GP_Volume_Down);
 
             config.Save();

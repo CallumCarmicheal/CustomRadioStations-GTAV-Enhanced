@@ -1,29 +1,17 @@
-﻿using System.IO;
-using System.Reflection;
+using System;
+using System.IO;
 
 public class PathHelper
 {
-    private static int MaxPathLength { get; set; }
-
-    static PathHelper()
-    {
-        // reflection
-        FieldInfo maxPathField = typeof(Path).GetField("MaxPath",
-            BindingFlags.Static |
-            BindingFlags.GetField |
-            BindingFlags.NonPublic);
-
-        // invoke the field gettor, which returns 260
-        MaxPathLength = (int)maxPathField.GetValue(null);
-        //the NUL terminator is part of MAX_PATH https://msdn.microsoft.com/en-us/library/aa365247.aspx#maxpath
-        MaxPathLength--; //So decrease by 1
-
-    }
-
+    // The original code reflected the private System.IO.Path.MaxPath field.
+    // That is a runtime implementation detail and can disappear/change. Keep the
+    // original compatibility limit without private reflection. Windows long-path
+    // support may allow more, but irrKlang/older plugins are not guaranteed to.
+    private const int LegacyMaxPathWithoutNull = 259;
 
     public static bool IsPathWithinLimits(string fullPathAndFilename)
     {
-        return fullPathAndFilename.Length <= MaxPathLength;
+        return !string.IsNullOrEmpty(fullPathAndFilename) &&
+               fullPathAndFilename.Length <= LegacyMaxPathWithoutNull;
     }
-
 }

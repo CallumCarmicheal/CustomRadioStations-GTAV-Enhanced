@@ -12,6 +12,8 @@
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
+    <SHVDN2Path Condition="'$(SHVDN2Path)' == ''">$(MSBuildProjectDirectory)\lib\ScriptHookVDotNet2.dll</SHVDN2Path>
+    <IrrKlangPath Condition="'$(IrrKlangPath)' == ''">$(MSBuildProjectDirectory)\lib\irrKlang.NET4.dll</IrrKlangPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -33,6 +35,8 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <LangVersion>7.1</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup />
   <PropertyGroup>
@@ -40,10 +44,12 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="irrKlang.NET4">
-      <HintPath>..\packages\irrKlang-64bit-1.6.0\bin\dotnet-4-64\irrKlang.NET4.dll</HintPath>
+      <HintPath>$(IrrKlangPath)</HintPath>
+      <Private>true</Private>
     </Reference>
-    <Reference Include="ScriptHookVDotNet2, Version=2.10.12.0, Culture=neutral, processorArchitecture=AMD64">
-      <HintPath>..\packages\ScriptHookVDotNet2.2.10.12\lib\net48\ScriptHookVDotNet2.dll</HintPath>
+    <Reference Include="ScriptHookVDotNet2">
+      <HintPath>$(SHVDN2Path)</HintPath>
+      <Private>false</Private>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -57,7 +63,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DecoratorHelper.cs" />
     <Compile Include="Decorators.cs" />
     <Compile Include="GeneralEvents.cs" />
     <Compile Include="GTAVFunctions.cs" />
@@ -97,17 +102,17 @@
     </None>
     <None Include="packages.config" />
   </ItemGroup>
-  <ItemGroup>
-    <Content Include="output_assets\Drag all to your installation directory.txt" />
-    <Content Include="output_assets\ikpFlac.dll" />
-    <Content Include="output_assets\ikpMP3.dll" />
-    <Content Include="output_assets\scripts\Drag all to your installation directory.txt" />
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <PropertyGroup>
-    <PostBuildEvent>COPY "$(TargetDir)$(TargetFileName)" "C:\Program Files\Rockstar Games\Grand Theft Auto V\scripts"
-xcopy /y "$(TargetDir)$(TargetName).pdb" "C:\Program Files\Rockstar Games\Grand Theft Auto V\scripts"</PostBuildEvent>
-  </PropertyGroup>
+  <Target Name="ValidateExternalDependencies" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(SHVDN2Path)')" Text="Missing ScriptHookVDotNet2.dll. Copy it from the SAME ScriptHookVDotNet Enhanced release you install in GTA V into CustomRadioStations\lib, or pass /p:SHVDN2Path=..." />
+    <Error Condition="!Exists('$(IrrKlangPath)')" Text="Missing irrKlang.NET4.dll. Copy the x64 .NET 4 irrKlang assembly into CustomRadioStations\lib, or pass /p:IrrKlangPath=..." />
+  </Target>
+  <Target Name="StageBuild" AfterTargets="Build">
+    <MakeDir Directories="$(MSBuildProjectDirectory)\dist\scripts" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(MSBuildProjectDirectory)\dist\scripts" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(MSBuildProjectDirectory)\dist\scripts" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+    <Copy SourceFiles="$(IrrKlangPath)" DestinationFolder="$(MSBuildProjectDirectory)\dist\scripts" Condition="Exists('$(IrrKlangPath)')" />
+  </Target>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">

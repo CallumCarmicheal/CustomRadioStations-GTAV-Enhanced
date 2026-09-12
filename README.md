@@ -1,12 +1,26 @@
 # Custom Radio Stations for GTA V
 
-![](https://cdn.discordapp.com/attachments/522091797216755712/539716314806222878/Grand_Theft_Auto_V_Screenshot_2019.01.29_-_08.57.21.32.png)
+> **Enhanced compatibility port (2026) and rewrite**
 
-## Just trying to install?
-If you are looking for help on how to install and use this mod, please see [this thread](https://forums.gta5-mods.com/topic/22729/script-wip-custom-radio-stations-more-radio-wheels-configurable-tracklists-and-more) for info.
+The project provides multiple local custom radio stations/wheels, track metadata, commercials and a virtual "live broadcast" timeline rather than turning the feature into a simple music player.
 
-## Building / Contributing
+## Build
 
-* You will need to install ScriptHookVDotNet 2.10.12.0 via the NuGet package manager; it is already referenced in the project.
-* You will need to download a version of irrKlang (ex: irrKlang-64bit-1.6.0) from [here](https://www.ambiera.com/irrklang/downloads.html) and copy the folder to match the relative path `\packages\irrKlang-64bit-1.6.0\bin\dotnet-4-64\irrKlang.NET4.dll`
-* Assets are not included in this repo. You can grab them from the latest official download [here](https://www.gta5-mods.com/scripts/custom-radio-stations-net#description_tab).
+Put these files in `CustomRadioStations\lib`:
+
+- `ScriptHookVDotNet2.dll` from the exact ScriptHookVDotNet Enhanced release installed in GTA V
+- `irrKlang.NET4.dll` from the x64 .NET 4 irrKlang runtime used by the original mod
+
+Then run:
+
+```powershell
+.\build-enhanced.ps1 -Configuration Release
+```
+
+The build is staged under `CustomRadioStations\dist\scripts` rather than copied into a hard-coded GTA Legacy directory.
+
+For actual runtime playback you also need the original mod's x64 irrKlang native runtime/codecs (normally `irrKlang.dll`, `ikpMP3.dll`, and `ikpFlac.dll` as applicable) and the original UI assets such as `iconbg.png` / `iconhl.png`. They were not committed to the upstream GitHub repository and are therefore not bundled here.
+
+## Port status
+
+The source no longer pattern-scans or patches GTA memory. The custom-station core has been hardened against missing/malformed stations, failed audio files, null radio-wheel state, vehicle transition edge cases and optional native-wheel failures. Native wheel organization now fails open: if Enhanced cannot enumerate/lock native stations, GTA's stock station controls are left alone.

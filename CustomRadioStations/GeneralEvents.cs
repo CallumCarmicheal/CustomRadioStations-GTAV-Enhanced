@@ -35,7 +35,9 @@ namespace EventHelper
 
         private static void UpdatePlayerEnteredExitedVehicle()
         {
-            if (Player.IsInVehicle())
+            if (Player == null || !Player.Exists()) return;
+
+            if (Player.IsInVehicle() && Player.CurrentVehicle != null && Player.CurrentVehicle.Exists())
             {
                 enteredVehicleNewHandle = Player.CurrentVehicle.Handle;
 
@@ -95,6 +97,8 @@ namespace EventHelper
         public static void Update()
         {
             Player = Game.Player.Character;
+            if (Player == null || !Player.Exists()) return;
+
             PlayerVehicle = Player.CurrentVehicle;
 
             UpdatePlayerEnteredExitedVehicle();

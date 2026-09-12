@@ -30,8 +30,8 @@ namespace CustomRadioStations
 
             ScriptSettings config = ScriptSettings.Load(path);
 
-            var description = config.GetValue<string>("GENERAL", "DESCRIPTION", null);
-            Category.Description = description.Replace("\\n", "\r\n");
+            var description = config.GetValue<string>("GENERAL", "DESCRIPTION", string.Empty);
+            Category.Description = (description ?? string.Empty).Replace("\\n", "\r\n");
         }
 
         public void RescanStationTracklists()

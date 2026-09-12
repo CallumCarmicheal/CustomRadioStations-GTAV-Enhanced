@@ -63,6 +63,7 @@ namespace CustomRadioStations
             FileName = Path.GetFileNameWithoutExtension(filepath);
             _displayName = DisplayNameFromFilename();
             //Length = Source.PlayLength;
+            if (Source == null) throw new InvalidDataException("irrKlang could not create a sound source for: " + filepath);
             HasTrackList = TracklistExists(filepath);
         }
 
@@ -77,6 +78,7 @@ namespace CustomRadioStations
             FileName = Path.GetFileNameWithoutExtension(filepath);
             _displayName = DisplayNameFromFilename();
             //Length = Source.PlayLength;
+            if (Source == null) throw new InvalidDataException("irrKlang could not create a sound source for: " + filepath);
             HasTrackList = TracklistExists(shortcutPath);
         }
 
@@ -105,14 +107,21 @@ namespace CustomRadioStations
                     if (lines[i].Length > 0)
                         CreateTracklist(lines[i]);
                 }
-                return true;
+                return Tracklist.Count > 0;
             }
+            Tracklist = null;
             return false;
         }
 
         private void CreateTracklist(string inputFromINI)
         {
+            if (string.IsNullOrWhiteSpace(inputFromINI) || inputFromINI.Length < 8)
+                return;
+
             if (uint.TryParse(inputFromINI.Substring(0, 2), out uint h)
+                && inputFromINI.Length > 5
+                && inputFromINI[2] == ':'
+                && inputFromINI[5] == ':'
                 && uint.TryParse(inputFromINI.Substring(3, 2), out uint m)
                 && uint.TryParse(inputFromINI.Substring(6, 2), out uint s))
             {
@@ -136,11 +145,12 @@ namespace CustomRadioStations
                 if (artistTitle.Contains("||"))
                 {
                     // Separate it by the string ||
-                    string[] splitTexts = artistTitle.Split(new string[] { "||" }, StringSplitOptions.RemoveEmptyEntries);
+                    string[] splitTexts = artistTitle.Split(new string[] { "||" }, StringSplitOptions.None);
 
-                    // Set Artist and Title with beginning and ending whitespaces removed
-                    var artist = splitTexts[0].Trim();
-                    var title = splitTexts[1].Trim();
+                    // Set Artist and Title with beginning and ending whitespaces removed.
+                    // Malformed metadata should never take the whole radio script down.
+                    var artist = splitTexts.Length > 0 ? splitTexts[0].Trim() : string.Empty;
+                    var title = splitTexts.Length > 1 ? splitTexts[1].Trim() : string.Empty;
 
                     Tracklist.Add(new Track(startTime, artist, title));
                 }
@@ -153,7 +163,7 @@ namespace CustomRadioStations
 
         public Track GetCurrentTrack()
         {
-            if (!HasTrackList) return null;
+            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0) return null;
 
             //Track trk = Tracklist.FirstOrDefault(t => t.StartTime <= PlayPosition());
             Track trk = Tracklist.LastOrDefault(t => PlayPosition() >= t.StartTime);
@@ -170,50 +180,49 @@ namespace CustomRadioStations
 
         public int GetCurrentTrackIndex()
         {
-            if (!HasTrackList) return 0;
+            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0) return -1;
 
             return Tracklist.IndexOf(GetCurrentTrack());
         }
 
         public Track GetNextTrack()
         {
-            if (!HasTrackList) return null;
+            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0) return null;
 
             Track t = GetCurrentTrack();
+            if (t == null) return Tracklist[0];
 
-            if (Tracklist.Last() == t)
-            {
-                return Tracklist.First();
-            }
-            else
-            {
-                return Tracklist[Tracklist.IndexOf(t) + 1];
-            }
+            int index = Tracklist.IndexOf(t);
+            return index < 0 || index >= Tracklist.Count - 1 ? Tracklist[0] : Tracklist[index + 1];
         }
 
         public void SkipToNextTrack()
         {
-            if (!HasTrackList) return;
+            if (!HasTrackList || Sound == null) return;
 
-            Sound.PlayPosition = GetNextTrack().StartTime;
+            Track next = GetNextTrack();
+            if (next != null) Sound.PlayPosition = next.StartTime;
         }
 
         public uint TimeUntilNextTrack()
         {
-            if (Sound == null || PlayPosition() == -1) return 0;
-            if (!HasTrackList) return Length - PlayPosition();
+            if (Sound == null) return 0;
+            uint pPos = PlayPosition();
+            uint remaining = Length > pPos ? Length - pPos : 0u;
+            if (!HasTrackList) return remaining;
 
             Track t = GetNextTrack();
-            uint pPos = PlayPosition();
+            if (t == null) return remaining;
 
-            return t.StartTime > pPos ? t.StartTime - pPos + 1 : Length - pPos;
+            return t.StartTime > pPos ? t.StartTime - pPos + 1 : remaining;
         }
 
         public uint GetRandomPlayPosition(float percentMinBound = 0.2f, float percentMaxBound = 0.7f)
         {
-            if (Sound == null) return 0;
+            if (Sound == null || Sound.PlayLength == 0) return 0;
             uint min = (uint)(percentMinBound * Sound.PlayLength);
             uint max = (uint)(percentMaxBound * Sound.PlayLength);
+            if (max <= min) return Math.Min(min, Sound.PlayLength - 1);
 
             // Get random uint within bounds
             var buffer = new byte[sizeof(uint)];
@@ -226,6 +235,8 @@ namespace CustomRadioStations
 
         public void PlaySound(/*Vector3 sourcePosition,*/bool resume, bool playLooped = false, bool playPaused = false, bool allowMultipleInstances = false, bool allowSoundEffects = false)
         {
+            if (Source == null) return;
+
             if (allowMultipleInstances || (!allowMultipleInstances && (Sound == null || Sound != null && (Sound.Finished || IsPaused))))
             {
                 // Vector3D sourcePos = SoundHelperIK.Vector3ToVector3D(GameplayCamera.GetOffsetFromWorldCoords(sourcePosition));
@@ -290,7 +301,7 @@ namespace CustomRadioStations
 
         public bool IsFinishedPlaying()
         {
-            return Sound.Finished;
+            return Sound == null || Sound.Finished;
         }
 
         /// <summary>
@@ -300,7 +311,7 @@ namespace CustomRadioStations
         /// <returns></returns>
         public uint PlayPosition()
         {
-            return Sound.PlayPosition;
+            return Sound == null ? 0u : Sound.PlayPosition;
         }
 
         // 3D Sound stuff only
@@ -323,27 +334,39 @@ namespace CustomRadioStations
 
         public void Dispose()
         {
-            Sound.Stop();
-            Sound.Dispose();
-            Source.Dispose();
+            if (Sound != null)
+            {
+                Sound.Stop();
+                Sound.Dispose();
+                Sound = null;
+            }
+
+            if (Source != null)
+            {
+                Source.Dispose();
+                Source = null;
+            }
         }
 
         public static ISoundEngine SoundEngine = new ISoundEngine();
 
         public static void ManageSoundEngine()
         {
+            if (SoundEngine == null) return;
             //SoundEngine.SetListenerPosition(new Vector3D(0, 0, 0), new Vector3D(0, 0, 1), new Vector3D(0, 0, 0), new Vector3D(0, 1, 0));
             SoundEngine.Update();
         }
 
         public static void StepVolume(float step, int decimals)
         {
+            if (SoundEngine == null) return;
             float temp = (float)Math.Round(SoundEngine.SoundVolume + step, decimals, MidpointRounding.ToEven);
             SoundEngine.SoundVolume = temp.LimitToRange(0f, 1f);
         }
 
         public static void DisposeSoundEngine()
         {
+            if (SoundEngine == null) return;
             SoundEngine.StopAllSounds();
             SoundEngine.Dispose();
         }

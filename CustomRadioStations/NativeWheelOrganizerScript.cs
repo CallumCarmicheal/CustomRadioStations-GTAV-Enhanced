@@ -24,6 +24,8 @@ namespace CustomRadioStations
 
         bool loaded;
 
+        bool nativeWheelWasApplied;
+
         public NativeWheelOrganizerScript()
         {
             Tick += OnTick;
@@ -36,14 +38,17 @@ namespace CustomRadioStations
 
         private void OnAbort(object sender, EventArgs e)
         {
-            UnhideAllStations();
+            if (nativeWheelWasApplied) UnhideAllStations();
         }
 
         void UnhideAllStations()
         {
+            if (maxStationCount <= 0) return;
             for (int i = 0; i < maxStationCount; i++)
             {
-                RadioNativeFunctions._LOCK_RADIO_STATION(RadioNativeFunctions.GET_RADIO_STATION_NAME(i), false);
+                string station = RadioNativeFunctions.GET_RADIO_STATION_NAME(i);
+                if (!string.IsNullOrWhiteSpace(station))
+                    RadioNativeFunctions._LOCK_RADIO_STATION(station, false);
             }
         }
 
@@ -52,19 +57,21 @@ namespace CustomRadioStations
             Logger.Init(logPath);
 
             Logger.Log("Game version: " + Game.Version.ToString(), logPath);
-            if ((int)Game.Version < (int)GameVersion.VER_1_0_1493_0_STEAM)
-                Logger.Log("WARNING: Can't use the native radio wheel organizer on this game version. " +
-                    "Please update to 1.0.1493.0 or higher.");
-
             Logger.Log("Checking all native and add-on radios...", logPath);
 
             maxStationCount = RadioNativeFunctions._MAX_RADIO_STATION_INDEX();
 
             validStationNames = new List<string>();
+            if (maxStationCount <= 0)
+            {
+                Logger.Log("Native radio wheel organization disabled: GTA did not report a valid station count.", logPath);
+                return;
+            }
 
             for (int i = 0; i < maxStationCount; i++)
             {
                 string stationName = RadioNativeFunctions.GET_RADIO_STATION_NAME(i);
+                if (string.IsNullOrWhiteSpace(stationName)) continue;
                 validStationNames.Add(stationName);
                 string s = "Name: " + stationName + " || Proper name: " + RadioNativeFunctions.GetRadioStationProperName(i);
                 Logger.Log(s, logPath);
@@ -75,7 +82,7 @@ namespace CustomRadioStations
 
         void GetOrganizationLists()
         {
-            if (!File.Exists(orgList)) return;
+            if (!File.Exists(orgList) || validStationNames == null || validStationNames.Count == 0) return;
             
             string[] lines = File.ReadAllLines(orgList);
 
@@ -100,37 +107,38 @@ namespace CustomRadioStations
                     continue;
                 }
 
-                if (WheelListIsPopulated() && validStationNames.Any(s => s.Equals(l)))
+                if (WheelListIsPopulated() && validStationNames.Any(s => string.Equals(s, l, StringComparison.OrdinalIgnoreCase)))
                 {
                     NativeWheel.WheelList.Last().stationList.Add(l);
                     lastLineWasWheelName = false;
                 }
             }
 
+            // Drop headers that ended up with no valid GTA stations. An empty wheel
+            // must never activate control interception or hide the whole stock wheel.
+            NativeWheel.WheelList.RemoveAll(w => w == null || w.stationList == null || w.stationList.Count == 0);
+
             if (WheelListIsPopulated())
             {
                 currentWheel = NativeWheel.WheelList[0];
-
-                //foreach (var w in NativeWheel.WheelList)
-                //{
-                //    w.stationList.ForEach(x => Logger.Log(x, logPath));
-                //}
             }
         }
 
         bool WheelListIsPopulated()
         {
-            return NativeWheel.WheelList.Count > 0;
+            return NativeWheel.WheelList != null && NativeWheel.WheelList.Count > 0;
         }
 
         void OnTick(object sender, EventArgs e)
         {
             if (GTAFunction.HasCheatStringJustBeenEntered("radio_reload"))
             {
-                UnhideAllStations();
-                NativeWheel.WheelList = null;
+                if (nativeWheelWasApplied) UnhideAllStations();
+                nativeWheelWasApplied = false;
+                NativeWheel.WheelList = new List<NativeWheel>();
                 currentWheel = null;
-                GetOrganizationLists();
+                LogAllStations();
+                if (maxStationCount > 0) GetOrganizationLists();
                 loaded = true;
                 Wait(150);
             }
@@ -140,20 +148,27 @@ namespace CustomRadioStations
                 if (!loaded && Game.Player.CanControlCharacter)
                 {
                     LogAllStations();
-                    GetOrganizationLists();
+                    if (maxStationCount > 0) GetOrganizationLists();
                     loaded = true;
                 }
 
                 ShowHelpTexts();
 
-                ControlWheelChange();
-
-                if (Event_JUST_OPENED_OnNextOpen)
+                // Native wheel organization is optional. Only intercept GTA's normal
+                // radio controls when a valid NativeWheels.cfg produced at least one
+                // usable wheel. Otherwise fail open and leave the stock radio untouched.
+                if (WheelListIsPopulated() && currentWheel != null)
                 {
-                    OnJustOpened();
-                }
+                    ControlWheelChange();
 
-                DisableNativeScrollRadioControls();
+                    if (Event_JUST_OPENED_OnNextOpen)
+                    {
+                        OnJustOpened();
+                    }
+
+                    if (RadioNativeFunctions.NativeWheelLockAvailable)
+                        DisableNativeScrollRadioControls();
+                }
 
                 Event_JUST_OPENED_OnNextOpen = false;
             }
@@ -178,15 +193,13 @@ namespace CustomRadioStations
 
             if (!Config.DisplayHelpText) return;
 
-            string nativeWheelText = (int)Game.Version < (int)GameVersion.VER_1_0_1493_0_STEAM ?
-                "" :
-                (WheelListIsPopulated() ?
+            string nativeWheelText = WheelListIsPopulated() && currentWheel != null ?
                 "\n" +
                 GTAFunction.InputString(ControlNextWheel) + " " +
                 GTAFunction.InputString(ControlPrevWheel) +
                 " : Next / Prev Wheel\n" +
                 "Wheel: " + currentWheel.Name
-                : "");
+                : "";
 
             GTAFunction.DisplayHelpTextThisFrame(
                 GTAFunction.InputString(Config.KB_Toggle, Config.GP_Toggle) +
@@ -204,7 +217,7 @@ namespace CustomRadioStations
 
         void ControlWheelChange()
         {
-            if (!WheelListIsPopulated()) return;
+            if (!WheelListIsPopulated() || currentWheel == null) return;
 
             if (Game.IsControlJustPressed(2, ControlNextWheel))
             {
@@ -220,7 +233,7 @@ namespace CustomRadioStations
 
         void UpdateWheelThisFrame()
         {
-            if (!WheelListIsPopulated()) return;
+            if (!WheelListIsPopulated() || currentWheel == null || validStationNames == null) return;
 
             // Unhide all listed radios
             foreach (var station in currentWheel.stationList)
@@ -231,10 +244,22 @@ namespace CustomRadioStations
             // Hide any valid station name that isn't in the current wheel station list
             foreach (var station in validStationNames)
             {
-                if (!currentWheel.stationList.Any(s => s.Equals(station)))
+                if (!currentWheel.stationList.Any(s => string.Equals(s, station, StringComparison.OrdinalIgnoreCase)))
                 {
                     RadioNativeFunctions._LOCK_RADIO_STATION(station, true);
                 }
+            }
+
+            if (!RadioNativeFunctions.NativeWheelLockAvailable)
+            {
+                Logger.Log("Native radio wheel organization disabled for this session because station locking is unavailable.", logPath);
+                NativeWheel.WheelList.Clear();
+                currentWheel = null;
+                nativeWheelWasApplied = false;
+            }
+            else
+            {
+                nativeWheelWasApplied = true;
             }
         }
 

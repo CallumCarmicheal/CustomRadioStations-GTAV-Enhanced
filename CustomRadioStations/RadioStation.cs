@@ -33,6 +33,8 @@ namespace CustomRadioStations
         uint stoppedPositionSound;
         bool allSoundsPlayedOnce;
 
+        public bool HasPlayableSounds => SoundFileTimePairs != null && SoundFileTimePairs.Count > 0;
+
         public RadioStation(WheelCategory correspondingWheelCategory, IEnumerable<string> songFilesPaths)
         {
             corrWheelCat = correspondingWheelCategory;
@@ -46,7 +48,7 @@ namespace CustomRadioStations
                 {
                     //Logger.Log(path.Substring(path.LastIndexOf('\\') + 1));
                     // If file is a shortcut, get the real path first
-                    if (Path.GetExtension(path) == ".lnk")
+                    if (string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase))
                     {
                         string str = GeneralHelper.GetShortcutTargetFile(path);
 
@@ -100,7 +102,9 @@ namespace CustomRadioStations
         /// </summary>
         private void UpdateRadioLengthWithCurrentSound()
         {
+            if (CurrentSound == null) return;
             var s = SoundFileTimePairs.Find(x => x.SoundFile == CurrentSound);
+            if (s == null) return;
             if (!CurrentSound.LengthAdded)
             {
                 s.StartTime = TotalLength;
@@ -167,17 +171,25 @@ namespace CustomRadioStations
 
                     lastCommIndex = GetNewRandom(lastCommIndex, commercials.Count);
                     var commercial = commercials[lastCommIndex];
-                    var pair = new SoundFileTimePair(
-                            string.IsNullOrEmpty(commercial.Item2) ? new SoundFile(commercial.Item1) :
-                            new SoundFile(commercial.Item1, commercial.Item2), 0);
 
-                    if (lastIndex >= SoundFileTimePairs.Count)
+                    try
                     {
-                        SoundFileTimePairs.Add(pair);
+                        var pair = new SoundFileTimePair(
+                                string.IsNullOrEmpty(commercial.Item2) ? new SoundFile(commercial.Item1) :
+                                new SoundFile(commercial.Item1, commercial.Item2), 0);
+
+                        if (lastIndex >= SoundFileTimePairs.Count)
+                        {
+                            SoundFileTimePairs.Add(pair);
+                        }
+                        else
+                        {
+                            SoundFileTimePairs.Insert(lastIndex, pair);
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        SoundFileTimePairs.Insert(lastIndex, pair);
+                        Logger.Log("WARNING: Could not load commercial '" + commercial.Item1 + "': " + ex.Message);
                     }
                 }
             }
@@ -212,6 +224,7 @@ namespace CustomRadioStations
         {
             if (CurrentSound == null || CurrentSound.Sound == null) return;
 
+            if (corrWheelCat == null || corrWheelCat.ItemList == null || corrWheelCat.ItemList.Count == 0) return;
             WheelCategoryItem radioWheelItem = corrWheelCat.ItemList[0];
 
             radioWheelItem.Name = Name + "\n" + CurrentSound.DisplayName;
@@ -221,10 +234,13 @@ namespace CustomRadioStations
         {
             if (CurrentSound == null || CurrentSound.Sound == null) return;
 
-            if (Game.Player.Character.IsInVehicle())
+            Ped player = Game.Player.Character;
+            if (player != null && player.Exists() && player.IsInVehicle())
             {
-                string[] info = CurrentSound.DisplayName.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
-                RadioNativeFunctions.UpdateRadioScaleform(Name, info[0], info[1]);
+                string[] info = (CurrentSound.DisplayName ?? string.Empty).Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
+                string artist = info.Length > 0 ? info[0] : string.Empty;
+                string track = info.Length > 1 ? info[1] : string.Empty;
+                RadioNativeFunctions.UpdateRadioScaleform(Name, artist, track);
             }
         }
 
@@ -235,10 +251,22 @@ namespace CustomRadioStations
 
         public void Play()
         {
+            if (!HasPlayableSounds)
+            {
+                Logger.Log("WARNING: Station '" + Name + "' has no playable sounds; ignoring play request.");
+                return;
+            }
+
             if (!hasPlayedOnce)
             {
                 CurrentSound = SoundFileTimePairs[0].SoundFile;
                 CurrentSound.PlaySound(false, false, true);
+                if (CurrentSound.Sound == null)
+                {
+                    Logger.Log("WARNING: irrKlang failed to start station '" + Name + "'.");
+                    CurrentSound = null;
+                    return;
+                }
                 CurrentSound.Sound.PlayPosition = CurrentSound.GetRandomPlayPosition();
                 CurrentSound.Sound.Paused = false;
                 UpdateRadioLengthWithCurrentSound();
@@ -263,50 +291,66 @@ namespace CustomRadioStations
 
         private void ResumeContinuity()
         {
-            uint elapsed = (uint)(DateTime.Now - lastPlayedTime).TotalMilliseconds;
+            if (!HasPlayableSounds) return;
 
-            var lastPlayedSound = SoundFileTimePairs[lastPlayedSoundIndex].SoundFile;
+            uint elapsed = lastPlayedTime == default(DateTime)
+                ? 0u
+                : (uint)Math.Min(uint.MaxValue, Math.Max(0d, (DateTime.Now - lastPlayedTime).TotalMilliseconds));
 
-            //UI.ShowSubtitle("allSoundsPlayed: " + allSoundsPlayedOnce +
-            //    "\nelapsed ms: " + elapsed +
-            //    "\nRemaining playtime: " + (lastPlayedSound.Length - stoppedPositionSound));
+            int safeLastIndex = Math.Max(0, Math.Min(lastPlayedSoundIndex, SoundFileTimePairs.Count - 1));
+            var lastPlayedSound = SoundFileTimePairs[safeLastIndex].SoundFile;
 
-            if (allSoundsPlayedOnce)
+            if (allSoundsPlayedOnce && TotalLength > 0)
             {
                 uint newPlayPos = GetTimeFromPrevious(stoppedPositionStation, TotalLength, elapsed);
-                var stPair = SoundFileTimePairs.LastOrDefault(s => newPlayPos >= s.StartTime);
-                CurrentSound = stPair != default(SoundFileTimePair) ? stPair.SoundFile : SoundFileTimePairs[0].SoundFile;
+                var stPair = SoundFileTimePairs.LastOrDefault(s => newPlayPos >= s.StartTime) ?? SoundFileTimePairs[0];
+                CurrentSound = stPair.SoundFile;
                 CurrentSound.PlaySound(true, false, true);
+                if (CurrentSound.Sound == null) { CurrentSound = null; return; }
                 UpdateRadioLengthWithCurrentSound();
-                CurrentSound.Sound.PlayPosition = Math.Max(0, newPlayPos - stPair.StartTime);
+                CurrentSound.Sound.PlayPosition = Math.Min(CurrentSound.Length > 0 ? CurrentSound.Length - 1 : 0u,
+                    newPlayPos >= stPair.StartTime ? newPlayPos - stPair.StartTime : 0u);
                 CurrentSoundIsPaused = false;
-            }
-            else if (elapsed < lastPlayedSound.Length - stoppedPositionSound)
-            {
-                CurrentSound = SoundFileTimePairs[lastPlayedSoundIndex].SoundFile;
-                CurrentSound.PlaySound(true, false, true);
-                CurrentSound.Sound.PlayPosition = Math.Min(CurrentSound.Length - 1, stoppedPositionSound + elapsed);
-                CurrentSoundIsPaused = false;
-                UpdateRadioLengthWithCurrentSound();
             }
             else
             {
-                CurrentSound = lastPlayedSoundIndex != SoundFileTimePairs.Count - 1 ?
-                    SoundFileTimePairs[lastPlayedSoundIndex + 1].SoundFile : SoundFileTimePairs[0].SoundFile;
-                CurrentSound.PlaySound(true);
-                UpdateRadioLengthWithCurrentSound();
+                uint remaining = lastPlayedSound.Length > stoppedPositionSound
+                    ? lastPlayedSound.Length - stoppedPositionSound
+                    : 0u;
+
+                if (elapsed < remaining)
+                {
+                    CurrentSound = lastPlayedSound;
+                    CurrentSound.PlaySound(true, false, true);
+                    if (CurrentSound.Sound == null) { CurrentSound = null; return; }
+                    uint maxPos = CurrentSound.Length > 0 ? CurrentSound.Length - 1 : 0u;
+                    CurrentSound.Sound.PlayPosition = Math.Min(maxPos, stoppedPositionSound + elapsed);
+                    CurrentSoundIsPaused = false;
+                    UpdateRadioLengthWithCurrentSound();
+                }
+                else
+                {
+                    CurrentSound = safeLastIndex != SoundFileTimePairs.Count - 1
+                        ? SoundFileTimePairs[safeLastIndex + 1].SoundFile
+                        : SoundFileTimePairs[0].SoundFile;
+                    CurrentSound.PlaySound(true);
+                    if (CurrentSound.Sound == null) { CurrentSound = null; return; }
+                    UpdateRadioLengthWithCurrentSound();
+                }
             }
 
             UpdateWheelInfo();
-            if (CurrentSound.HasTrackList)
+            if (CurrentSound != null && CurrentSound.HasTrackList)
                 UpdateTrackUpdateTimer();
         }
 
         private uint GetTimeFromPrevious(uint previous, uint duration, uint elapsed)
         {
-            uint adjElapsed = elapsed - (duration - previous);
-            uint time = (previous + elapsed) > duration ? adjElapsed % duration : previous + elapsed;
-            return time == duration ? 0 : time;
+            if (duration == 0) return 0;
+            // Use 64-bit arithmetic so long real-time gaps cannot wrap uint before modulo.
+            ulong normalizedPrevious = previous % duration;
+            ulong time = (normalizedPrevious + elapsed) % duration;
+            return (uint)time;
         }
 
         public void Stop()
@@ -315,14 +359,18 @@ namespace CustomRadioStations
 
             // Get stopped position
             var stPair = SoundFileTimePairs.Find(s => s.SoundFile == CurrentSound);
+            if (stPair == null) return;
             stoppedPositionStation = stPair.StartTime + CurrentSound.PlayPosition();
             lastPlayedTime = DateTime.Now;
             lastPlayedSoundIndex = SoundFileTimePairs.IndexOf(stPair);
             stoppedPositionSound = CurrentSound.PlayPosition();
 
             // Set name in wheel to just the station name
-            WheelCategoryItem radioWheelItem = corrWheelCat.ItemList[0];
-            radioWheelItem.Name = Name;
+            if (corrWheelCat != null && corrWheelCat.ItemList != null && corrWheelCat.ItemList.Count > 0)
+            {
+                WheelCategoryItem radioWheelItem = corrWheelCat.ItemList[0];
+                radioWheelItem.Name = Name;
+            }
 
             //CurrentSound.StopSound();
             CurrentSoundIsPaused = true;
@@ -334,18 +382,28 @@ namespace CustomRadioStations
         
         private void PlayNextSound()
         {
-            int currentSoundIndex = 0;
+            if (!HasPlayableSounds) return;
+
+            int currentSoundIndex = -1;
             if (CurrentSound != null)
             {
-                currentSoundIndex = SoundFileTimePairs.IndexOf(SoundFileTimePairs.Find(s => s.SoundFile == CurrentSound));
+                currentSoundIndex = SoundFileTimePairs.FindIndex(s => s.SoundFile == CurrentSound);
                 CurrentSound.StopSound();
             }
 
-            // Set next in list
-            currentSoundIndex = currentSoundIndex < SoundFileTimePairs.Count - 1 ? currentSoundIndex + 1 : 0;
+            // Set next in list; -1 naturally advances to index 0.
+            currentSoundIndex = currentSoundIndex >= 0 && currentSoundIndex < SoundFileTimePairs.Count - 1
+                ? currentSoundIndex + 1
+                : 0;
 
             CurrentSound = SoundFileTimePairs[currentSoundIndex].SoundFile;
             CurrentSound.PlaySound(true);
+            if (CurrentSound.Sound == null)
+            {
+                Logger.Log("WARNING: Failed to start next audio file on station '" + Name + "'.");
+                CurrentSound = null;
+                return;
+            }
             UpdateRadioLengthWithCurrentSound();
             UpdateWheelInfo();
             UpdateTrackUpdateTimer();
@@ -379,11 +437,11 @@ namespace CustomRadioStations
         {
             get
             {
-                return CurrentSound.IsPaused;
+                return CurrentSound != null && CurrentSound.IsPaused;
             }
             set
             {
-                CurrentSound.IsPaused = value;
+                if (CurrentSound != null) CurrentSound.IsPaused = value;
             }
         }
 

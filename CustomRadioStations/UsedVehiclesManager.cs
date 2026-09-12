@@ -14,7 +14,7 @@ namespace CustomRadioStations
 
         public static bool IsUsedVehicle(Vehicle vehicle)
         {
-            return Vehicles.Exists(x => x.Handle == vehicle.Handle);
+            return vehicle != null && vehicle.Exists() && Vehicles.Exists(x => x.Handle == vehicle.Handle);
         }
 
         private static UsedVehicle GetFromList(Vehicle vehicle)
@@ -24,7 +24,9 @@ namespace CustomRadioStations
 
         private static void AddVehicle(Vehicle vehicle, StationWheelPair pair)
         {
-            if (Vehicles.Count == 20)
+            if (vehicle == null || !vehicle.Exists()) return;
+
+            if (Vehicles.Count >= 20)
                 Vehicles.RemoveAt(0);
 
             Vehicles.Add(new UsedVehicle(vehicle, pair));
@@ -62,6 +64,7 @@ namespace CustomRadioStations
 
                 //StationWheelPair pair = StationWheelPair.List.Find(x => x.Station == item.radioInfo.Station);
                 StationWheelPair pair = StationWheelPair.List.Find(x => x.Equals(item.radioInfo));
+                if (pair == null) return;
 
                 WheelVars.CurrentRadioWheel = pair.Wheel;
                 WheelVars.CurrentRadioWheel.SelectedCategory = pair.Category;
