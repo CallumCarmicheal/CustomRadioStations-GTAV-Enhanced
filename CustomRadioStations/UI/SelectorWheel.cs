@@ -33,9 +33,7 @@ namespace SelectorWheel {
     }
 
     public class Wheel {
-        public string WheelName {
-            get; set;
-        }
+        public string WheelName { get; set; }
         private bool _visible;
         public int CurrentCatIndex = 0;
         public List<WheelCategory> Categories = new List<WheelCategory>();
@@ -60,9 +58,7 @@ namespace SelectorWheel {
         Color TextureCatBgHighlightColor;
         double TextureCatBgHighlightSizeMultiple;
 
-        public Func<Color> HighlightColorProvider {
-            private get; set;
-        }
+        public Func<Color> HighlightColorProvider { private get; set; }
 
         private Size _textureSize;
         public Size TextureSize {
@@ -510,9 +506,7 @@ namespace SelectorWheel {
         void ControlCategorySelection() {
             Color selectedHighlightColor = TextureCatBgHighlightColor;
             if (HighlightColorProvider != null) {
-                try {
-                    selectedHighlightColor = HighlightColorProvider();
-                } catch { }
+                try { selectedHighlightColor = HighlightColorProvider(); } catch { }
             }
 
             foreach (var cat in Categories) {
@@ -1005,12 +999,8 @@ namespace SelectorWheel {
         public Texture CategoryTexture;
         public Texture BackgroundTexture;
         public Texture HighlightTexture;
-        public string Description {
-            get; set;
-        }
-        public bool IsRadioOff {
-            get; set;
-        }
+        public string Description { get; set; }
+        public bool IsRadioOff { get; set; }
 
         /// <summary>
         /// Instantiates a new category for use in a selection wheel.
@@ -1089,9 +1079,7 @@ namespace SelectorWheel {
     public class WheelCategoryItem {
         public string Name;
         public Texture ItemTexture;
-        public string Description {
-            get; set;
-        }
+        public string Description { get; set; }
 
         /// <summary>
         /// Instantiate a new item to be later added to a WheelCategory.
@@ -1113,15 +1101,9 @@ namespace SelectorWheel {
     }
 
     public class Texture {
-        public string Path {
-            get; set;
-        }
-        public int Index {
-            get; set;
-        }
-        public int DrawLevel {
-            get; set;
-        }
+        public string Path { get; set; }
+        public int Index { get; set; }
+        public int DrawLevel { get; set; }
 
         private CustomSprite _sprite;
         private bool _validationAttempted;

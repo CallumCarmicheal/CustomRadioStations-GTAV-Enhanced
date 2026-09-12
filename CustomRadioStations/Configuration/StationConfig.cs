@@ -12,44 +12,28 @@ namespace CustomRadioStations {
         }
 
         [JsonProperty("id")]
-        public string Id {
-            get; set;
-        }
+        public string Id { get; set; }
 
         [JsonProperty("name")]
-        public string Name {
-            get; set;
-        }
+        public string Name { get; set; }
 
         [JsonProperty("description")]
-        public string Description {
-            get; set;
-        }
+        public string Description { get; set; }
 
         [JsonProperty("icon")]
-        public string Icon {
-            get; set;
-        }
+        public string Icon { get; set; }
 
         [JsonProperty("tracks")]
-        public List<string> Tracks {
-            get; set;
-        }
+        public List<string> Tracks { get; set; }
 
         [JsonProperty("commercials")]
-        public List<string> Commercials {
-            get; set;
-        }
+        public List<string> Commercials { get; set; }
 
         [JsonProperty("playback")]
-        public PlaybackConfig Playback {
-            get; set;
-        }
+        public PlaybackConfig Playback { get; set; }
 
         [JsonProperty("commercialBreaks")]
-        public CommercialBreakConfig CommercialBreaks {
-            get; set;
-        }
+        public CommercialBreakConfig CommercialBreaks { get; set; }
     }
 
     internal sealed class PlaybackConfig {
@@ -61,24 +45,16 @@ namespace CustomRadioStations {
         }
 
         [JsonProperty("mode")]
-        public string Mode {
-            get; set;
-        }
+        public string Mode { get; set; }
 
         [JsonProperty("shuffle")]
-        public bool Shuffle {
-            get; set;
-        }
+        public bool Shuffle { get; set; }
 
         [JsonProperty("volume")]
-        public float Volume {
-            get; set;
-        }
+        public float Volume { get; set; }
 
         [JsonProperty("loop")]
-        public bool Loop {
-            get; set;
-        }
+        public bool Loop { get; set; }
     }
 
     internal sealed class CommercialBreakConfig {
@@ -91,28 +67,18 @@ namespace CustomRadioStations {
         }
 
         [JsonProperty("enabled")]
-        public bool Enabled {
-            get; set;
-        }
+        public bool Enabled { get; set; }
 
         [JsonProperty("minTracksBetween")]
-        public int MinTracksBetween {
-            get; set;
-        }
+        public int MinTracksBetween { get; set; }
 
         [JsonProperty("maxTracksBetween")]
-        public int MaxTracksBetween {
-            get; set;
-        }
+        public int MaxTracksBetween { get; set; }
 
         [JsonProperty("minCommercials")]
-        public int MinCommercials {
-            get; set;
-        }
+        public int MinCommercials { get; set; }
 
         [JsonProperty("maxCommercials")]
-        public int MaxCommercials {
-            get; set;
-        }
+        public int MaxCommercials { get; set; }
     }
 }

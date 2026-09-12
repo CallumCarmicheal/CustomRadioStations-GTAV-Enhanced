@@ -84,8 +84,7 @@ namespace CustomRadioStations {
                     MissingMemberHandling = MissingMemberHandling.Ignore,
                     ObjectCreationHandling = ObjectCreationHandling.Replace
                 };
-                NativeWheelConfiguration config = JsonConvert.DeserializeObject<NativeWheelConfiguration>(
-                    File.ReadAllText(AppPaths.NativeWheelsFile), serializerSettings);
+                NativeWheelConfiguration config = JsonConvert.DeserializeObject<NativeWheelConfiguration>(File.ReadAllText(AppPaths.NativeWheelsFile), serializerSettings);
 
                 foreach (NativeWheelSettings wheelSettings in config?.Wheels ?? new List<NativeWheelSettings>()) {
                     if (wheelSettings == null || string.IsNullOrWhiteSpace(wheelSettings.Name))

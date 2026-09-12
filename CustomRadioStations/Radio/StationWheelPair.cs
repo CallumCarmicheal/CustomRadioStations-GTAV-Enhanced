@@ -6,24 +6,12 @@ namespace CustomRadioStations {
     internal sealed class StationWheelPair {
         internal static readonly List<StationWheelPair> List = new List<StationWheelPair>();
 
-        internal SelectorWheel.Wheel Wheel {
-            get;
-        }
-        internal SelectorWheel.WheelCategory Category {
-            get;
-        }
-        internal RadioStation Station {
-            get;
-        }
-        internal string StationDirectory {
-            get;
-        }
-        internal string ConfigPath {
-            get;
-        }
-        internal bool IsLegacyIni {
-            get;
-        }
+        internal SelectorWheel.Wheel Wheel { get; }
+        internal SelectorWheel.WheelCategory Category { get; }
+        internal RadioStation Station { get; }
+        internal string StationDirectory { get; }
+        internal string ConfigPath { get; }
+        internal bool IsLegacyIni { get; }
 
         internal StationWheelPair(SelectorWheel.Wheel wheel, SelectorWheel.WheelCategory category,
             RadioStation station, string stationDirectory, string configPath, bool isLegacyIni) {

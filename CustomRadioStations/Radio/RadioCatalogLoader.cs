@@ -137,8 +137,7 @@ namespace CustomRadioStations {
             wheel.AddCategory(category);
 
             if (!string.IsNullOrEmpty(definition.IconPath)) {
-                int requiredIconPixels = WheelDisplayMetrics.GetRequiredIconPixels(
-                    wheel.TextureSize.Width, wheel.TextureSize.Height, GTA.UI.Screen.Resolution.Height);
+                int requiredIconPixels = WheelDisplayMetrics.GetRequiredIconPixels(wheel.TextureSize.Width, wheel.TextureSize.Height, GTA.UI.Screen.Resolution.Height);
                 string selectedIconPath = StationIconVariantResolver.Resolve(definition.IconPath, requiredIconPixels);
                 if (!string.IsNullOrEmpty(selectedIconPath)) {
                     category.CategoryTexture = new Texture(selectedIconPath, wheel.Categories.IndexOf(category));

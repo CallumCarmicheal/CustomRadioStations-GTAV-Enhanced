@@ -53,9 +53,7 @@ namespace CustomRadioStations {
                 Config.Load();
             } catch (Exception ex) {
                 initializationFailure = ex.ToString();
-                try {
-                    Logger.Log("FATAL: Startup dependency/configuration failure: " + ex);
-                } catch { }
+                try { Logger.Log("FATAL: Startup dependency/configuration failure: " + ex); } catch { }
             }
 
             if (initializationFailure == null)
@@ -72,30 +70,14 @@ namespace CustomRadioStations {
         private void OnAbort(object sender, EventArgs e) {
             // Cleanup is intentionally best-effort: an unavailable Enhanced native or an
             // already-disposed audio engine must not turn script shutdown into a crash.
-            try {
-                focusPauseMonitor?.Dispose();
-            } catch { }
-            try {
-                AudioPauseCoordinator.Reset();
-            } catch { }
-            try {
-                Game.TimeScale = 1f;
-            } catch { }
-            try {
-                SoundFile.DisposeSoundEngine();
-            } catch { }
-            try {
-                RadioNativeFunctions.DisposeDashboardScaleform();
-            } catch { }
-            try {
-                Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER);
-            } catch { }
-            try {
-                Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", false);
-            } catch { }
-            try {
-                Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", false);
-            } catch { }
+            try { focusPauseMonitor?.Dispose(); } catch { }
+            try { AudioPauseCoordinator.Reset(); } catch { }
+            try { Game.TimeScale = 1f; } catch { }
+            try { SoundFile.DisposeSoundEngine(); } catch { }
+            try { RadioNativeFunctions.DisposeDashboardScaleform(); } catch { }
+            try { Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER); } catch { }
+            try { Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", false); } catch { }
+            try { Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", false); } catch { }
             try {
                 if (Function.Call<bool>(Hash.IS_AUDIO_SCENE_ACTIVE, "DEATH_SCENE")) {
                     Function.Call(Hash.STOP_AUDIO_SCENE, "DEATH_SCENE");
@@ -284,9 +266,7 @@ namespace CustomRadioStations {
             if (initializationFailure != null) {
                 if (!loaded && Game.Player != null && Game.Player.CanControlCharacter) {
                     loaded = true;
-                    try {
-                        UIScreen.ShowSubtitle("Custom Radio Stations could not start. Check CustomRadioStations.log.");
-                    } catch { }
+                    try { UIScreen.ShowSubtitle("Custom Radio Stations could not start. Check CustomRadioStations.log."); } catch { }
                 }
                 return;
             }
@@ -411,10 +391,8 @@ namespace CustomRadioStations {
         GTA.Control ControlVolumeDown;
         GTA.Control ControlNextWheel;
         GTA.Control ControlPrevWheel;
-        readonly HoldRepeatState volumeUpRepeat = new HoldRepeatState(
-            TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(100));
-        readonly HoldRepeatState volumeDownRepeat = new HoldRepeatState(
-            TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(100));
+        readonly HoldRepeatState volumeUpRepeat = new HoldRepeatState(TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(100));
+        readonly HoldRepeatState volumeDownRepeat = new HoldRepeatState(TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(100));
         bool volumeSavePending;
         DateTime volumeSaveAt;
 
@@ -446,12 +424,8 @@ namespace CustomRadioStations {
                         RadioStation.CurrentPlaying.PlayNextSong();
                     } else {
                         DateTime now = DateTime.UtcNow;
-                        bool increase = volumeUpRepeat.ShouldFire(
-                            ControlInput.IsJustPressed(ControlVolumeUp),
-                            ControlInput.IsPressed(ControlVolumeUp), now);
-                        bool decrease = volumeDownRepeat.ShouldFire(
-                            ControlInput.IsJustPressed(ControlVolumeDown),
-                            ControlInput.IsPressed(ControlVolumeDown), now);
+                        bool increase = volumeUpRepeat.ShouldFire(ControlInput.IsJustPressed(ControlVolumeUp), ControlInput.IsPressed(ControlVolumeUp), now);
+                        bool decrease = volumeDownRepeat.ShouldFire(ControlInput.IsJustPressed(ControlVolumeDown), ControlInput.IsPressed(ControlVolumeDown), now);
 
                         // Opposing controls cancel each other when pressed together.
                         if (increase != decrease)
@@ -523,9 +497,7 @@ namespace CustomRadioStations {
             bool pauseRequested = IsPauseControlJustPressed(GTA.Control.FrontendPause) ||
                 IsPauseControlJustPressed(GTA.Control.FrontendPauseAlternate);
             bool pauseMenuActive = false;
-            try {
-                pauseMenuActive = Game.IsPaused;
-            } catch { }
+            try { pauseMenuActive = Game.IsPaused; } catch { }
             AudioPauseCoordinator.ReportGamePauseState(pauseMenuActive, pauseRequested);
         }
 

@@ -89,12 +89,8 @@ namespace CustomRadioStations {
                 Pixels = pixels;
             }
 
-            internal string Path {
-                get;
-            }
-            internal int Pixels {
-                get;
-            }
+            internal string Path { get; }
+            internal int Pixels { get; }
         }
     }
 
@@ -132,8 +128,7 @@ namespace CustomRadioStations {
         }
 
         private static int ReadBigEndianInt32(byte[] bytes, int offset) {
-            return (bytes[offset] << 24) | (bytes[offset + 1] << 16) |
-                (bytes[offset + 2] << 8) | bytes[offset + 3];
+            return (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3];
         }
     }
 }

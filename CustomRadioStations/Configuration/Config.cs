@@ -54,8 +54,7 @@ namespace CustomRadioStations {
             bool shouldCreate = !File.Exists(AppPaths.SettingsFile);
             if (!shouldCreate) {
                 try {
-                    settings = JsonConvert.DeserializeObject<ApplicationSettings>(
-                        File.ReadAllText(AppPaths.SettingsFile), JsonSettings) ?? new ApplicationSettings();
+                    settings = JsonConvert.DeserializeObject<ApplicationSettings>(File.ReadAllText(AppPaths.SettingsFile), JsonSettings) ?? new ApplicationSettings();
                 } catch (Exception ex) {
                     Logger.Log("ERROR: Failed to load global settings JSON '" + AppPaths.SettingsFile + "': " + ex.Message);
                     settings = new ApplicationSettings();

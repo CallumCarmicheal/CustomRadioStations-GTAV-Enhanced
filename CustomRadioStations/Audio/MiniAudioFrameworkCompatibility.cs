@@ -55,8 +55,7 @@ namespace CustomRadioStations {
 
             var callback = (ma_device_data_proc)Delegate.CreateDelegate(typeof(ma_device_data_proc), callbackMethod);
             var deviceInfo = new DeviceInfo { Index = -1 };
-            ContextConfig config = ma_ex_context_config_init(
-                sampleRate, (byte)channels, periodSizeInFrames, ref deviceInfo);
+            ContextConfig config = ma_ex_context_config_init(sampleRate, (byte)channels, periodSizeInFrames, ref deviceInfo);
             config.DeviceDataProc = Marshal.GetFunctionPointerForDelegate(callback);
 
             IntPtr nativeContext = ma_ex_context_init(ref config);

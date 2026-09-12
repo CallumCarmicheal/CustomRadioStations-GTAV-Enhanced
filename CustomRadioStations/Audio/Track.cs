@@ -6,19 +6,13 @@ using System.Collections.Generic;
 namespace CustomRadioStations {
     class Track {
         [JsonProperty("startTimeMs")]
-        public uint StartTime {
-            get; set;
-        }
+        public uint StartTime { get; set; }
 
         [JsonProperty("artist")]
-        public string Artist {
-            get; set;
-        }
+        public string Artist { get; set; }
 
         [JsonProperty("title")]
-        public string Title {
-            get; set;
-        }
+        public string Title { get; set; }
 
         public Track() {
         }
@@ -30,7 +24,9 @@ namespace CustomRadioStations {
         }
 
         public override string ToString() {
-            return "Artist: " + Artist + "\n" + "Title: " + Title + "\n" + "Ms: " + StartTime;
+            return "Artist: " + Artist + "\n" 
+                + "Title: " + Title + "\n" 
+                + "Ms: " + StartTime;
         }
     }
 
@@ -40,8 +36,6 @@ namespace CustomRadioStations {
         }
 
         [JsonProperty("tracks")]
-        public List<Track> Tracks {
-            get; set;
-        }
+        public List<Track> Tracks { get; set; }
     }
 }

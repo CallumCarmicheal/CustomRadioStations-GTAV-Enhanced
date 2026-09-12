@@ -19,8 +19,7 @@ namespace CustomRadioStations {
             string folderName = Path.GetFileName(stationDirectory);
 
             try {
-                StationConfig config = JsonConvert.DeserializeObject<StationConfig>(
-                    File.ReadAllText(configPath), SerializerSettings);
+                StationConfig config = JsonConvert.DeserializeObject<StationConfig>(File.ReadAllText(configPath), SerializerSettings);
                 if (config == null)
                     throw new JsonException("The document did not contain a JSON object.");
                 if (string.IsNullOrWhiteSpace(config.Name))

@@ -50,14 +50,10 @@ namespace CustomRadioStations {
         /// <summary>
         /// If Length has been added to this sound's corresponding station
         /// </summary>
-        public bool LengthAdded {
-            get; set;
-        }
+        public bool LengthAdded { get; set; }
 
         public bool HasTrackList;
-        public List<Track> Tracklist {
-            get; private set;
-        }
+        public List<Track> Tracklist { get; private set; }
 
         //public float MaximumDistance = 20f;
         //public float MinimumDistance = 1f;
@@ -99,8 +95,7 @@ namespace CustomRadioStations {
                     MissingMemberHandling = MissingMemberHandling.Ignore,
                     ObjectCreationHandling = ObjectCreationHandling.Replace
                 };
-                TracklistConfig config = JsonConvert.DeserializeObject<TracklistConfig>(
-                    File.ReadAllText(tracklistPath), serializerSettings);
+                TracklistConfig config = JsonConvert.DeserializeObject<TracklistConfig>(File.ReadAllText(tracklistPath), serializerSettings);
                 Tracklist = (config?.Tracks ?? new List<Track>())
                     .Where(track => track != null)
                     .OrderBy(track => track.StartTime)
@@ -464,9 +459,7 @@ namespace CustomRadioStations {
 
             // Dispose a copy because MiniAudioSound.Dispose unregisters itself.
             foreach (MiniAudioSound sound in sounds.ToArray()) {
-                try {
-                    sound.Dispose();
-                } catch { }
+                try { sound.Dispose(); } catch { }
             }
             sounds.Clear();
 

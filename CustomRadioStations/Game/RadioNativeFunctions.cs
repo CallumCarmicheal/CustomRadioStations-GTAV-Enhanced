@@ -71,9 +71,7 @@ namespace CustomRadioStations {
             if (index == 255) {
                 SetVanillaRadioOff();
             } else {
-                try {
-                    Function.Call(Hash.SET_RADIO_TO_STATION_INDEX, index);
-                } catch { }
+                try { Function.Call(Hash.SET_RADIO_TO_STATION_INDEX, index); } catch { }
             }
         }
 
@@ -90,9 +88,7 @@ namespace CustomRadioStations {
         }
 
         public static void SET_RADIO_TO_STATION_NAME(string name) {
-            try {
-                Function.Call(Hash.SET_RADIO_TO_STATION_NAME, name);
-            } catch { }
+            try { Function.Call(Hash.SET_RADIO_TO_STATION_NAME, name); } catch { }
         }
 
         public static string GetRadioStationProperName(string name) {
@@ -191,9 +187,7 @@ namespace CustomRadioStations {
         }
 
         public static void SET_MOBILE_PHONE_RADIO_STATE(bool on) {
-            try {
-                Function.Call(Hash.SET_MOBILE_PHONE_RADIO_STATE, on);
-            } catch { }
+            try { Function.Call(Hash.SET_MOBILE_PHONE_RADIO_STATE, on); } catch { }
         }
 
         static string _GET_LABEL_TEXT(string text) {

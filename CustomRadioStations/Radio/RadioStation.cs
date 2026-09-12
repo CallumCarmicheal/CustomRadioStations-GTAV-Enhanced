@@ -53,18 +53,10 @@ namespace CustomRadioStations {
             RenderCachedWheelInfo();
         }
 
-        internal string Id {
-            get;
-        }
-        internal string Name {
-            get;
-        }
-        internal string Description {
-            get;
-        }
-        internal uint TotalLength {
-            get; private set;
-        }
+        internal string Id { get; }
+        internal string Name { get; }
+        internal string Description { get; }
+        internal uint TotalLength { get; private set; }
         internal bool HasPlayableSounds => programme.Any(item => !item.IsCommercial);
 
         private bool IsBroadcastMode => string.Equals(playback.Mode, "broadcast", StringComparison.OrdinalIgnoreCase);
@@ -243,8 +235,7 @@ namespace CustomRadioStations {
 
             uint[] knownLengths = programme.Select(item => item.SoundFile.Length).ToArray();
             if (knownLengths.All(length => length > 0)) {
-                BroadcastPosition target = BroadcastTimeline.Advance(
-                    knownLengths, safeLastIndex, stoppedPositionSound, elapsed, playback.Loop);
+                BroadcastPosition target = BroadcastTimeline.Advance(knownLengths, safeLastIndex, stoppedPositionSound, elapsed, playback.Loop);
                 if (target.Finished) {
                     FinishPlayback();
                     return;
@@ -514,15 +505,9 @@ namespace CustomRadioStations {
             IsCommercial = isCommercial;
         }
 
-        internal SoundFile SoundFile {
-            get;
-        }
-        internal bool IsCommercial {
-            get;
-        }
-        internal uint StartTime {
-            get; set;
-        }
+        internal SoundFile SoundFile { get; }
+        internal bool IsCommercial { get; }
+        internal uint StartTime { get; set; }
     }
 
     /// <summary>

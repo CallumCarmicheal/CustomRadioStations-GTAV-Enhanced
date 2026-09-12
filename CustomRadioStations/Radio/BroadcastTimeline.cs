@@ -9,15 +9,9 @@ namespace CustomRadioStations {
             Finished = finished;
         }
 
-        internal int Index {
-            get;
-        }
-        internal uint Position {
-            get;
-        }
-        internal bool Finished {
-            get;
-        }
+        internal int Index { get; }
+        internal uint Position { get; }
+        internal bool Finished { get; }
     }
 
     internal static class BroadcastTimeline {

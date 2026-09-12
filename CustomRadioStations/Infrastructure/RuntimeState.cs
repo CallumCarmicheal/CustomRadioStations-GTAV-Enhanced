@@ -8,9 +8,7 @@ namespace CustomRadioStations {
     internal static class RuntimeState {
         private const string LoadedOnceEnvironmentVariable = "CRSSH_HAS_LOADED_ONCE";
 
-        internal static bool CatalogLoadCompleted {
-            get; set;
-        }
+        internal static bool CatalogLoadCompleted { get; set; }
 
         internal static bool HasLoadedOnce {
             get {
