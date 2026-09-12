@@ -263,7 +263,7 @@ namespace CustomRadioStations
                 CurrentSound.PlaySound(false, false, true);
                 if (CurrentSound.Sound == null)
                 {
-                    Logger.Log("WARNING: irrKlang failed to start station '" + Name + "'.");
+                    Logger.Log("WARNING: MiniAudioEx failed to start station '" + Name + "'.");
                     CurrentSound = null;
                     return;
                 }

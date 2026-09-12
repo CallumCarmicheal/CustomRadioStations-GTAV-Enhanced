@@ -668,7 +668,7 @@ namespace CustomRadioStations
                         RadioStation.CurrentPlaying.Play();
                         RadioStation.NextQueuedStation = null;
 
-                        // Do not mute GTA's radio if irrKlang failed to start the selected
+                        // Do not mute GTA's radio if MiniAudioEx failed to start the selected
                         // source. This keeps the game usable even when one station/file is bad.
                         if (!RadioStation.CurrentPlaying.IsPlaying)
                         {

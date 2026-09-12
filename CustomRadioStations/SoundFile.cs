@@ -1,18 +1,18 @@
-﻿using GTA;
-using GTA.Math;
-using IrrKlang;
+﻿using MiniAudioEx.Core.StandardAPI;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System;
+using System.ComponentModel;
+using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace CustomRadioStations
 {
     class SoundFile
     {
-        public ISound Sound;
-        public ISoundSource Source;
-        public ISoundEffectControl SoundEffect;
+        public MiniAudioSound Sound;
+        private AudioClip Clip;
 
         public string FileName;
         public string FilePath;
@@ -55,30 +55,18 @@ namespace CustomRadioStations
         public SoundFile(string filepath)
         {
             FilePath = filepath;
-            Source = SoundEngine.AddSoundSourceFromFile(filepath, StreamMode.AutoDetect, false);
-            if (Source == null)
-            {
-                Source = SoundEngine.GetSoundSource(filepath);
-            }
+            Clip = new AudioClip(filepath, true);
             FileName = Path.GetFileNameWithoutExtension(filepath);
             _displayName = DisplayNameFromFilename();
-            //Length = Source.PlayLength;
-            if (Source == null) throw new InvalidDataException("irrKlang could not create a sound source for: " + filepath);
             HasTrackList = TracklistExists(filepath);
         }
 
         public SoundFile(string filepath, string shortcutPath)
         {
             FilePath = shortcutPath;
-            Source = SoundEngine.AddSoundSourceFromFile(filepath, StreamMode.AutoDetect, false);
-            if (Source == null)
-            {
-                Source = SoundEngine.GetSoundSource(filepath);
-            }
+            Clip = new AudioClip(filepath, true);
             FileName = Path.GetFileNameWithoutExtension(filepath);
             _displayName = DisplayNameFromFilename();
-            //Length = Source.PlayLength;
-            if (Source == null) throw new InvalidDataException("irrKlang could not create a sound source for: " + filepath);
             HasTrackList = TracklistExists(shortcutPath);
         }
 
@@ -233,43 +221,40 @@ namespace CustomRadioStations
             return result;
         }
 
-        public void PlaySound(/*Vector3 sourcePosition,*/bool resume, bool playLooped = false, bool playPaused = false, bool allowMultipleInstances = false, bool allowSoundEffects = false)
+        public void PlaySound(bool resume, bool playLooped = false, bool playPaused = false, bool allowMultipleInstances = false, bool allowSoundEffects = false)
         {
-            if (Source == null) return;
+            if (Clip == null) return;
 
-            if (allowMultipleInstances || (!allowMultipleInstances && (Sound == null || Sound != null && (Sound.Finished || IsPaused))))
+            if (!allowMultipleInstances && Sound != null && !Sound.Finished && !IsPaused)
+                return;
+
+            if (resume && IsPaused)
             {
-                // Vector3D sourcePos = SoundHelperIK.Vector3ToVector3D(GameplayCamera.GetOffsetFromWorldCoords(sourcePosition));
-                
-                if (resume && IsPaused)
-                {
-                    IsPaused = false;
-                    return;
-                }
+                IsPaused = false;
+                return;
+            }
 
-                // Sound = SoundEngine.Play3D(Source, sourcePos.X, sourcePos.Y, sourcePos.Z, playLooped, false, false);
-                Sound = SoundEngine.Play2D(Source, playLooped, true, allowSoundEffects);
+            if (Sound != null)
+            {
+                Sound.Dispose();
+                Sound = null;
+            }
 
+            try
+            {
+                Sound = SoundEngine.Play2D(Clip, playLooped, playPaused);
                 if (Sound == null) return;
 
-                // Attempt to avoid popping..
-                Sound.Volume = 0f;
-
-                if (!playPaused)
-                {
-                    Sound.Paused = false;
-                }
-
-                Sound.Volume = Source.DefaultVolume;
-
                 if (Length == 0)
-                {
-                    //Length = Source.PlayLength;
                     Length = Sound.PlayLength;
-                }
-                if (allowSoundEffects)
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("ERROR: MiniAudioEx failed to start '" + FileName + "': " + ex.Message);
+                if (Sound != null)
                 {
-                    SoundEffect = Sound.SoundEffectControl;
+                    Sound.Dispose();
+                    Sound = null;
                 }
             }
         }
@@ -305,55 +290,33 @@ namespace CustomRadioStations
         }
 
         /// <summary>
-        /// Returns -1 if null, not playing, etc. 
-        /// Else returns position in milliseconds.
+        /// Returns the current playback position in milliseconds.
         /// </summary>
-        /// <returns></returns>
         public uint PlayPosition()
         {
             return Sound == null ? 0u : Sound.PlayPosition;
         }
 
-        // 3D Sound stuff only
-        /*public void ProcessSound(Vector3 sourcePosition)
-        {
-            if (Sound != null && !Sound.Finished)
-            {
-                Sound.MaxDistance = MaximumDistance;
-                Sound.MinDistance = MinimumDistance;
-                Vector3D sourcePos = SoundHelperIK.Vector3ToVector3D(GameplayCamera.GetOffsetFromWorldCoords(sourcePosition));
-                Sound.Position = sourcePos;
-            }
-        }
-
-        public void SetDistances(float max, float min)
-        {
-            MaximumDistance = max;
-            MinimumDistance = min;
-        }*/
-
         public void Dispose()
         {
             if (Sound != null)
             {
-                Sound.Stop();
                 Sound.Dispose();
                 Sound = null;
             }
 
-            if (Source != null)
+            if (Clip != null)
             {
-                Source.Dispose();
-                Source = null;
+                Clip.Dispose();
+                Clip = null;
             }
         }
 
-        public static ISoundEngine SoundEngine = new ISoundEngine();
+        public static MiniAudioEngine SoundEngine = new MiniAudioEngine();
 
         public static void ManageSoundEngine()
         {
             if (SoundEngine == null) return;
-            //SoundEngine.SetListenerPosition(new Vector3D(0, 0, 0), new Vector3D(0, 0, 1), new Vector3D(0, 0, 0), new Vector3D(0, 1, 0));
             SoundEngine.Update();
         }
 
@@ -367,16 +330,258 @@ namespace CustomRadioStations
         public static void DisposeSoundEngine()
         {
             if (SoundEngine == null) return;
-            SoundEngine.StopAllSounds();
             SoundEngine.Dispose();
         }
     }
 
-    static class SoundHelperIK
+    /// <summary>
+    /// Small compatibility handle that keeps the old SoundFile/RadioStation timing API
+    /// expressed in milliseconds while MiniAudioEx exposes its cursor in PCM frames.
+    /// </summary>
+    sealed class MiniAudioSound : IDisposable
     {
-        public static Vector3D Vector3ToVector3D(Vector3 vec)
+        private readonly MiniAudioEngine engine;
+        private readonly AudioClip clip;
+        private readonly AudioSource source;
+        private readonly bool looped;
+        private bool paused;
+        private bool finished;
+        private bool disposed;
+
+        internal MiniAudioSound(MiniAudioEngine engine, AudioClip clip, bool looped, bool startPaused)
         {
-            return new Vector3D(vec.X, vec.Z, vec.Y);
+            this.engine = engine;
+            this.clip = clip;
+            this.looped = looped;
+
+            source = new AudioSource(1);
+            source.End += OnPlaybackEnded;
+            source.Volume = 0f;
+            source.Play(clip);
+            source.Loop = looped;
+
+            // A zero-length, non-playing source means the decoder/open operation failed.
+            if (source.Length == 0 && !source.IsPlaying)
+            {
+                source.Dispose();
+                throw new InvalidDataException("MiniAudioEx could not decode or open: " + clip.FilePath);
+            }
+
+            if (startPaused)
+            {
+                source.Stop();
+                source.Cursor = 0;
+                paused = true;
+            }
+
+            source.Volume = 1f;
+        }
+
+        public uint PlayPosition
+        {
+            get { return FramesToMilliseconds(source.Cursor); }
+            set
+            {
+                ulong frame = MillisecondsToFrames(value);
+                ulong length = source.Length;
+                source.Cursor = length > 0 && frame >= length ? length - 1 : frame;
+                if (finished && (length == 0 || source.Cursor < length))
+                    finished = false;
+            }
+        }
+
+        public uint PlayLength
+        {
+            get { return FramesToMilliseconds(source.Length); }
+        }
+
+        public bool Paused
+        {
+            get { return paused; }
+            set
+            {
+                if (disposed || finished || paused == value) return;
+
+                if (value)
+                {
+                    source.Stop();
+                    paused = true;
+                    return;
+                }
+
+                // AudioSource.Stop() preserves the cursor. Re-issuing Play() is the
+                // MiniAudioEx continue path; restore the cursor explicitly as well so
+                // this remains correct even if the backend reopens the streamed file.
+                ulong cursor = source.Cursor;
+                source.Play(clip);
+                source.Loop = looped;
+                if (cursor > 0)
+                    source.Cursor = cursor;
+                paused = false;
+                finished = false;
+            }
+        }
+
+        public bool Finished
+        {
+            get
+            {
+                if (!finished && !paused && !looped && !source.IsPlaying)
+                {
+                    ulong length = source.Length;
+                    if (length > 0 && source.Cursor >= length)
+                        finished = true;
+                }
+                return finished;
+            }
+        }
+
+        public float Volume
+        {
+            get { return source.Volume; }
+            set { source.Volume = value.LimitToRange(0f, 1f); }
+        }
+
+        public void Stop()
+        {
+            if (disposed) return;
+            source.Stop();
+            paused = false;
+            finished = true;
+        }
+
+        private void OnPlaybackEnded()
+        {
+            if (!looped)
+            {
+                paused = false;
+                finished = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            source.End -= OnPlaybackEnded;
+            source.Dispose();
+            engine.Unregister(this);
+        }
+
+        private static uint FramesToMilliseconds(ulong frames)
+        {
+            int sampleRate = AudioContext.SampleRate;
+            if (sampleRate <= 0) return 0;
+            ulong milliseconds = (frames * 1000UL) / (ulong)sampleRate;
+            return milliseconds > uint.MaxValue ? uint.MaxValue : (uint)milliseconds;
+        }
+
+        private static ulong MillisecondsToFrames(uint milliseconds)
+        {
+            int sampleRate = AudioContext.SampleRate;
+            if (sampleRate <= 0) return 0;
+            return ((ulong)milliseconds * (ulong)sampleRate) / 1000UL;
+        }
+    }
+
+    /// <summary>
+    /// Process-local MiniAudioEx owner. The public surface intentionally mirrors the
+    /// tiny engine surface that the rest of CRS historically used.
+    /// </summary>
+    sealed class MiniAudioEngine : IDisposable
+    {
+        private const uint SampleRate = 48000;
+        private const uint Channels = 2;
+        private readonly List<MiniAudioSound> sounds = new List<MiniAudioSound>();
+        private bool disposed;
+
+        internal MiniAudioEngine()
+        {
+            MiniAudioNativeLoader.LoadFromScriptDirectory();
+            AudioContext.Initialize(SampleRate, Channels);
+        }
+
+        public float SoundVolume
+        {
+            get { return disposed ? 0f : AudioContext.MasterVolume; }
+            set
+            {
+                if (!disposed)
+                    AudioContext.MasterVolume = value.LimitToRange(0f, 1f);
+            }
+        }
+
+        internal MiniAudioSound Play2D(AudioClip clip, bool looped, bool startPaused)
+        {
+            if (disposed) return null;
+            var sound = new MiniAudioSound(this, clip, looped, startPaused);
+            sounds.Add(sound);
+            return sound;
+        }
+
+        internal void Update()
+        {
+            if (!disposed)
+                AudioContext.Update();
+        }
+
+        internal void Unregister(MiniAudioSound sound)
+        {
+            sounds.Remove(sound);
+        }
+
+        public void Dispose()
+        {
+            if (disposed) return;
+
+            // Dispose a copy because MiniAudioSound.Dispose unregisters itself.
+            foreach (MiniAudioSound sound in sounds.ToArray())
+            {
+                try { sound.Dispose(); } catch { }
+            }
+            sounds.Clear();
+
+            AudioContext.Deinitialize();
+            disposed = true;
+        }
+    }
+
+    static class MiniAudioNativeLoader
+    {
+        private const string NativeLibraryName = "miniaudioex.dll";
+        private static IntPtr nativeModule;
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr LoadLibrary(string lpFileName);
+
+        internal static void LoadFromScriptDirectory()
+        {
+            if (nativeModule != IntPtr.Zero) return;
+
+            string assemblyDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            string appBase = AppDomain.CurrentDomain.BaseDirectory;
+            string[] candidates = new string[]
+            {
+                string.IsNullOrEmpty(assemblyDirectory) ? null : Path.Combine(assemblyDirectory, NativeLibraryName),
+                string.IsNullOrEmpty(appBase) ? null : Path.Combine(appBase, "scripts", NativeLibraryName),
+                string.IsNullOrEmpty(appBase) ? null : Path.Combine(appBase, NativeLibraryName),
+            };
+
+            foreach (string candidate in candidates)
+            {
+                if (string.IsNullOrEmpty(candidate) || !File.Exists(candidate)) continue;
+
+                nativeModule = LoadLibrary(candidate);
+                if (nativeModule != IntPtr.Zero)
+                    return;
+
+                int error = Marshal.GetLastWin32Error();
+                throw new Win32Exception(error, "Failed to load MiniAudioEx native runtime: " + candidate);
+            }
+
+            // Let normal DllImport probing have one chance before surfacing a clearer error.
+            // AudioContext.Initialize() will throw DllNotFoundException if the runtime truly
+            // is unavailable.
         }
     }
 }

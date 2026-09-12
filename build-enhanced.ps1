@@ -1,17 +1,13 @@
 ﻿param(
     [ValidateSet('Debug','Release')]
     [string]$Configuration = 'Release',
-    [string]$SHVDN3Path = (Join-Path $PSScriptRoot 'CustomRadioStations\lib\ScriptHookVDotNet3.dll'),
-    [string]$IrrKlangPath = (Join-Path $PSScriptRoot 'CustomRadioStations\lib\irrKlang.NET4.dll')
+    [string]$SHVDN3Path = (Join-Path $PSScriptRoot 'CustomRadioStations\lib\ScriptHookVDotNet3.dll')
 )
 
 $ErrorActionPreference = 'Stop'
 
 if (!(Test-Path $SHVDN3Path)) {
     throw "Missing ScriptHookVDotNet3.dll: $SHVDN3Path`nCopy it from the SAME ScriptHookVDotNet Enhanced release installed in GTA V."
-}
-if (!(Test-Path $IrrKlangPath)) {
-    throw "Missing irrKlang.NET4.dll: $IrrKlangPath`nCopy the x64 .NET 4 irrKlang assembly used by the original mod."
 }
 
 $msbuild = Get-Command msbuild.exe -ErrorAction SilentlyContinue
@@ -27,19 +23,28 @@ if (!$msbuild) {
 }
 
 $project = Join-Path $PSScriptRoot 'CustomRadioStations\CustomRadioStations.csproj'
-& $msbuild.FullName $project /m /t:Rebuild "/p:Configuration=$Configuration" "/p:SHVDN3Path=$SHVDN3Path" "/p:IrrKlangPath=$IrrKlangPath"
+$stage = Join-Path $PSScriptRoot 'CustomRadioStations\dist\scripts'
+
+# Avoid leaving proprietary/stale runtime DLLs from an older irrKlang build in dist.
+if (Test-Path $stage) {
+    Remove-Item $stage -Recurse -Force
+}
+
+& $msbuild.FullName $project /restore /m /t:Rebuild "/p:Configuration=$Configuration" "/p:SHVDN3Path=$SHVDN3Path"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-$stage = Join-Path $PSScriptRoot 'CustomRadioStations\dist\scripts'
-$lib = Join-Path $PSScriptRoot 'CustomRadioStations\lib'
-foreach ($runtimeName in @('irrKlang.dll','ikpMP3.dll','ikpFlac.dll')) {
-    $runtimeFile = Join-Path $lib $runtimeName
-    if (Test-Path $runtimeFile) {
-        Copy-Item $runtimeFile $stage -Force
-    } else {
-        Write-Warning "$runtimeName was not found in lib; the original x64 runtime/plugin may still be required in GTA's scripts directory."
+$requiredOutputs = @(
+    'CustomRadioStations.dll',
+    'MiniAudioExNET.dll',
+    'miniaudioex.dll'
+)
+foreach ($name in $requiredOutputs) {
+    $path = Join-Path $stage $name
+    if (!(Test-Path $path)) {
+        throw "Build succeeded but required staged output is missing: $path"
     }
 }
 
 Write-Host "`nBuild staged to:"
 Write-Host $stage
+Write-Host "`nAudio backend: JAJ.Packages.MiniAudioEx 3.3.6 (NuGet, MIT)"
