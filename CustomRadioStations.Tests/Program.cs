@@ -1,22 +1,19 @@
 using Newtonsoft.Json;
+
 using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace CustomRadioStations
-{
-    internal static class Program
-    {
+namespace CustomRadioStations {
+    internal static class Program {
         private static int passed;
         private static string root;
         private static string tracks;
 
-        private static int Main()
-        {
+        private static int Main() {
             root = Path.Combine(Path.GetTempPath(), "crs-json-tests-" + Guid.NewGuid().ToString("N"));
             tracks = Path.Combine(root, "tracks");
-            try
-            {
+            try {
                 CreateFixture();
                 TestDefaultsAndEmptyArrays();
                 TestResolverSources();
@@ -25,20 +22,15 @@ namespace CustomRadioStations
                 TestJsonTracklistModel();
                 Console.WriteLine("Passed " + passed + " station configuration tests.");
                 return 0;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Console.Error.WriteLine(ex);
                 return 1;
-            }
-            finally
-            {
+            } finally {
                 if (Directory.Exists(root)) Directory.Delete(root, true);
             }
         }
 
-        private static void CreateFixture()
-        {
+        private static void CreateFixture() {
             Directory.CreateDirectory(Path.Combine(tracks, "Albums"));
             File.WriteAllBytes(Path.Combine(tracks, "song.mp3"), new byte[] { 1 });
             File.WriteAllBytes(Path.Combine(tracks, "UPPER.MP3"), new byte[] { 1 });
@@ -47,8 +39,7 @@ namespace CustomRadioStations
             File.WriteAllBytes(Path.Combine(tracks, "Albums", "rare.flac"), new byte[] { 1 });
         }
 
-        private static void TestDefaultsAndEmptyArrays()
-        {
+        private static void TestDefaultsAndEmptyArrays() {
             WriteStationJson("{\"name\":\"Vice City FM\"}");
             StationDefinition definition;
             Assert(StationConfigLoader.TryLoad(root, out definition), "tracks omitted uses default wildcard");
@@ -63,8 +54,7 @@ namespace CustomRadioStations
             Assert(config.Commercials.Count == 1 && config.Commercials[0] == "*", "typed model supplies missing commercials default");
         }
 
-        private static void TestResolverSources()
-        {
+        private static void TestResolverSources() {
             var warnings = new List<string>();
             var resolver = new MediaSourceResolver(warnings.Add);
             Assert(resolver.Resolve(new[] { "*" }, tracks, "track").Count == 4, "wildcard recursively scans root");
@@ -88,8 +78,7 @@ namespace CustomRadioStations
                 "empty commercials list remains empty");
         }
 
-        private static void TestInvalidConfigurations()
-        {
+        private static void TestInvalidConfigurations() {
             StationDefinition definition;
             WriteStationJson("{not-json");
             Assert(!StationConfigLoader.TryLoad(root, out definition), "malformed JSON skipped");
@@ -106,13 +95,11 @@ namespace CustomRadioStations
                 "commercial count normalized");
         }
 
-        private static void WriteStationJson(string json)
-        {
+        private static void WriteStationJson(string json) {
             File.WriteAllText(Path.Combine(root, "station.json"), json);
         }
 
-        private static void TestLegacyIniParser()
-        {
+        private static void TestLegacyIniParser() {
             string path = Path.Combine(root, "station.ini");
             File.WriteAllText(path, "[GENERAL]" + Environment.NewLine + "DESCRIPTION = Existing station");
             Settings.ScriptSettings legacy = Settings.ScriptSettings.Load(path);
@@ -120,8 +107,7 @@ namespace CustomRadioStations
                 "legacy station INI remains readable");
         }
 
-        private static void TestJsonTracklistModel()
-        {
+        private static void TestJsonTracklistModel() {
             TracklistConfig config = JsonConvert.DeserializeObject<TracklistConfig>(
                 "{\"tracks\":[{\"startTimeMs\":185000,\"artist\":\"Artist\",\"title\":\"Song\"}]}");
             Assert(config.Tracks.Count == 1 && config.Tracks[0].StartTime == 185000 &&
@@ -129,8 +115,7 @@ namespace CustomRadioStations
                 "JSON tracklist metadata is strongly typed");
         }
 
-        private static void Assert(bool condition, string name)
-        {
+        private static void Assert(bool condition, string name) {
             if (!condition) throw new InvalidOperationException("FAILED: " + name);
             passed++;
             Console.WriteLine("PASS: " + name);

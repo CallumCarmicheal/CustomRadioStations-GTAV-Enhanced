@@ -20,7 +20,7 @@ namespace CustomRadioStations {
 
         DateTime? loadDelayTimer = null;
 
-
+        ActionOptions ActionQueued;
 
         bool loaded;
 
@@ -37,7 +37,9 @@ namespace CustomRadioStations {
             // malformed settings file should produce a log instead of preventing SHVDN
             // from constructing the script at all.
             try {
-                if (!Directory.Exists(AppPaths.RootDirectory)) Directory.CreateDirectory(AppPaths.RootDirectory);
+                if (!Directory.Exists(AppPaths.RootDirectory)) 
+                    Directory.CreateDirectory(AppPaths.RootDirectory);
+
                 Logger.Init();
                 Config.SetupSystemCulture();
                 Config.Load();
