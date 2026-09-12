@@ -63,7 +63,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Decorators.cs" />
+    <Compile Include="RuntimeState.cs" />
     <Compile Include="GeneralEvents.cs" />
     <Compile Include="GTAVFunctions.cs" />
     <Compile Include="Logger.cs" />

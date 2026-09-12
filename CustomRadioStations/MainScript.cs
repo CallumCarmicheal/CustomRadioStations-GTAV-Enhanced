@@ -400,9 +400,7 @@ namespace CustomRadioStations
 
                 if (loadDelayTimer == null) loadDelayTimer = DateTime.Now.AddMilliseconds(Config.LoadStartDelay);
 
-                Decorators.DEntity = Game.Player.Character;
-
-                if (loadDelayTimer < DateTime.Now || Decorators.ScriptHasLoadedOnce)
+                if (loadDelayTimer < DateTime.Now || RuntimeState.HasLoadedOnce)
                 {
                     if (Config.DisplayHelpText)
                         UI.ShowSubtitle("Loading Custom Radios...");
@@ -435,7 +433,7 @@ namespace CustomRadioStations
 
                     RadioNativeFunctions.DashboardScaleform = new ScaleformHelper.Scaleform("dashboard", true);
 
-                    if (!Decorators.ScriptHasLoadedOnce) { Decorators.Init(Game.Player.Character); }
+                    RuntimeState.HasLoadedOnce = true;
 
                     loaded = true;
 
