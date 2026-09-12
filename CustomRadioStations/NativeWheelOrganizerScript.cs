@@ -211,20 +211,20 @@ namespace CustomRadioStations
 
         void DisableNativeScrollRadioControls()
         {
-            Game.DisableControlThisFrame(2, GTA.Control.VehicleNextRadio);
-            Game.DisableControlThisFrame(2, GTA.Control.VehiclePrevRadio);
+            ControlInput.DisableThisFrame(GTA.Control.VehicleNextRadio);
+            ControlInput.DisableThisFrame(GTA.Control.VehiclePrevRadio);
         }
 
         void ControlWheelChange()
         {
             if (!WheelListIsPopulated() || currentWheel == null) return;
 
-            if (Game.IsControlJustPressed(2, ControlNextWheel))
+            if (ControlInput.IsJustPressed(ControlNextWheel))
             {
                 currentWheel = NativeWheel.WheelList.GetNext(currentWheel);
                 UpdateWheelThisFrame();
             }
-            else if (Game.IsControlJustPressed(2, ControlPrevWheel))
+            else if (ControlInput.IsJustPressed(ControlPrevWheel))
             {
                 currentWheel = NativeWheel.WheelList.GetPrevious(currentWheel);
                 UpdateWheelThisFrame();
@@ -265,13 +265,13 @@ namespace CustomRadioStations
 
         void OnJustOpened()
         {
-            //UI.ShowSubtitle("Just Opened");
+            // Legacy debug subtitle("Just Opened");
             UpdateWheelThisFrame();
         }
 
         void OnJustClosed()
         {
-            //UI.ShowSubtitle("Just Closed");
+            // Legacy debug subtitle("Just Closed");
         }
 
         void OnKeyDown(object sender, KeyEventArgs e)

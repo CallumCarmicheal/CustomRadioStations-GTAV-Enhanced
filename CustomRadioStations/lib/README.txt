@@ -1,8 +1,8 @@
-Enhanced build dependencies
+﻿Enhanced build dependencies
 ===========================
 
-Required to COMPILE:
-  ScriptHookVDotNet2.dll  - from the SAME ScriptHookVDotNet Enhanced release installed in GTA V
+Required to COMPILE (SHVDN3 API):
+  ScriptHookVDotNet3.dll  - from the SAME ScriptHookVDotNet Enhanced release installed in GTA V
   irrKlang.NET4.dll       - x64 .NET 4 assembly used by the original mod
 
 Required at RUNTIME by irrKlang (copy the matching x64 versions from the original mod/runtime):

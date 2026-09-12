@@ -11,7 +11,7 @@ namespace CustomRadioStations
     public static class RadioNativeFunctions
     {
 
-        public static ScaleformHelper.Scaleform DashboardScaleform;
+        public static Scaleform DashboardScaleform;
         private static bool dashboardDisabled;
         private static bool lockStationFailureLogged;
         private static bool maxStationFailureLogged;
@@ -24,7 +24,7 @@ namespace CustomRadioStations
         {
             try
             {
-                if (dashboardDisabled || DashboardScaleform == null || DashboardScaleform.Handle == 0) return;
+                if (dashboardDisabled || DashboardScaleform == null || !DashboardScaleform.IsValid || !DashboardScaleform.IsLoaded) return;
 
                 // Dashboard scaleform still exists in Enhanced, but keep this best-effort:
                 // a UI asset change should not take down radio playback.
@@ -37,6 +37,13 @@ namespace CustomRadioStations
                 dashboardDisabled = true;
                 Logger.Log("WARNING: Dashboard SET_RADIO Scaleform is unavailable; disabling dashboard metadata. " + exception.Message);
             }
+        }
+
+
+        public static void DisposeDashboardScaleform()
+        {
+            try { DashboardScaleform?.Dispose(); }
+            finally { DashboardScaleform = null; }
         }
 
         // Only works for vehicle radio.
@@ -167,7 +174,7 @@ namespace CustomRadioStations
         public static void SetVanillaRadioOff()
         {
             Ped player = Game.Player.Character;
-            if (player != null && player.Exists() && player.IsInVehicle() && player.CurrentVehicle != null && player.CurrentVehicle.EngineRunning)
+            if (player != null && player.Exists() && player.IsInVehicle() && player.CurrentVehicle != null && player.CurrentVehicle.IsEngineRunning)
             {
                 SetVehicleRadioStationOff();
             }

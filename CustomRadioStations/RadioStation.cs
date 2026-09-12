@@ -118,7 +118,7 @@ namespace CustomRadioStations
         {
             if (CurrentSound == null || CurrentSound.Sound == null) return;
 
-            //UI.ShowSubtitle((lastPlayedSoundIndex + 1) + " / " + SoundFileTimePairs.Count);
+            // Legacy debug subtitle((lastPlayedSoundIndex + 1) + " / " + SoundFileTimePairs.Count);
             
             if (CurrentSound.HasTrackList && trackUpdateTimer < DateTime.Now)
             {

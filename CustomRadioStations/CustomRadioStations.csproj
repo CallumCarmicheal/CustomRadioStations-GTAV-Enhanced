@@ -12,7 +12,7 @@
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
-    <SHVDN2Path Condition="'$(SHVDN2Path)' == ''">$(MSBuildProjectDirectory)\lib\ScriptHookVDotNet2.dll</SHVDN2Path>
+    <SHVDN3Path Condition="'$(SHVDN3Path)' == ''">$(MSBuildProjectDirectory)\lib\ScriptHookVDotNet3.dll</SHVDN3Path>
     <IrrKlangPath Condition="'$(IrrKlangPath)' == ''">$(MSBuildProjectDirectory)\lib\irrKlang.NET4.dll</IrrKlangPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -47,8 +47,8 @@
       <HintPath>$(IrrKlangPath)</HintPath>
       <Private>true</Private>
     </Reference>
-    <Reference Include="ScriptHookVDotNet2">
-      <HintPath>$(SHVDN2Path)</HintPath>
+    <Reference Include="ScriptHookVDotNet3">
+      <HintPath>$(SHVDN3Path)</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="System" />
@@ -64,6 +64,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="RuntimeState.cs" />
+    <Compile Include="ControlInput.cs" />
     <Compile Include="GeneralEvents.cs" />
     <Compile Include="GTAVFunctions.cs" />
     <Compile Include="Logger.cs" />
@@ -76,7 +77,6 @@
     <Compile Include="RadioStation.cs" />
     <Compile Include="GeneralHelper.cs" />
     <Compile Include="Config.cs" />
-    <Compile Include="Scaleform.cs" />
     <Compile Include="SelectorWheel.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="SoundFile.cs" />
@@ -104,7 +104,7 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="ValidateExternalDependencies" BeforeTargets="ResolveReferences">
-    <Error Condition="!Exists('$(SHVDN2Path)')" Text="Missing ScriptHookVDotNet2.dll. Copy it from the SAME ScriptHookVDotNet Enhanced release you install in GTA V into CustomRadioStations\lib, or pass /p:SHVDN2Path=..." />
+    <Error Condition="!Exists('$(SHVDN3Path)')" Text="Missing ScriptHookVDotNet3.dll. Copy it from the SAME ScriptHookVDotNet Enhanced release you install in GTA V into CustomRadioStations\lib, or pass /p:SHVDN3Path=..." />
     <Error Condition="!Exists('$(IrrKlangPath)')" Text="Missing irrKlang.NET4.dll. Copy the x64 .NET 4 irrKlang assembly into CustomRadioStations\lib, or pass /p:IrrKlangPath=..." />
   </Target>
   <Target Name="StageBuild" AfterTargets="Build">

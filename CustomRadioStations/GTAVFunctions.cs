@@ -60,7 +60,7 @@ namespace GTAVFunctions
 
         public static void ToggleInjuredAnimations(Ped ped, bool on)
         {
-            Function.Call(Hash._0x33A60D8BDD6E508C, ped, on); //_SET_PED_CAN_PLAY_INJURED_ANIMS
+            Function.Call((Hash)0x33A60D8BDD6E508C, ped, on); //_SET_PED_CAN_PLAY_INJURED_ANIMS
         }
 
         public static void SetPedRagdoll(Ped p, int ms, RagdollType type)
@@ -167,11 +167,11 @@ namespace GTAVFunctions
             entity.PositionNoOffset = position;
             /*Teleport(entity, position, false);
             Script.Wait(100);
-            RaycastResult ray = World.Raycast(position + Vector3.WorldUp * 200f, position + Vector3.WorldUp * -2f, IntersectOptions.Map);
-            if (ray.DitHitAnything)
+            RaycastResult ray = World.Raycast(position + Vector3.WorldUp * 200f, position + Vector3.WorldUp * -2f, IntersectFlags.Map);
+            if (ray.DidHit)
             {
-                //entity.Position = ray.HitCoords;
-                Teleport(entity, ray.HitCoords, false);
+                //entity.Position = ray.HitPosition;
+                Teleport(entity, ray.HitPosition, false);
             }*/
         }
 
@@ -193,13 +193,13 @@ namespace GTAVFunctions
         {
             bool groundIsFound;
             float gz = GetGroundZ(pos, out groundIsFound);
-            //UI.ShowSubtitle(groundIsFound && pos.Z > gz + height ? "~r~" + (pos.Z - (gz + height)) : "false");
+            // Legacy debug subtitle(groundIsFound && pos.Z > gz + height ? "~r~" + (pos.Z - (gz + height)) : "false");
             return groundIsFound && pos.Z > gz + height ? true : false;
         }
 
         public static bool IsWithinThisHeightAboveGround(this Vector3 position, float height)
         {
-            return World.Raycast(position, Vector3.WorldDown, height, IntersectOptions.Map | IntersectOptions.Mission_Entities).DitHitAnything;
+            return World.Raycast(position, Vector3.WorldDown, height, IntersectFlags.Map | IntersectFlags.Vehicles).DidHit;
         }
 
         public static void DamagePed(Ped attacker, Ped victim, int damage, RagdollType type, int ragdollMS, Vector3 forceDirection = default(Vector3), float forceDirectionMultiplier = 1f, Vector3 forceRotation = default(Vector3), float forceRotationMultiplier = 1f)
@@ -261,7 +261,7 @@ namespace GTAVFunctions
 
         public static bool HasCheatStringJustBeenEntered(string cheat)
         {
-            return Function.Call<bool>(Hash._0x557E43C447E700A8, Game.GenerateHash(cheat)); // _HAS_CHEAT_STRING_JUST_BEEN_ENTERED
+            return Function.Call<bool>((Hash)0x557E43C447E700A8, Game.GenerateHash(cheat)); // _HAS_CHEAT_STRING_JUST_BEEN_ENTERED
         }
 
         public static float CalculateRelativeValue(float input, float inputMin, float inputMax, float outputMin, float outputMax)
@@ -324,10 +324,10 @@ namespace GTAVFunctions
         /// <param name="shape"></param>
         public static void DisplayHelpTextThisFrame(string text, bool foreverUntilNextHelpText = false, bool beep = true, int shape = -1)
         {
-            Function.Call(Hash._SET_TEXT_COMPONENT_FORMAT, "CELL_EMAIL_BCON"); //BEGIN_TEXT_COMMAND_DISPLAY_HELP jamyfafi
-            //Function.Call(Hash._ADD_TEXT_COMPONENT_STRING, text);
+            Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_HELP, "CELL_EMAIL_BCON"); //BEGIN_TEXT_COMMAND_DISPLAY_HELP jamyfafi
+            //Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, text);
             AddLongString(text);
-            Function.Call(Hash._0x238FFE5C7B0498A6, 0, foreverUntilNextHelpText, beep, shape); //END_TEXT_COMMAND_DISPLAY_HELP
+            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_HELP, 0, foreverUntilNextHelpText, beep, shape); //END_TEXT_COMMAND_DISPLAY_HELP
         }
 
         private static void AddLongString(string str)
@@ -336,7 +336,7 @@ namespace GTAVFunctions
             for (int i = 0; i < str.Length; i += strLen)
             {
                 string substr = str.Substring(i, Math.Min(strLen, str.Length - i));
-                Function.Call(Hash._ADD_TEXT_COMPONENT_STRING, substr); //ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME
+                Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, substr); //ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME
             }
         }
 
@@ -726,14 +726,14 @@ namespace GTAVFunctions
 
         public static bool UsingGamepad()
         {
-            return Game.CurrentInputMode == InputMode.GamePad;
+            return Game.LastInputMethod == InputMethod.GamePad;
         }
 
         public static bool GetScreenCoordFromWorldCoord(Vector3 worldCoord, out float screenX, out float screenY)
         {
             OutputArgument x = new OutputArgument();
             OutputArgument y = new OutputArgument();
-            bool worldCoordIsNotOnScreen = Function.Call<bool>(Hash._0xF9904D11F1ACBEC3, worldCoord.X, worldCoord.Y, worldCoord.Z, x, y); // _GET_SCREEN_COORD_FROM_WORLD_COORD
+            bool worldCoordIsNotOnScreen = Function.Call<bool>(Hash.GET_SCREEN_COORD_FROM_WORLD_COORD, worldCoord.X, worldCoord.Y, worldCoord.Z, x, y);
             screenX = x.GetResult<float>();
             screenY = y.GetResult<float>();
             return !worldCoordIsNotOnScreen;

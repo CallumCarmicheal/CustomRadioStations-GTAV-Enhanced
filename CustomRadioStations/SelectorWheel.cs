@@ -10,8 +10,11 @@ using System.IO;
 using GTA;
 using GTA.Native;
 using GTA.Math;
+using GTAVFunctions;
 using Control = GTA.Control;
-using Font = GTA.Font;
+using CustomSprite = GTA.UI.CustomSprite;
+using Font = GTA.UI.Font;
+using UIScreen = GTA.UI.Screen;
 
 namespace SelectorWheel
 {
@@ -556,7 +559,7 @@ namespace SelectorWheel
                 {
                     Texture temp = catTextureExists ? cat.CategoryTexture : cat.SelectedItem.ItemTexture;
                     temp.Draw(3, TextureRefreshRate,
-                        new Point((int)(cat.position2D.X * UI.WIDTH) + xTextureOffset, (int)(cat.position2D.Y * UI.HEIGHT) + yTextureOffset),
+                        new Point((int)(cat.position2D.X * UIScreen.Width) + xTextureOffset, (int)(cat.position2D.Y * UIScreen.Height) + yTextureOffset),
                         new PointF(0.5f, 0.5f),
                         isSelectedCategory && !bgTextureExists ? SizeMultiply(TextureSize, 1.25) : TextureSize,
                         0f, isSelectedCategory ? Color.FromArgb(255, 255, 255, 255) : Color.FromArgb(120, 255, 255, 255), UIHelper.AspectRatio);
@@ -564,7 +567,7 @@ namespace SelectorWheel
                     if (bgTextureExists)
                     {
                         cat.BackgroundTexture.Draw(2, TextureRefreshRate,
-                            new Point((int)(cat.position2D.X * UI.WIDTH) + xTextureOffset, (int)(cat.position2D.Y * UI.HEIGHT) + yTextureOffset),
+                            new Point((int)(cat.position2D.X * UIScreen.Width) + xTextureOffset, (int)(cat.position2D.Y * UIScreen.Height) + yTextureOffset),
                             new PointF(0.5f, 0.5f),
                             SizeMultiply(TextureSize, TextureCatBgSizeMultiple),
                             0f, isSelectedCategory ? TextureCatBgColor : Color.FromArgb(120, TextureCatBgColor.R, TextureCatBgColor.G, TextureCatBgColor.B), UIHelper.AspectRatio);
@@ -573,7 +576,7 @@ namespace SelectorWheel
                     if (isSelectedCategory && hlTextureExists)
                     {
                         cat.HighlightTexture.Draw(1, TextureRefreshRate,
-                            new Point((int)(cat.position2D.X * UI.WIDTH) + xTextureOffset, (int)(cat.position2D.Y * UI.HEIGHT) + yTextureOffset),
+                            new Point((int)(cat.position2D.X * UIScreen.Width) + xTextureOffset, (int)(cat.position2D.Y * UIScreen.Height) + yTextureOffset),
                             new PointF(0.5f, 0.5f),
                             SizeMultiply(TextureSize, TextureCatBgHighlightSizeMultiple),
                             0f, TextureCatBgHighlightColor, UIHelper.AspectRatio);
@@ -595,15 +598,15 @@ namespace SelectorWheel
 
             if (SelectedCategory.SelectedItem.Description != null)
             {
-                float pixelX = 964f / (float)UI.WIDTH;
-                float pixelY = 100f / (float)UI.HEIGHT;
-                UIHelper.DrawCustomText(SelectedCategory.SelectedItem.Description, 0.35f, FontDescription, 255, 255, 255, 255, pixelX, pixelY, 0, 0, 0, 0, 0, UIHelper.TextJustification.Left, true, pixelX, 1250f / (float)UI.WIDTH, true, 0, 0, 0, 180, 10f / (float)UI.WIDTH, 10f / (float)UI.HEIGHT);
+                float pixelX = 964f / (float)UIScreen.Width;
+                float pixelY = 100f / (float)UIScreen.Height;
+                UIHelper.DrawCustomText(SelectedCategory.SelectedItem.Description, 0.35f, FontDescription, 255, 255, 255, 255, pixelX, pixelY, 0, 0, 0, 0, 0, UIHelper.TextJustification.Left, true, pixelX, 1250f / (float)UIScreen.Width, true, 0, 0, 0, 180, 10f / (float)UIScreen.Width, 10f / (float)UIScreen.Height);
             }
             else if (SelectedCategory.Description != null)
             {
-                float pixelX = 964f / (float)UI.WIDTH;
-                float pixelY = 100f / (float)UI.HEIGHT;
-                UIHelper.DrawCustomText(SelectedCategory.Description, 0.35f, FontDescription, 255, 255, 255, 255, pixelX, pixelY, 0, 0, 0, 0, 0, UIHelper.TextJustification.Left, true, pixelX, 1250f / (float)UI.WIDTH, true, 0, 0, 0, 180, 10f / (float)UI.WIDTH, 10f / (float)UI.HEIGHT);
+                float pixelX = 964f / (float)UIScreen.Width;
+                float pixelY = 100f / (float)UIScreen.Height;
+                UIHelper.DrawCustomText(SelectedCategory.Description, 0.35f, FontDescription, 255, 255, 255, 255, pixelX, pixelY, 0, 0, 0, 0, 0, UIHelper.TextJustification.Left, true, pixelX, 1250f / (float)UIScreen.Width, true, 0, 0, 0, 180, 10f / (float)UIScreen.Width, 10f / (float)UIScreen.Height);
             }
 
             CategorySelectionControls();
@@ -619,14 +622,14 @@ namespace SelectorWheel
             }
 
             /*UIHelper.DrawRectangle(inputCoord.X, inputCoord.Y, 0.05f, 0.05f, 0, 235, 255, 255);
-            UI.ShowSubtitle(Math.Round(new Vector2(WheelLeftRightValue(), WheelUpDownValue()).Length(), 2).ToString());*/
+            UIScreen.ShowSubtitle(Math.Round(new Vector2(WheelLeftRightValue(), WheelUpDownValue()).Length(), 2).ToString());*/
 
             int inputIndex = ClosestCategoryToInputCoord() != null ? Categories.IndexOf(ClosestCategoryToInputCoord()) : CurrentCatIndex;
 
             //int nextClosest = NextClosestIndexWithWrap(Categories, CurrentCatIndex, inputIndex);
             if (inputIndex != CurrentCatIndex /*&& nextClosest != CurrentCatIndex*/)
             {
-                //if (Game.CurrentInputMode == InputMode.GamePad)
+                //if (Game.LastInputMethod == InputMethod.GamePad)
                 //{
                 //// Stop cat bg and highligh draw
                 if (!string.IsNullOrWhiteSpace(TextureCatHlPath))
@@ -645,10 +648,10 @@ namespace SelectorWheel
 
                 CategoryChange(SelectedCategory, SelectedCategory.SelectedItem, false);
                 ItemChange(SelectedCategory, SelectedCategory.SelectedItem, false, GoTo.Same);
-                Game.PlaySound(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
+                Audio.PlaySoundFrontendAndForget(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
             }
 
-            /*if (Game.CurrentInputMode == InputMode.GamePad)
+            /*if (Game.LastInputMethod == InputMethod.GamePad)
             {
                 if (inputIndex != CurrentCatIndex)
                 {
@@ -656,12 +659,12 @@ namespace SelectorWheel
 
                     CategoryChange(SelectedCategory, SelectedCategory.SelectedItem, false);
                     ItemChange(SelectedCategory, SelectedCategory.SelectedItem, false);
-                    Game.PlaySound(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
+                    Audio.PlaySoundFrontendAndForget(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
                 }
             }
             else
             {
-                UI.ShowSubtitle("UpDown: " + WheelUpDownValue() + "\nLeftRight: " + WheelLeftRightValue());
+                UIScreen.ShowSubtitle("UpDown: " + WheelUpDownValue() + "\nLeftRight: " + WheelLeftRightValue());
                 if (inputTimer < DateTime.Now)
                 {
                     WheelDirection dir = GetMouseDirection();
@@ -746,7 +749,7 @@ namespace SelectorWheel
                     CurrentCatIndex = tempIndex;
                     CategoryChange(SelectedCategory, SelectedCategory.SelectedItem, false);
                     ItemChange(SelectedCategory, SelectedCategory.SelectedItem, false);
-                    Game.PlaySound(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
+                    Audio.PlaySoundFrontendAndForget(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
                 }
             }*/
         }
@@ -844,7 +847,7 @@ namespace SelectorWheel
 
         float InputToAngle()
         {
-            var angle = Math.Atan2(Game.GetControlNormal(2, GTA.Control.WeaponWheelUpDown), Game.GetControlNormal(2, GTA.Control.WeaponWheelLeftRight));
+            var angle = Math.Atan2(ControlInput.GetValueNormalized(GTA.Control.WeaponWheelUpDown), ControlInput.GetValueNormalized(GTA.Control.WeaponWheelLeftRight));
             if (angle < 0)
             {
                 angle += Math.PI * 2;
@@ -882,14 +885,14 @@ namespace SelectorWheel
                 if (SelectedCategory.SelectedItem.ItemTexture != null && SelectedCategory.ItemCount() > 1) { SelectedCategory.SelectedItem.ItemTexture.StopDraw(); }
                 SelectedCategory.GoToNextItem();
                 ItemChange(SelectedCategory, SelectedCategory.SelectedItem, false, GoTo.Next);
-                Game.PlaySound(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
+                Audio.PlaySoundFrontendAndForget(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
             }
             else if (Control_GoToPreviousItemInCategory_Pressed())
             {
                 if (SelectedCategory.SelectedItem.ItemTexture != null && SelectedCategory.ItemCount() > 1) { SelectedCategory.SelectedItem.ItemTexture.StopDraw(); }
                 SelectedCategory.GoToPreviousItem();
                 ItemChange(SelectedCategory, SelectedCategory.SelectedItem, false, GoTo.Prev);
-                Game.PlaySound(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
+                Audio.PlaySoundFrontendAndForget(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
             }
         }
 
@@ -942,11 +945,11 @@ namespace SelectorWheel
 
         protected void DisableControls()
         {
-            Game.DisableAllControlsThisFrame(2);
+            ControlInput.DisableAllThisFrame();
 
             foreach (var con in ControlsToEnable)
             {
-                Game.EnableControlThisFrame(2, con);
+                ControlInput.EnableThisFrame(con);
             }
         }
 
@@ -957,7 +960,7 @@ namespace SelectorWheel
         /// <returns>normalized value of left/right mouse/stick movement.</returns>
         float WheelLeftRightValue()
         {
-            return Game.GetControlNormal(2, Control.WeaponWheelLeftRight);
+            return ControlInput.GetValueNormalized(Control.WeaponWheelLeftRight);
         }
         
         /// <summary>
@@ -967,18 +970,18 @@ namespace SelectorWheel
         /// <returns>normalized value of up/down mouse/stick movement.</returns>
         float WheelUpDownValue()
         {
-            return Game.GetControlNormal(2, Control.WeaponWheelUpDown);
+            return ControlInput.GetValueNormalized(Control.WeaponWheelUpDown);
         }
 
         bool Control_GoToNextItemInCategory_Pressed()
         {
-            return Game.IsControlJustPressed(2, Game.CurrentInputMode == InputMode.MouseAndKeyboard ?
+            return ControlInput.IsJustPressed(Game.LastInputMethod == InputMethod.MouseAndKeyboard ?
                 Control.WeaponWheelPrev : Control.VehicleAccelerate);
         }
 
         bool Control_GoToPreviousItemInCategory_Pressed()
         {
-            return Game.IsControlJustPressed(2, Game.CurrentInputMode == InputMode.MouseAndKeyboard ? 
+            return ControlInput.IsJustPressed(Game.LastInputMethod == InputMethod.MouseAndKeyboard ? 
                 Control.WeaponWheelNext : Control.VehicleBrake);
         }
         
@@ -1148,6 +1151,8 @@ namespace SelectorWheel
         public int Index { get; set; }
         public int DrawLevel { get; set; }
 
+        private CustomSprite _sprite;
+
         public Texture(string path, int index)
         {
             Path = path;
@@ -1156,32 +1161,62 @@ namespace SelectorWheel
 
         public void Draw(int level, int time, Point pos, Size size)
         {
-            UI.DrawTexture(Path, Index, level, time, pos, size);
+            Draw(level, time, pos, new PointF(0.5f, 0.5f), size, 0f, Color.White, UIHelper.AspectRatio);
         }
 
         public void Draw(int level, int time, Point pos, Size size, float rotation, Color color)
         {
-            UI.DrawTexture(Path, Index, level, time, pos, size, rotation, color);
+            Draw(level, time, pos, new PointF(0.5f, 0.5f), size, rotation, color, UIHelper.AspectRatio);
         }
 
         public void Draw(int level, int time, Point pos, PointF center, Size size, float rotation, Color color)
         {
-            UI.DrawTexture(Path, Index, level, time, pos, center, size, rotation, color);
+            Draw(level, time, pos, center, size, rotation, color, UIHelper.AspectRatio);
         }
 
         public void Draw(int level, int time, Point pos, PointF center, Size size, float rotation, Color color, float aspectRatio)
         {
-            UI.DrawTexture(Path, Index, level, time, pos, center, size, rotation, color, aspectRatio);
+            // SHVDN3 replaces GTA.UI.DrawTexture with GTA.UI.CustomSprite.
+            // The live wheel rendering uses a 0.5/0.5 center, which maps directly to Centered=true.
+            bool centered = Math.Abs(center.X - 0.5f) < 0.0001f && Math.Abs(center.Y - 0.5f) < 0.0001f;
+            PointF position = new PointF(pos.X, pos.Y);
+
+            if (!centered)
+            {
+                // Preserve the old DrawTexture anchor semantics for any future caller that
+                // supplies a non-central anchor. CustomSprite uses either top-left or center.
+                position.X -= size.Width * center.X;
+                position.Y -= size.Height * center.Y;
+            }
+
+            if (_sprite == null)
+            {
+                _sprite = new CustomSprite(Path, new SizeF(size.Width, size.Height), position, color, rotation, centered);
+            }
+            else
+            {
+                _sprite.Position = position;
+                _sprite.Size = new SizeF(size.Width, size.Height);
+                _sprite.Color = color;
+                _sprite.Rotation = rotation;
+                _sprite.Centered = centered;
+                _sprite.Enabled = true;
+            }
+
+            _sprite.Draw();
         }
 
         public void LoadTexture()
         {
-            StopDraw();
+            if (_sprite != null) return;
+
+            _sprite = new CustomSprite(Path, SizeF.Empty, PointF.Empty, Color.White, 0f, false);
+            _sprite.Enabled = false;
         }
-        
+
         public void StopDraw()
         {
-            UI.DrawTexture(Path, Index, 1, 0, new Point(1280, 720), new Size(0, 0));
+            if (_sprite != null) _sprite.Enabled = false;
         }
     }
 
@@ -1201,11 +1236,11 @@ namespace SelectorWheel
             bool withRectangle = false, int R = 0, int G = 0, int B = 0, int A = 255,
             float rectWidthOffset = 0f, float rectHeightOffset = 0f, float rectYPosDivisor = 23.5f)
         {
-            Function.Call(Hash._SET_TEXT_ENTRY, "jamyfafi"); //Required, don't change this! AKA BEGIN_TEXT_COMMAND_DISPLAY_TEXT
+            Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "jamyfafi"); //Required, don't change this! AKA BEGIN_TEXT_COMMAND_DISPLAY_TEXT
             Function.Call(Hash.SET_TEXT_SCALE, FontSize, FontSize); //1st param: 1.0f
             Function.Call(Hash.SET_TEXT_FONT, (int)FontType);
             Function.Call(Hash.SET_TEXT_COLOUR, Red, Green, Blue, Alpha);
-            Function.Call(Hash.SET_TEXT_DROPSHADOW, dropShawdowPixelDistance, dRed, dGreen, dBlue, dAlpha);
+            Function.Call((Hash)0x465C84BC39F1C351, dropShawdowPixelDistance, dRed, dGreen, dBlue, dAlpha); // SET_TEXT_DROPSHADOW
             Function.Call(Hash.SET_TEXT_OUTLINE);
             Function.Call(Hash.SET_TEXT_JUSTIFICATION, (int)justifyType);
             if (justifyType == TextJustification.Right || ForceTextWrap)
@@ -1213,10 +1248,10 @@ namespace SelectorWheel
                 Function.Call(Hash.SET_TEXT_WRAP, startWrap, endWrap);
             }
 
-            //Function.Call(Hash._ADD_TEXT_COMPONENT_STRING, Message);
+            //Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, Message);
             AddLongString(Message);
 
-            Function.Call(Hash._DRAW_TEXT, XPos, YPos); //AKA END_TEXT_COMMAND_DISPLAY_TEXT
+            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, XPos, YPos); //AKA END_TEXT_COMMAND_DISPLAY_TEXT
 
             if (withRectangle)
             {
@@ -1264,16 +1299,16 @@ namespace SelectorWheel
             for (int i = 0; i < str.Length; i += strLen)
             {
                 string substr = str.Substring(i, Math.Min(strLen, str.Length - i));
-                Function.Call(Hash._ADD_TEXT_COMPONENT_STRING, substr); //ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME
+                Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, substr); //ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME
             }
         }
 
         public static float MeasureStringWidth(string str, Font font, float fontsize)
         {
-            //int screenw = 2560;// Game.ScreenResolution.Width;
-            //int screenh = 1440;// Game.ScreenResolution.Height;
+            //int screenw = 2560;// UIScreen.Resolution.Width;
+            //int screenh = 1440;// UIScreen.Resolution.Height;
             const float height = 1080f;
-            float ratio = (float)Game.ScreenResolution.Width / Game.ScreenResolution.Height;
+            float ratio = (float)UIScreen.Resolution.Width / UIScreen.Resolution.Height;
             float width = height * ratio;
             return MeasureStringWidthNoConvert(str, font, fontsize) * width;
         }
@@ -1284,17 +1319,17 @@ namespace SelectorWheel
             AddLongString(str);
             Function.Call(Hash.SET_TEXT_FONT, (int)font);
             Function.Call(Hash.SET_TEXT_SCALE, fontsize, fontsize);
-            return Function.Call<float>(Hash._0x85F061DA64ED2F67, true); //_END_TEXT_COMMAND_GET_WIDTH //Function.Call<float>((Hash)0x85F061DA64ED2F67, (int)font) * fontsize; //_END_TEXT_COMMAND_GET_WIDTH
+            return Function.Call<float>((Hash)0x85F061DA64ED2F67, true); //_END_TEXT_COMMAND_GET_WIDTH //Function.Call<float>((Hash)0x85F061DA64ED2F67, (int)font) * fontsize; //_END_TEXT_COMMAND_GET_WIDTH
         }
 
         public static float MeasureFontHeight(float fontSize, Font font)
         {
-            return Function.Call<float>(Hash._0xDB88A37483346780, fontSize, (int)font) * Game.ScreenResolution.Height; //1080f
+            return Function.Call<float>((Hash)0xDB88A37483346780, fontSize, (int)font) * UIScreen.Resolution.Height; //1080f
         }
 
         public static float MeasureFontHeightNoConvert(float fontSize, Font font)
         {
-            return Function.Call<float>(Hash._0xDB88A37483346780, fontSize, (int)font);
+            return Function.Call<float>((Hash)0xDB88A37483346780, fontSize, (int)font);
         }
 
         public static int GetStringLineCount(string text, float FontSize, Font FontType, float startWrap, float endWrap, float x, float y)
@@ -1310,7 +1345,7 @@ namespace SelectorWheel
         public static float XPixelToPercentage(int pixel)
         {
             const float height = 1080f;
-            float ratio = (float)Game.ScreenResolution.Width / Game.ScreenResolution.Height;
+            float ratio = (float)UIScreen.Resolution.Width / UIScreen.Resolution.Height;
             float width = height * ratio;
 
             return pixel / width;
@@ -1319,7 +1354,7 @@ namespace SelectorWheel
         public static float YPixelToPercentage(int pixel)
         {
             const float height = 1080f;
-            float ratio = (float)Game.ScreenResolution.Width / Game.ScreenResolution.Height;
+            float ratio = (float)UIScreen.Resolution.Width / UIScreen.Resolution.Height;
             float width = height * ratio;
 
             return pixel / height;
@@ -1328,7 +1363,7 @@ namespace SelectorWheel
         public static float XPercentageToPixel(float percent)
         {
             const float height = 1080f;
-            float ratio = (float)Game.ScreenResolution.Width / Game.ScreenResolution.Height;
+            float ratio = (float)UIScreen.Resolution.Width / UIScreen.Resolution.Height;
             float width = height * ratio;
 
             return percent * width;
@@ -1337,7 +1372,7 @@ namespace SelectorWheel
         public static float YPercentageToPixel(float percent)
         {
             const float height = 1080f;
-            float ratio = (float)Game.ScreenResolution.Width / Game.ScreenResolution.Height;
+            float ratio = (float)UIScreen.Resolution.Width / UIScreen.Resolution.Height;
             float width = height * ratio;
 
             return percent * height;
@@ -1349,11 +1384,11 @@ namespace SelectorWheel
             return new string(original.Select(c => invalidChars.Contains(c) ? replacementChar : c).ToArray());
         }
         
-        public static float AspectRatio { get; private set; } = Function.Call<float>(Hash._GET_SCREEN_ASPECT_RATIO, true);
+        public static float AspectRatio { get; private set; } = UIScreen.PhysicalAspectRatio;
 
         public static float UpdateAspectRatio()
         {
-            AspectRatio = Function.Call<float>(Hash._GET_SCREEN_ASPECT_RATIO, true);
+            AspectRatio = UIScreen.PhysicalAspectRatio;
             return AspectRatio;
         }
 
@@ -1361,8 +1396,8 @@ namespace SelectorWheel
         {
             // Credits to MaxShadow for this method
             float angle2 = (normalizedAngle * (float)Math.PI * 2) - ((float)Math.PI / 2);
-            float x2 = (UI.WIDTH / 2) + (float)Math.Cos(angle2) * x;
-            float y2 = (UI.HEIGHT / 2) + (float)Math.Sin(angle2) * y * (AspectRatio / (16f / 9f));
+            float x2 = (UIScreen.Width / 2) + (float)Math.Cos(angle2) * x;
+            float y2 = (UIScreen.Height / 2) + (float)Math.Sin(angle2) * y * (AspectRatio / (16f / 9f));
             return new PointF(x2, y2);
         }
     }

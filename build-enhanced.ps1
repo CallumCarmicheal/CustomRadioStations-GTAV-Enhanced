@@ -1,14 +1,14 @@
-param(
+﻿param(
     [ValidateSet('Debug','Release')]
     [string]$Configuration = 'Release',
-    [string]$SHVDN2Path = (Join-Path $PSScriptRoot 'CustomRadioStations\lib\ScriptHookVDotNet2.dll'),
+    [string]$SHVDN3Path = (Join-Path $PSScriptRoot 'CustomRadioStations\lib\ScriptHookVDotNet3.dll'),
     [string]$IrrKlangPath = (Join-Path $PSScriptRoot 'CustomRadioStations\lib\irrKlang.NET4.dll')
 )
 
 $ErrorActionPreference = 'Stop'
 
-if (!(Test-Path $SHVDN2Path)) {
-    throw "Missing ScriptHookVDotNet2.dll: $SHVDN2Path`nCopy it from the SAME ScriptHookVDotNet Enhanced release installed in GTA V."
+if (!(Test-Path $SHVDN3Path)) {
+    throw "Missing ScriptHookVDotNet3.dll: $SHVDN3Path`nCopy it from the SAME ScriptHookVDotNet Enhanced release installed in GTA V."
 }
 if (!(Test-Path $IrrKlangPath)) {
     throw "Missing irrKlang.NET4.dll: $IrrKlangPath`nCopy the x64 .NET 4 irrKlang assembly used by the original mod."
@@ -27,7 +27,7 @@ if (!$msbuild) {
 }
 
 $project = Join-Path $PSScriptRoot 'CustomRadioStations\CustomRadioStations.csproj'
-& $msbuild.FullName $project /m /t:Rebuild "/p:Configuration=$Configuration" "/p:SHVDN2Path=$SHVDN2Path" "/p:IrrKlangPath=$IrrKlangPath"
+& $msbuild.FullName $project /m /t:Rebuild "/p:Configuration=$Configuration" "/p:SHVDN3Path=$SHVDN3Path" "/p:IrrKlangPath=$IrrKlangPath"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $stage = Join-Path $PSScriptRoot 'CustomRadioStations\dist\scripts'
