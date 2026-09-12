@@ -3,10 +3,6 @@ using GTA.Native;
 using System;
 using System.Windows.Forms;
 using System.IO;
-using System.Collections.Generic;
-using System.Linq;
-using System.Drawing;
-using GTA.Math;
 using UIScreen = GTA.UI.Screen;
 using SelectorWheel;
 using GTAVFunctions;
@@ -16,14 +12,6 @@ namespace CustomRadioStations
 {
     public class MainScript : Script
     {
-        public const string mainPath = @"scripts\Custom Radio Stations\";
-
-        public static string iconBgPath = @"scripts\Custom Radio Stations\iconbg.png";
-
-        public static string iconhighlightPath = @"scripts\Custom Radio Stations\iconhl.png";
-
-        bool canResumeCustomStation;
-
         bool lastPlayedOnFoot;
 
         int lastVanillaStationPlayed = 0;
@@ -54,7 +42,7 @@ namespace CustomRadioStations
             // from constructing the script at all.
             try
             {
-                if (!Directory.Exists(mainPath)) Directory.CreateDirectory(mainPath);
+                if (!Directory.Exists(AppPaths.RootDirectory)) Directory.CreateDirectory(AppPaths.RootDirectory);
                 Logger.Init();
                 Config.SetupSystemCulture();
                 Config.LoadINI();
@@ -102,135 +90,41 @@ namespace CustomRadioStations
 
         public void SetupRadio()
         {
-            // A script/domain reload must not retain stale wheel/station objects.
-            WheelVars.RadioWheels.Clear();
-            WheelVars.CurrentRadioWheel = null;
-            WheelVars.NextQueuedWheel = null;
-            StationWheelPair.List.Clear();
-            RadioStation.CurrentPlaying = null;
-            RadioStation.NextQueuedStation = null;
+            RadioCatalogLoader.Reload();
 
-            if (!Directory.Exists(mainPath))
+            foreach (Wheel radioWheel in WheelVars.RadioWheels)
             {
-                Directory.CreateDirectory(mainPath);
-                Logger.Log("Created missing custom radio directory: " + mainPath);
-            }
-
-            // Get folders in script's main folder "Custom Radio Stations"
-            string[] wheelDirectories = Directory.GetDirectories(mainPath, "*", SearchOption.TopDirectoryOnly);
-
-            foreach (var wheelDir in wheelDirectories)
-            {
-                Logger.Log("Loading " + wheelDir);
-
-                Logger.Log("Checking if " + wheelDir + "\\settings.ini exists");
-
-                var wheelIni = Config.LoadWheelINI(wheelDir);
-
-                // Create wheel obj
-                Wheel radioWheel = new Wheel("Radio Wheel", wheelDir, 0, 0, new System.Drawing.Size(wheelIni.iconX, wheelIni.iconY), 200, wheelIni.wheelRadius);
-
-                // Get folders in script's main folder "Custom Radio Stations"
-                string[] stationDirectories = Directory.GetDirectories(wheelDir, "*", SearchOption.TopDirectoryOnly);
-
-                Logger.Log("Number of stations: " + stationDirectories.Count());
-
-                // Specify file extensions to search for in the next step
-                var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp3", ".wav", ".flac", ".lnk" };
-
-                // Keep count of the number of station folders with actual music files
-                int populatedStationCount = 0;
-
-                // Generate wheel categories for each folder, which will be our individual stations on the wheel
-                foreach (var stationDir in stationDirectories)
+                radioWheel.OnCategoryChange += (sender, selectedCategory, selectedItem, wheelJustOpened) =>
                 {
-                    Logger.Log("Loading " + stationDir);
+                    StationWheelPair pair = StationWheelPair.List.Find(candidate =>
+                        candidate.Wheel == radioWheel && candidate.Category == selectedCategory);
+                    if (pair == null) return;
 
-                    // Get all files that have the above-mentioned extensions.
-                    var musicFilePaths = Directory.GetFiles(stationDir, "*.*", SearchOption.TopDirectoryOnly)
-                        .Where(x => extensions.Contains(Path.GetExtension(x))).ToArray();
+                    ActionQueued = ActionOptions.PlayQueued;
+                    RadioStation.NextQueuedStation = pair.Station;
+                    SetActionDelay(Config.WheelActionDelay);
+                    lastRadioWasCustom = true;
+                };
 
-                    // Don't make a station out of an empty folder
-                    if (musicFilePaths.Count() == 0)
-                    {
-                        Logger.Log("Skipping " + Path.GetFileName(stationDir) + " as there are no music files.");
-                        continue;
-                    }
-
-                    WheelCategory stationCat = new WheelCategory(Path.GetFileName(stationDir));
-                    radioWheel.AddCategory(stationCat);
-                    WheelCategoryItem stationItem = new WheelCategoryItem(stationCat.Name);
-                    stationCat.AddItem(stationItem);
-
-                    RadioStation station = new RadioStation(stationCat, musicFilePaths);
-
-                    // All files may have failed to load (bad shortcuts, unsupported/corrupt audio, etc.).
-                    // Do not register a wheel entry that can only crash when selected.
-                    if (!station.HasPlayableSounds)
-                    {
-                        Logger.Log("Skipping " + Path.GetFileName(stationDir) + " because no playable audio could be loaded.");
-                        radioWheel.RemoveCategory(stationCat);
-                        continue;
-                    }
-
-                    populatedStationCount++;
-
-                    // Add wheel category-station combo to a station list
-                    StationWheelPair pair = new StationWheelPair(radioWheel, stationCat, station);
-                    StationWheelPair.List.Add(pair);
-
-                    // Get description
-                    pair.LoadStationINI(Path.Combine(stationDir, "station.ini"));
-
-                    radioWheel.OnCategoryChange += (sender, selectedCategory, selectedItem, wheelJustOpened) =>
-                    {
-                        // HandleRadioWheelToggle() handles what happens when the wheel is opened.
-                        // So we will only use this anonymous method for when the station is actually changed.
-                        //if (wheelJustOpened) return;
-
-                        if (selectedCategory == stationCat)
-                        {
-                            // If there is no input for a short amount of time, set the selected station as next to play
-                            ActionQueued = ActionOptions.PlayQueued;
-
-                            RadioStation.NextQueuedStation = station;
-
-                            // If radio is still being decided, add delay before station changes
-                            SetActionDelay(Config.WheelActionDelay);
-
-                            lastRadioWasCustom = true;
-                        }
-                    };
-
-                    radioWheel.OnItemChange += (sender, selectedCategory, selectedItem, wheelJustOpened, goTo) =>
-                    {
-                        if (wheelJustOpened) return;
-                        
-                        if (radioWheel.Visible && radioWheel == WheelVars.CurrentRadioWheel && WheelVars.NextQueuedWheel == null)
-                        {
-                            if (goTo == GoTo.Next)
-                            {
-                                radioWheel.Visible = false;
-                                WheelVars.NextQueuedWheel = WheelVars.RadioWheels.GetNext(radioWheel);
-                            }
-                            else if (goTo == GoTo.Prev)
-                            {
-                                radioWheel.Visible = false;
-                                WheelVars.NextQueuedWheel = WheelVars.RadioWheels.GetPrevious(radioWheel);
-                            }
-                        }
-                    };
-                }
-                
-                if (populatedStationCount > 0)
+                // Register navigation once per wheel. The legacy loader registered this
+                // identical handler once per station, causing duplicate callbacks.
+                radioWheel.OnItemChange += (sender, selectedCategory, selectedItem, wheelJustOpened, goTo) =>
                 {
-                    WheelVars.RadioWheels.Add(radioWheel);
-                    radioWheel.Origin = new Vector2(0.5f, 0.45f);
-                    radioWheel.SetCategoryBackgroundIcons(iconBgPath, Config.IconBG, Config.IconBgSizeMultiple, iconhighlightPath, Config.IconHL, Config.IconHlSizeMultiple);
-                    radioWheel.CalculateCategoryPlacement();
-                }
+                    if (wheelJustOpened || !radioWheel.Visible ||
+                        radioWheel != WheelVars.CurrentRadioWheel || WheelVars.NextQueuedWheel != null)
+                        return;
 
-                Logger.Log(@"/\/\/\/\/\/\/\/\/\/\/\/\/\/\");
+                    if (goTo == GoTo.Next)
+                    {
+                        radioWheel.Visible = false;
+                        WheelVars.NextQueuedWheel = WheelVars.RadioWheels.GetNext(radioWheel);
+                    }
+                    else if (goTo == GoTo.Prev)
+                    {
+                        radioWheel.Visible = false;
+                        WheelVars.NextQueuedWheel = WheelVars.RadioWheels.GetPrevious(radioWheel);
+                    }
+                };
             }
             
             if (WheelVars.RadioWheels.Count > 0)
@@ -273,14 +167,11 @@ namespace CustomRadioStations
 
                 if (UsedVehiclesManager.IsUsedVehicle(veh))
                 {
-                    canResumeCustomStation = false;
-
                     if (UsedVehiclesManager.GetVehicleStationInfo(veh) == null)
                     {
                         // Make vanilla radio audible
                         RadioNativeFunctions.VanillaRadioFadedOut(false);
 
-                        canResumeCustomStation = false;
                         lastRadioWasCustom = false;
                         return;
                     }
@@ -307,7 +198,6 @@ namespace CustomRadioStations
                         // Make vanilla radio audible
                         RadioNativeFunctions.VanillaRadioFadedOut(false);
 
-                        canResumeCustomStation = false;
                         lastRadioWasCustom = false;
                         return;
                     }
@@ -329,7 +219,6 @@ namespace CustomRadioStations
 
                         SetActionDelay(Config.WheelActionDelay + 300);
 
-                        canResumeCustomStation = false;
                         lastRadioWasCustom = true;
                     }
                     else
@@ -339,7 +228,6 @@ namespace CustomRadioStations
                         // Make vanilla radio audible
                         RadioNativeFunctions.VanillaRadioFadedOut(false);
 
-                        canResumeCustomStation = false;
                         lastRadioWasCustom = false;
                     }
                 }
@@ -388,7 +276,7 @@ namespace CustomRadioStations
         {
             if (initializationFailure != null)
             {
-                if (!loaded && !Game.IsLoading && Game.Player != null && Game.Player.CanControlCharacter)
+                if (!loaded && Game.Player != null && Game.Player.CanControlCharacter)
                 {
                     loaded = true;
                     try { UIScreen.ShowSubtitle("Custom Radio Stations could not start. Check CustomRadioStations.log."); } catch { }
@@ -398,7 +286,7 @@ namespace CustomRadioStations
 
             if (!loaded)
             {
-                if (!Game.Player.CanControlCharacter || Game.IsLoading) return;
+                if (Game.Player == null || !Game.Player.CanControlCharacter) return;
 
                 if (loadDelayTimer == null) loadDelayTimer = DateTime.Now.AddMilliseconds(Config.LoadStartDelay);
 
@@ -408,7 +296,7 @@ namespace CustomRadioStations
                         UIScreen.ShowSubtitle("Loading Custom Radios...");
 
                     Logger.Log("Starting Custom Radio Stations Enhanced compatibility build");
-                    Logger.Log("Reported game version: " + Game.Version);
+                    Logger.Log("Reported game version: " + Game.FileVersion);
 
                     try
                     {
@@ -445,7 +333,6 @@ namespace CustomRadioStations
                     if (Config.CustomWheelAsDefault && WheelVars.RadioWheels.Count > 0)
                     {
                         lastRadioWasCustom = true;
-                        canResumeCustomStation = true;
                     }
                 }
 
@@ -591,7 +478,6 @@ namespace CustomRadioStations
                     // Make vanilla radio audible
                     RadioNativeFunctions.VanillaRadioFadedOut(false);
 
-                    canResumeCustomStation = true;
                 }
             }
 

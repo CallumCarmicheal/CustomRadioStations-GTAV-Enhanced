@@ -9,7 +9,8 @@ namespace CustomRadioStations
         public static string GetShortcutTargetFile(string shortcutFilePath)
         {
             IWshRuntimeLibrary.IWshShell wsh = new IWshRuntimeLibrary.WshShell();
-            IWshRuntimeLibrary.IWshShortcut sc = (IWshRuntimeLibrary.IWshShortcut)wsh.CreateShortcut(shortcutFilePath);
+            object shortcut = wsh.CreateShortcut(shortcutFilePath);
+            IWshRuntimeLibrary.IWshShortcut sc = (IWshRuntimeLibrary.IWshShortcut)shortcut;
 
             if (System.IO.File.Exists(sc.TargetPath))
             {

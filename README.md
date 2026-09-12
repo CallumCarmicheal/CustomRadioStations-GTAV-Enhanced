@@ -1,6 +1,6 @@
 ﻿# Custom Radio Stations for GTA V
 
-> **Enhanced compatibility port v0.5 (2026):** forward-port of the original GPL-3.0 project for GTA V Enhanced using ScriptHookVDotNet Enhanced and the ScriptHookVDotNet3 API. v0.5 replaces the proprietary irrKlang playback backend with the open-source MiniAudioEx/miniaudio stack. See [`ENHANCED_PORT_NOTES.md`](ENHANCED_PORT_NOTES.md) for details.
+> **Enhanced compatibility port v0.5 (2026):** forward-port of the original GPL-3.0 project for GTA V Enhanced using ScriptHookVDotNet Enhanced and the ScriptHookVDotNet3 API. v0.5 replaces the proprietary irrKlang playback backend with the open-source MiniAudioEx/miniaudio stack.
 
 The project provides multiple local custom radio stations/wheels, track metadata, commercials and a virtual "live broadcast" timeline rather than turning the feature into a simple music player.
 
@@ -29,10 +29,21 @@ No irrKlang files or codec plugins are required anymore. MP3, FLAC, WAV and OGG 
 
 The original UI assets such as `iconbg.png` / `iconhl.png` are still required if your original CRS distribution uses them; those assets were not committed to the upstream GitHub repository.
 
+## Source layout
+
+- `Audio` - MiniAudioEx integration, playback state and track metadata
+- `Configuration` - global/wheel settings and INI parsing
+- `Game` - ScriptHookVDotNet input, events, native radio calls and vehicle state
+- `Infrastructure` - runtime paths, logging and process-lifetime state
+- `Radio` - station catalog discovery, playlists and wheel/station associations
+- `Scripts` - the two SHVDN script entry points
+- `UI` - selector-wheel rendering and shared wheel state
+- `Utilities` - general and GTA math helpers
+
+`RadioCatalogLoader` owns filesystem discovery. It recognizes MP3, FLAC, WAV and OGG files plus Windows shortcuts, builds wheels in deterministic folder order, and leaves gameplay event handling to `MainScript`.
+
 ## Port status
 
 The source no longer pattern-scans or patches GTA memory, no longer depends on the deprecated SHVDN2 compatibility API, and no longer depends on proprietary irrKlang. The custom-station core has been hardened against missing/malformed stations, failed audio files, null radio-wheel state, vehicle transition edge cases and optional native-wheel failures.
 
 The MiniAudioEx backend preserves the old station-facing millisecond API while internally converting to MiniAudioEx PCM cursors. Pause/resume, seek, station continuity, looping, per-sound volume and global volume are retained. `AudioContext.Update()` is driven from the existing game tick.
-
-This environment cannot launch GTA V Enhanced, so the remaining work is an in-game validation pass of playback, pause/resume/seek continuity, HUD/Scaleform behavior, and the current Enhanced radio natives. See `ENHANCED_PORT_NOTES.md` for the test matrix.

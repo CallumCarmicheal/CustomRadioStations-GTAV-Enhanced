@@ -11,9 +11,6 @@ namespace CustomRadioStations
 {
     public class NativeWheelOrganizerScript : Script
     {
-        const string logPath = "scripts\\Custom Radio Stations\\NativeStations.log";
-        const string orgList = "scripts\\Custom Radio Stations\\NativeWheels.cfg";
-
         NativeWheel currentWheel;
 
         List<string> validStationNames;
@@ -54,17 +51,17 @@ namespace CustomRadioStations
 
         void LogAllStations()
         {
-            Logger.Init(logPath);
+            Logger.Init(AppPaths.NativeStationsLogFile);
 
-            Logger.Log("Game version: " + Game.Version.ToString(), logPath);
-            Logger.Log("Checking all native and add-on radios...", logPath);
+            Logger.Log("Game version: " + Game.FileVersion, AppPaths.NativeStationsLogFile);
+            Logger.Log("Checking all native and add-on radios...", AppPaths.NativeStationsLogFile);
 
             maxStationCount = RadioNativeFunctions._MAX_RADIO_STATION_INDEX();
 
             validStationNames = new List<string>();
             if (maxStationCount <= 0)
             {
-                Logger.Log("Native radio wheel organization disabled: GTA did not report a valid station count.", logPath);
+                Logger.Log("Native radio wheel organization disabled: GTA did not report a valid station count.", AppPaths.NativeStationsLogFile);
                 return;
             }
 
@@ -74,17 +71,17 @@ namespace CustomRadioStations
                 if (string.IsNullOrWhiteSpace(stationName)) continue;
                 validStationNames.Add(stationName);
                 string s = "Name: " + stationName + " || Proper name: " + RadioNativeFunctions.GetRadioStationProperName(i);
-                Logger.Log(s, logPath);
+                Logger.Log(s, AppPaths.NativeStationsLogFile);
             }
 
-            Logger.Log("Please use the 'Name' name for your wheel organization lists (NativeWheels.cfg)! 'Proper name' is only for display purposes.", logPath);
+            Logger.Log("Please use the 'Name' name for your wheel organization lists (NativeWheels.cfg)! 'Proper name' is only for display purposes.", AppPaths.NativeStationsLogFile);
         }
 
         void GetOrganizationLists()
         {
-            if (!File.Exists(orgList) || validStationNames == null || validStationNames.Count == 0) return;
+            if (!File.Exists(AppPaths.NativeWheelsFile) || validStationNames == null || validStationNames.Count == 0) return;
             
-            string[] lines = File.ReadAllLines(orgList);
+            string[] lines = File.ReadAllLines(AppPaths.NativeWheelsFile);
 
             bool lastLineWasWheelName = false;
 
@@ -252,7 +249,7 @@ namespace CustomRadioStations
 
             if (!RadioNativeFunctions.NativeWheelLockAvailable)
             {
-                Logger.Log("Native radio wheel organization disabled for this session because station locking is unavailable.", logPath);
+                Logger.Log("Native radio wheel organization disabled for this session because station locking is unavailable.", AppPaths.NativeStationsLogFile);
                 NativeWheel.WheelList.Clear();
                 currentWheel = null;
                 nativeWheelWasApplied = false;

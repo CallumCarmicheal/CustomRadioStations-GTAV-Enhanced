@@ -95,6 +95,9 @@ namespace CustomRadioStations
                     if (lines[i].Length > 0)
                         CreateTracklist(lines[i]);
                 }
+                // Metadata lookup assumes chronological entries. Accept hand-edited
+                // files in any order and normalize them once when loading.
+                Tracklist.Sort((left, right) => left.StartTime.CompareTo(right.StartTime));
                 return Tracklist.Count > 0;
             }
             Tracklist = null;
@@ -111,7 +114,9 @@ namespace CustomRadioStations
                 && inputFromINI[2] == ':'
                 && inputFromINI[5] == ':'
                 && uint.TryParse(inputFromINI.Substring(3, 2), out uint m)
-                && uint.TryParse(inputFromINI.Substring(6, 2), out uint s))
+                && uint.TryParse(inputFromINI.Substring(6, 2), out uint s)
+                && m < 60
+                && s < 60)
             {
                 // Convert hours:minutes:seconds to milliseconds
                 uint startTime = (h * 60 * 60 * 1000)

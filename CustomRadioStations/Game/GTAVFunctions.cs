@@ -223,7 +223,7 @@ namespace GTAVFunctions
 
         public static void SetVehicleVisualDamage(Vehicle v, Vector3 worldCoord, float visualDamageAmount = 200f, float radiusOfDamage = 250f, bool p6 = true)
         {
-            Vector3 offset = v.GetOffsetFromWorldCoords(worldCoord);
+            Vector3 offset = v.GetPositionOffset(worldCoord);
             Function.Call(Hash.SET_VEHICLE_DAMAGE, v, offset.X, offset.Y, offset.Z, visualDamageAmount, radiusOfDamage, p6);
         }
 
@@ -261,7 +261,7 @@ namespace GTAVFunctions
 
         public static bool HasCheatStringJustBeenEntered(string cheat)
         {
-            return Function.Call<bool>((Hash)0x557E43C447E700A8, Game.GenerateHash(cheat)); // _HAS_CHEAT_STRING_JUST_BEEN_ENTERED
+            return Function.Call<bool>((Hash)0x557E43C447E700A8, StringHash.AtStringHashUtf8(cheat, 0)); // _HAS_CHEAT_STRING_JUST_BEEN_ENTERED
         }
 
         public static float CalculateRelativeValue(float input, float inputMin, float inputMax, float outputMin, float outputMax)

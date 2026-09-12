@@ -5,16 +5,13 @@ using System.Text;
 using System.Drawing;
 using System.Globalization;
 using System.Windows.Forms;
+using System.IO;
 using GTA;
 using Control = GTA.Control;
 using ScriptSettings = Settings.ScriptSettings;
 
-namespace CustomRadioStations
-{
-    public static class Config
-    {
-        private const string iniPath = @"scripts\Custom Radio Stations\settings.ini";
-
+namespace CustomRadioStations {
+    public static class Config {
         private const string INI_SECTION_GENERAL = "GENERAL",
                                 INI_SECTION_GRAPHICS = "GRAPHICS",
                                 INI_SECTION_KEYBOARD_CONTROLS = "KEYBOARD_CONTROLS",
@@ -45,11 +42,10 @@ namespace CustomRadioStations
         public static Control GP_Volume_Up;
         public static Control GP_Volume_Down;
 
-        public static void SaveINI()
-        {
+        public static void SaveINI() {
             ForceDecimal();
 
-            ScriptSettings config = ScriptSettings.Load(iniPath);
+            ScriptSettings config = ScriptSettings.Load(AppPaths.SettingsFile);
 
             var comment = ";Type 'radio_reload' into the cheat textbox (press ` to access) to reload settings.ini, NativeWheels.cfg, and all station.ini files.";
             config.SetValue<float>(INI_SECTION_GENERAL, "DEFAULT VOLUME (0 to 1.0)", SoundFile.SoundEngine.SoundVolume, comment);
@@ -85,11 +81,10 @@ namespace CustomRadioStations
             config.Save();
         }
 
-        public static void LoadINI()
-        {
+        public static void LoadINI() {
             ForceDecimal();
 
-            ScriptSettings config = ScriptSettings.Load(iniPath);
+            ScriptSettings config = ScriptSettings.Load(AppPaths.SettingsFile);
 
             SoundFile.SoundEngine.SoundVolume = config.GetValue<float>(INI_SECTION_GENERAL, "DEFAULT VOLUME (0 to 1.0)", 0.3f);
             CustomWheelAsDefault = config.GetValue<bool>(INI_SECTION_GENERAL, "First Custom Wheel Is Default On Startup", true);
@@ -120,11 +115,10 @@ namespace CustomRadioStations
             SaveINI();
         }
 
-        public static (int iconX, int iconY, float wheelRadius) LoadWheelINI(string directory)
-        {
+        public static (int iconX, int iconY, float wheelRadius) LoadWheelINI(string directory) {
             ForceDecimal();
 
-            ScriptSettings config = ScriptSettings.Load(directory + "\\settings.ini");
+            ScriptSettings config = ScriptSettings.Load(Path.Combine(directory, AppPaths.WheelSettingsFileName));
 
             int iconX = config.GetValue<int>(INI_SECTION_GRAPHICS, "ICON X SIZE", IconX);
             int iconY = config.GetValue<int>(INI_SECTION_GRAPHICS, "ICON Y SIZE", IconY);
@@ -132,14 +126,11 @@ namespace CustomRadioStations
             return (iconX, iconY, wheelRadius);
         }
 
-        public static void UpdateWheelsVisuals()
-        {
-            foreach (var pair in StationWheelPair.List)
-            {
+        public static void UpdateWheelsVisuals() {
+            foreach (var pair in StationWheelPair.List) {
                 // Go up two levels from pair.IniPath to get wheel settings directory
                 string path = pair.IniPath;
-                for (int i = 0; i < 2; i++)
-                {
+                for (int i = 0; i < 2; i++) {
                     path = System.IO.Path.GetDirectoryName(path);
                 }
 
@@ -147,39 +138,33 @@ namespace CustomRadioStations
 
                 pair.Wheel.TextureSize = new Size(wheelIni.iconX, wheelIni.iconY);
                 pair.Wheel.Radius = wheelIni.wheelRadius;
-                pair.Wheel.SetCategoryBackgroundIcons(MainScript.iconBgPath, IconBG, IconBgSizeMultiple, MainScript.iconhighlightPath, IconHL, IconHlSizeMultiple);
+                pair.Wheel.SetCategoryBackgroundIcons(AppPaths.BackgroundIconFile, IconBG, IconBgSizeMultiple, AppPaths.HighlightIconFile, IconHL, IconHlSizeMultiple);
             }
         }
 
-        public static void ReloadStationINIs()
-        {
+        public static void ReloadStationINIs() {
             StationWheelPair.List.ForEach(x => x.LoadStationINI(x.IniPath));
         }
 
-        public static void RescanForTracklists()
-        {
+        public static void RescanForTracklists() {
             StationWheelPair.List.ForEach(x => x.RescanStationTracklists());
         }
 
         public static CultureInfo culture;
-        public static void SetupSystemCulture()
-        {
+        public static void SetupSystemCulture() {
             culture = new CultureInfo(System.Threading.Thread.CurrentThread.CurrentCulture.Name, true);
             culture.NumberFormat.NumberDecimalSeparator = ".";
             ForceDecimal();
         }
 
-        public static void ForceDecimal()
-        {
+        public static void ForceDecimal() {
             System.Threading.Thread.CurrentThread.CurrentCulture = culture;
         }
 
         public static int loadCounter = 0;      // Count how many audio files are loaded
         public static int loadInterval = 10;    // Add a Wait() every 10 loaded audio files
-        public static void LoadTick()
-        {
-            if (loadCounter % loadInterval == 0)
-            {
+        public static void LoadTick() {
+            if (loadCounter % loadInterval == 0) {
                 Script.Wait(LoadMS);
             }
 
