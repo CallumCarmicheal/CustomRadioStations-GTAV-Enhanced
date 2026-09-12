@@ -35,6 +35,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $requiredOutputs = @(
     'CustomRadioStations.dll',
+    'Newtonsoft.Json.dll',
     'MiniAudioExNET.dll',
     'miniaudioex.dll'
 )

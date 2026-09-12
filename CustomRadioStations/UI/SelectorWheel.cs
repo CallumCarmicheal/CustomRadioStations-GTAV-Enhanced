@@ -286,7 +286,7 @@ namespace SelectorWheel {
             if (!HaveTexturesBeenCached) {
                 foreach (var cat in Categories) {
                     bool hasTexture = false;
-                    if (File.Exists(Path.Combine(TexturePath, UIHelper.MakeValidFileName(cat.Name) + ".png"))) {
+                    if (cat.CategoryTexture == null && File.Exists(Path.Combine(TexturePath, UIHelper.MakeValidFileName(cat.Name) + ".png"))) {
                         cat.CategoryTexture = new Texture(Path.Combine(TexturePath, UIHelper.MakeValidFileName(cat.Name) + ".png"), Categories.IndexOf(cat));
                         hasTexture = true;
                     }

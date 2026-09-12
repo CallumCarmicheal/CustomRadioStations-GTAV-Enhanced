@@ -6,6 +6,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using GTAVFunctions;
+using Newtonsoft.Json;
 
 namespace CustomRadioStations
 {
@@ -74,41 +75,44 @@ namespace CustomRadioStations
                 Logger.Log(s, AppPaths.NativeStationsLogFile);
             }
 
-            Logger.Log("Please use the 'Name' name for your wheel organization lists (NativeWheels.cfg)! 'Proper name' is only for display purposes.", AppPaths.NativeStationsLogFile);
+            Logger.Log("Use each station's 'Name' value in native-wheels.json. 'Proper name' is only for display purposes.", AppPaths.NativeStationsLogFile);
         }
 
         void GetOrganizationLists()
         {
             if (!File.Exists(AppPaths.NativeWheelsFile) || validStationNames == null || validStationNames.Count == 0) return;
             
-            string[] lines = File.ReadAllLines(AppPaths.NativeWheelsFile);
-
-            bool lastLineWasWheelName = false;
-
-            foreach (string line in lines)
+            try
             {
-                if (String.IsNullOrWhiteSpace(line)) continue;
-
-                string l = line.Trim();
-
-                if (l.Contains("[") && l.Contains("]"))
+                var serializerSettings = new JsonSerializerSettings
                 {
-                    if (lastLineWasWheelName)
+                    MissingMemberHandling = MissingMemberHandling.Ignore,
+                    ObjectCreationHandling = ObjectCreationHandling.Replace
+                };
+                NativeWheelConfiguration config = JsonConvert.DeserializeObject<NativeWheelConfiguration>(
+                    File.ReadAllText(AppPaths.NativeWheelsFile), serializerSettings);
+
+                foreach (NativeWheelSettings wheelSettings in config?.Wheels ?? new List<NativeWheelSettings>())
+                {
+                    if (wheelSettings == null || string.IsNullOrWhiteSpace(wheelSettings.Name)) continue;
+                    var wheel = new NativeWheel(wheelSettings.Name.Trim());
+                    foreach (string station in wheelSettings.Stations ?? new List<string>())
                     {
-                        NativeWheel.WheelList.Remove(NativeWheel.WheelList.Last());
+                        string stationName = station?.Trim();
+                        if (!string.IsNullOrWhiteSpace(stationName) &&
+                            validStationNames.Any(s => string.Equals(s, stationName, StringComparison.OrdinalIgnoreCase)) &&
+                            !wheel.stationList.Any(s => string.Equals(s, stationName, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            wheel.stationList.Add(stationName);
+                        }
                     }
-
-                    var wheel = new NativeWheel(l.Substring(1, l.Length - 2));
-                    NativeWheel.WheelList.Add(wheel);
-                    lastLineWasWheelName = true;
-                    continue;
+                    if (wheel.stationList.Count > 0) NativeWheel.WheelList.Add(wheel);
                 }
-
-                if (WheelListIsPopulated() && validStationNames.Any(s => string.Equals(s, l, StringComparison.OrdinalIgnoreCase)))
-                {
-                    NativeWheel.WheelList.Last().stationList.Add(l);
-                    lastLineWasWheelName = false;
-                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Failed to load native-wheels.json: " + ex.Message + ". Native wheel organization will remain disabled.", AppPaths.NativeStationsLogFile);
+                NativeWheel.WheelList.Clear();
             }
 
             // Drop headers that ended up with no valid GTA stations. An empty wheel
@@ -152,7 +156,7 @@ namespace CustomRadioStations
                 ShowHelpTexts();
 
                 // Native wheel organization is optional. Only intercept GTA's normal
-                // radio controls when a valid NativeWheels.cfg produced at least one
+                // radio controls when a valid native-wheels.json produced at least one
                 // usable wheel. Otherwise fail open and leave the stock radio untouched.
                 if (WheelListIsPopulated() && currentWheel != null)
                 {

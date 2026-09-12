@@ -1,397 +1,410 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.IO;
 using GTA;
 using GTA.Native;
-using GTA.Math;
 using SelectorWheel;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 
-namespace CustomRadioStations {
-    class RadioStation {
+namespace CustomRadioStations
+{
+    internal sealed class RadioStation : IDisposable
+    {
+        internal static readonly Random random = new Random();
 
-        public static Random random = new Random();
+        private readonly WheelCategory wheelCategory;
+        private readonly List<string> trackSources;
+        private readonly List<string> commercialSources;
+        private readonly List<StationMediaItem> programme = new List<StationMediaItem>();
+        private readonly PlaybackConfig playback;
+        private readonly CommercialBreakConfig commercialBreaks;
 
-        public string Name { get; set; }
+        private SoundFile currentSound;
+        private bool hasPlayedOnce;
+        private bool allSoundsPlayedOnce;
+        private int lastPlayedSoundIndex;
+        private int lastCommercialIndex = -1;
+        private uint stoppedPositionStation;
+        private uint stoppedPositionSound;
+        private DateTime lastPlayedTime;
+        private DateTime trackUpdateTimer = DateTime.Now;
 
-        /// <summary>
-        /// In milliseconds
-        /// </summary>
-        public uint TotalLength { get; private set; } = 0;
+        internal RadioStation(WheelCategory correspondingWheelCategory, StationDefinition definition)
+        {
+            wheelCategory = correspondingWheelCategory;
+            Id = definition.Id;
+            Name = definition.Name;
+            Description = definition.Description ?? string.Empty;
+            playback = definition.Playback ?? new PlaybackConfig();
+            commercialBreaks = definition.CommercialBreaks ?? new CommercialBreakConfig();
+            trackSources = new List<string>(definition.Tracks ?? new string[0]);
+            commercialSources = new List<string>(definition.Commercials ?? new string[0]);
 
-        WheelCategory corrWheelCat;
-        List<SoundFileTimePair> SoundFileTimePairs;
-        SoundFile CurrentSound;
+            BuildProgramme();
+        }
 
-        bool hasPlayedOnce;
-        uint stoppedPositionStation;
-        DateTime lastPlayedTime;
+        internal string Id { get; }
+        internal string Name { get; }
+        internal string Description { get; }
+        internal uint TotalLength { get; private set; }
+        internal bool HasPlayableSounds => programme.Any(item => !item.IsCommercial);
 
-        int lastPlayedSoundIndex;
-        uint stoppedPositionSound;
-        bool allSoundsPlayedOnce;
+        private bool IsBroadcastMode => string.Equals(playback.Mode, "broadcast", StringComparison.OrdinalIgnoreCase);
 
-        public bool HasPlayableSounds => SoundFileTimePairs != null && SoundFileTimePairs.Count > 0;
+        private void BuildProgramme()
+        {
+            var tracks = new List<StationMediaItem>();
+            foreach (string source in trackSources)
+            {
+                SoundFile sound = TryCreateSound(source, "track");
+                if (sound != null) tracks.Add(new StationMediaItem(sound, false));
+                Config.LoadTick();
+            }
 
-        public RadioStation(WheelCategory correspondingWheelCategory, IEnumerable<string> songFilesPaths) {
-            corrWheelCat = correspondingWheelCategory;
-            Name = corrWheelCat.Name;
-            SoundFileTimePairs = new List<SoundFileTimePair>();
-            List<Tuple<string, string>> commercials = new List<Tuple<string, string>>();
+            if (playback.Shuffle) Shuffle(tracks);
 
-            foreach (var path in songFilesPaths) {
-                try {
-                    //Logger.Log(path.Substring(path.LastIndexOf('\\') + 1));
-                    // If file is a shortcut, get the real path first
-                    if (string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase)) {
-                        string str = GeneralHelper.GetShortcutTargetFile(path);
+            int tracksUntilBreak = NextInclusive(commercialBreaks.MinTracksBetween, commercialBreaks.MaxTracksBetween);
+            int tracksSinceBreak = 0;
+            foreach (StationMediaItem track in tracks)
+            {
+                programme.Add(track);
+                tracksSinceBreak++;
 
-                        if (str == string.Empty) continue;
+                if (!commercialBreaks.Enabled || commercialSources.Count == 0 ||
+                    commercialBreaks.MaxCommercials == 0 || tracksSinceBreak < tracksUntilBreak)
+                    continue;
 
-                        if (Path.GetFileNameWithoutExtension(str).Contains("[Commercial]")
-                            || Path.GetFileNameWithoutExtension(path).Contains("[Commercial]")) {
-                            commercials.Add(Tuple.Create(str, path));
-                        } else {
-                            SoundFileTimePairs.Add(new SoundFileTimePair(new SoundFile(str, path), 0));
-                        }
-                    } else {
-                        if (Path.GetFileNameWithoutExtension(path).Contains("[Commercial]")) {
-                            commercials.Add(Tuple.Create(path, string.Empty));
-                        } else {
-                            SoundFileTimePairs.Add(new SoundFileTimePair(new SoundFile(path), 0));
-                        }
-                    }
-
-                    Config.LoadTick();
-                } catch (Exception ex) {
-                    Logger.Log("ERROR : " + path.Substring(path.LastIndexOf('\\') + 1) + " : " + ex.Message);
-                    Script.Wait(500);
+                int commercialCount = NextInclusive(commercialBreaks.MinCommercials, commercialBreaks.MaxCommercials);
+                for (int i = 0; i < commercialCount; i++)
+                {
+                    string source = GetNextCommercialSource();
+                    SoundFile commercial = TryCreateSound(source, "commercial");
+                    if (commercial != null) programme.Add(new StationMediaItem(commercial, true));
                 }
-            }
 
-            ShuffleList(); // Do this based on an ini setting? Yes. TODO
-            InsertCommercials(commercials);
-
-            // Calculate lengths and stuff for the station
-            // Replaced by UpdateRadioLengthWithCurrentSound()
-            //foreach (var s in SoundFileTimePairs)
-            //{
-            //    s.StartTime = TotalLength;
-            //    TotalLength += s.SoundFile.Length;
-            //}
-        }
-
-        /// <summary>
-        /// Must be called after CurrentSound.PlaySound();
-        /// </summary>
-        private void UpdateRadioLengthWithCurrentSound() {
-            if (CurrentSound == null) return;
-            var s = SoundFileTimePairs.Find(x => x.SoundFile == CurrentSound);
-            if (s == null) return;
-            if (!CurrentSound.LengthAdded) {
-                s.StartTime = TotalLength;
-                TotalLength += CurrentSound.Length;
-                CurrentSound.LengthAdded = true;
+                tracksSinceBreak = 0;
+                tracksUntilBreak = NextInclusive(commercialBreaks.MinTracksBetween, commercialBreaks.MaxTracksBetween);
             }
         }
 
-        DateTime trackUpdateTimer = DateTime.Now;
-        public void Update() {
-            if (CurrentSound == null || CurrentSound.Sound == null) return;
+        private string GetNextCommercialSource()
+        {
+            if (commercialSources.Count == 1)
+            {
+                lastCommercialIndex = 0;
+                return commercialSources[0];
+            }
 
-            // Legacy debug subtitle((lastPlayedSoundIndex + 1) + " / " + SoundFileTimePairs.Count);
+            int next;
+            do { next = random.Next(commercialSources.Count); }
+            while (next == lastCommercialIndex);
+            lastCommercialIndex = next;
+            return commercialSources[next];
+        }
 
-            if (CurrentSound.HasTrackList && trackUpdateTimer < DateTime.Now) {
+        private SoundFile TryCreateSound(string path, string kind)
+        {
+            try
+            {
+                if (string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase))
+                {
+                    string target = GeneralHelper.GetShortcutTargetFile(path);
+                    if (string.IsNullOrEmpty(target))
+                        throw new FileNotFoundException("Shortcut target does not exist.", path);
+                    return new SoundFile(target, path);
+                }
+                return new SoundFile(path);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("WARNING: Could not load " + kind + " '" + path + "' for station '" + Name + "': " + ex.Message);
+                return null;
+            }
+        }
+
+        private static void Shuffle<T>(IList<T> items)
+        {
+            for (int i = items.Count - 1; i > 0; i--)
+            {
+                int selected = random.Next(i + 1);
+                T value = items[selected];
+                items[selected] = items[i];
+                items[i] = value;
+            }
+        }
+
+        private static int NextInclusive(int minimum, int maximum)
+        {
+            return minimum >= maximum ? minimum : random.Next(minimum, maximum + 1);
+        }
+
+        internal void Update()
+        {
+            if (currentSound == null || currentSound.Sound == null) return;
+            if (currentSound.HasTrackList && trackUpdateTimer < DateTime.Now)
+            {
                 UpdateWheelInfo();
                 UpdateTrackUpdateTimer();
             }
-
-            if (CurrentSound.IsFinishedPlaying()) {
-                PlayNextSound();
-            }
+            if (currentSound.IsFinishedPlaying()) PlayNextSound();
         }
 
-        private void ShuffleList() {
-            /*int n = SoundFileTimePairs.Count;
-
-            for (int i = SoundFileTimePairs.Count - 1; i > 1; i--)
+        internal void Play()
+        {
+            if (!HasPlayableSounds)
             {
-                int rnd = random.Next(i + 1);
-
-                SoundFileTimePair value = SoundFileTimePairs[rnd];
-                SoundFileTimePairs[rnd] = SoundFileTimePairs[i];
-                SoundFileTimePairs[i] = value;
-            }*/
-
-            var count = SoundFileTimePairs.Count;
-            var last = count - 1;
-            for (var i = 0; i < last; ++i) {
-                var r = random.Next(i, count);
-                var tmp = SoundFileTimePairs[i];
-                SoundFileTimePairs[i] = SoundFileTimePairs[r];
-                SoundFileTimePairs[r] = tmp;
-            }
-        }
-
-        int lastCommIndex = 0;
-        private void InsertCommercials(List<Tuple<string, string>> commercials) {
-            if (commercials.Count > 0) {
-                int numToInsert = SoundFileTimePairs.Count / 3;
-                int lastIndex = -1;
-                SoundFileTimePairs.Capacity += numToInsert;
-
-                for (int i = 0; i < numToInsert; i++) {
-                    lastIndex += 4;
-
-                    lastCommIndex = GetNewRandom(lastCommIndex, commercials.Count);
-                    var commercial = commercials[lastCommIndex];
-
-                    try {
-                        var pair = new SoundFileTimePair(
-                                string.IsNullOrEmpty(commercial.Item2) ? new SoundFile(commercial.Item1) :
-                                new SoundFile(commercial.Item1, commercial.Item2), 0);
-
-                        if (lastIndex >= SoundFileTimePairs.Count) {
-                            SoundFileTimePairs.Add(pair);
-                        } else {
-                            SoundFileTimePairs.Insert(lastIndex, pair);
-                        }
-                    } catch (Exception ex) {
-                        Logger.Log("WARNING: Could not load commercial '" + commercial.Item1 + "': " + ex.Message);
-                    }
-                }
-            }
-        }
-
-        private int GetNewRandom(int input, int max) {
-            int rnd = random.Next(0, max);
-            if (input == rnd && max != 1) {
-                return GetNewRandom(input, max);
-            } else {
-                return rnd;
-            }
-
-        }
-
-        internal void RescanSoundsTracklists() {
-            foreach (var pair in SoundFileTimePairs) {
-                var soundFile = pair.SoundFile;
-                soundFile.HasTrackList = soundFile.TracklistExists(soundFile.FilePath);
-            }
-            UpdateWheelInfo();
-            UpdateTrackUpdateTimer();
-        }
-
-        private void UpdateWheelInfo() {
-            if (CurrentSound == null || CurrentSound.Sound == null) return;
-
-            if (corrWheelCat == null || corrWheelCat.ItemList == null || corrWheelCat.ItemList.Count == 0) return;
-            WheelCategoryItem radioWheelItem = corrWheelCat.ItemList[0];
-
-            radioWheelItem.Name = Name + "\n" + CurrentSound.DisplayName;
-        }
-
-        public void UpdateDashboardInfo() {
-            if (CurrentSound == null || CurrentSound.Sound == null) return;
-
-            Ped player = Game.Player.Character;
-            if (player != null && player.Exists() && player.IsInVehicle()) {
-                string[] info = (CurrentSound.DisplayName ?? string.Empty).Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
-                string artist = info.Length > 0 ? info[0] : string.Empty;
-                string track = info.Length > 1 ? info[1] : string.Empty;
-                RadioNativeFunctions.UpdateRadioScaleform(Name, artist, track);
-            }
-        }
-
-        private void UpdateTrackUpdateTimer() {
-            trackUpdateTimer = DateTime.Now.AddMilliseconds(CurrentSound == null || CurrentSound.Sound == null ? 5000 : CurrentSound.TimeUntilNextTrack());
-        }
-
-        public void Play() {
-            if (!HasPlayableSounds) {
-                Logger.Log("WARNING: Station '" + Name + "' has no playable sounds; ignoring play request.");
+                Logger.Log("WARNING: Station '" + Name + "' has no playable tracks; ignoring play request.");
                 return;
             }
 
-            if (!hasPlayedOnce) {
-                CurrentSound = SoundFileTimePairs[0].SoundFile;
-                CurrentSound.PlaySound(false, false, true);
-                if (CurrentSound.Sound == null) {
-                    Logger.Log("WARNING: MiniAudioEx failed to start station '" + Name + "'.");
-                    CurrentSound = null;
-                    return;
-                }
-                CurrentSound.Sound.PlayPosition = CurrentSound.GetRandomPlayPosition();
-                CurrentSound.Sound.Paused = false;
-                UpdateRadioLengthWithCurrentSound();
+            if (!hasPlayedOnce)
+            {
+                currentSound = programme[0].SoundFile;
+                if (!StartCurrentSound()) return;
+                currentSound.Sound.PlayPosition = IsBroadcastMode ? currentSound.GetRandomPlayPosition() : 0u;
+                currentSound.Sound.Paused = false;
+                UpdateProgrammeLength();
                 hasPlayedOnce = true;
-
                 UpdateWheelInfo();
-            } else {
-                if (!allSoundsPlayedOnce &&
-                    lastPlayedSoundIndex == SoundFileTimePairs.Count - 1) {
+            }
+            else if (IsBroadcastMode)
+            {
+                if (!allSoundsPlayedOnce && lastPlayedSoundIndex == programme.Count - 1)
                     allSoundsPlayedOnce = true;
-                }
-
-                ResumeContinuity();
+                ResumeBroadcastContinuity();
+            }
+            else
+            {
+                ResumePlaylist();
             }
 
             Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", true);
             Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", true);
         }
 
-        private void ResumeContinuity() {
-            if (!HasPlayableSounds) return;
+        private bool StartCurrentSound(bool resume = false)
+        {
+            currentSound.PlaySound(resume, false, true);
+            if (currentSound.Sound == null)
+            {
+                Logger.Log("WARNING: MiniAudioEx failed to start station '" + Name + "'.");
+                currentSound = null;
+                return false;
+            }
+            currentSound.Sound.Volume = playback.Volume;
+            return true;
+        }
 
+        private void ResumePlaylist()
+        {
+            int index = Math.Max(0, Math.Min(lastPlayedSoundIndex, programme.Count - 1));
+            currentSound = programme[index].SoundFile;
+            if (!StartCurrentSound(true)) return;
+            uint maximum = currentSound.Length > 0 ? currentSound.Length - 1 : 0;
+            currentSound.Sound.PlayPosition = Math.Min(maximum, stoppedPositionSound);
+            CurrentSoundIsPaused = false;
+            UpdateProgrammeLength();
+            UpdateWheelInfo();
+        }
+
+        private void ResumeBroadcastContinuity()
+        {
             uint elapsed = lastPlayedTime == default(DateTime)
                 ? 0u
                 : (uint)Math.Min(uint.MaxValue, Math.Max(0d, (DateTime.Now - lastPlayedTime).TotalMilliseconds));
+            int safeLastIndex = Math.Max(0, Math.Min(lastPlayedSoundIndex, programme.Count - 1));
+            SoundFile lastSound = programme[safeLastIndex].SoundFile;
 
-            int safeLastIndex = Math.Max(0, Math.Min(lastPlayedSoundIndex, SoundFileTimePairs.Count - 1));
-            var lastPlayedSound = SoundFileTimePairs[safeLastIndex].SoundFile;
-
-            if (allSoundsPlayedOnce && TotalLength > 0) {
-                uint newPlayPos = GetTimeFromPrevious(stoppedPositionStation, TotalLength, elapsed);
-                var stPair = SoundFileTimePairs.LastOrDefault(s => newPlayPos >= s.StartTime) ?? SoundFileTimePairs[0];
-                CurrentSound = stPair.SoundFile;
-                CurrentSound.PlaySound(true, false, true);
-                if (CurrentSound.Sound == null) { CurrentSound = null; return; }
-                UpdateRadioLengthWithCurrentSound();
-                CurrentSound.Sound.PlayPosition = Math.Min(CurrentSound.Length > 0 ? CurrentSound.Length - 1 : 0u,
-                    newPlayPos >= stPair.StartTime ? newPlayPos - stPair.StartTime : 0u);
-                CurrentSoundIsPaused = false;
-            } else {
-                uint remaining = lastPlayedSound.Length > stoppedPositionSound
-                    ? lastPlayedSound.Length - stoppedPositionSound
-                    : 0u;
-
-                if (elapsed < remaining) {
-                    CurrentSound = lastPlayedSound;
-                    CurrentSound.PlaySound(true, false, true);
-                    if (CurrentSound.Sound == null) { CurrentSound = null; return; }
-                    uint maxPos = CurrentSound.Length > 0 ? CurrentSound.Length - 1 : 0u;
-                    CurrentSound.Sound.PlayPosition = Math.Min(maxPos, stoppedPositionSound + elapsed);
-                    CurrentSoundIsPaused = false;
-                    UpdateRadioLengthWithCurrentSound();
-                } else {
-                    CurrentSound = safeLastIndex != SoundFileTimePairs.Count - 1
-                        ? SoundFileTimePairs[safeLastIndex + 1].SoundFile
-                        : SoundFileTimePairs[0].SoundFile;
-                    CurrentSound.PlaySound(true);
-                    if (CurrentSound.Sound == null) { CurrentSound = null; return; }
-                    UpdateRadioLengthWithCurrentSound();
+            if (allSoundsPlayedOnce && TotalLength > 0)
+            {
+                uint newPosition = GetTimeFromPrevious(stoppedPositionStation, TotalLength, elapsed);
+                StationMediaItem item = programme.LastOrDefault(candidate => newPosition >= candidate.StartTime) ?? programme[0];
+                currentSound = item.SoundFile;
+                if (!StartCurrentSound(true)) return;
+                UpdateProgrammeLength();
+                currentSound.Sound.PlayPosition = Math.Min(currentSound.Length > 0 ? currentSound.Length - 1 : 0,
+                    newPosition >= item.StartTime ? newPosition - item.StartTime : 0);
+            }
+            else
+            {
+                uint remaining = lastSound.Length > stoppedPositionSound ? lastSound.Length - stoppedPositionSound : 0;
+                if (elapsed < remaining)
+                {
+                    currentSound = lastSound;
+                    if (!StartCurrentSound(true)) return;
+                    currentSound.Sound.PlayPosition = Math.Min(currentSound.Length > 0 ? currentSound.Length - 1 : 0,
+                        stoppedPositionSound + elapsed);
+                    UpdateProgrammeLength();
+                }
+                else
+                {
+                    int nextIndex = safeLastIndex < programme.Count - 1 ? safeLastIndex + 1 : 0;
+                    currentSound = programme[nextIndex].SoundFile;
+                    if (!StartCurrentSound(true)) return;
+                    UpdateProgrammeLength();
                 }
             }
 
+            CurrentSoundIsPaused = false;
             UpdateWheelInfo();
-            if (CurrentSound != null && CurrentSound.HasTrackList)
-                UpdateTrackUpdateTimer();
+            if (currentSound != null && currentSound.HasTrackList) UpdateTrackUpdateTimer();
         }
 
-        private uint GetTimeFromPrevious(uint previous, uint duration, uint elapsed) {
-            if (duration == 0) return 0;
-            // Use 64-bit arithmetic so long real-time gaps cannot wrap uint before modulo.
-            ulong normalizedPrevious = previous % duration;
-            ulong time = (normalizedPrevious + elapsed) % duration;
-            return (uint)time;
-        }
+        internal void Stop()
+        {
+            if (currentSound == null || currentSound.Sound == null) return;
+            StationMediaItem item = programme.Find(candidate => candidate.SoundFile == currentSound);
+            if (item == null) return;
 
-        public void Stop() {
-            if (CurrentSound == null || CurrentSound.Sound == null) return;
-
-            // Get stopped position
-            var stPair = SoundFileTimePairs.Find(s => s.SoundFile == CurrentSound);
-            if (stPair == null) return;
-            stoppedPositionStation = stPair.StartTime + CurrentSound.PlayPosition();
+            stoppedPositionStation = item.StartTime + currentSound.PlayPosition();
+            stoppedPositionSound = currentSound.PlayPosition();
+            lastPlayedSoundIndex = programme.IndexOf(item);
             lastPlayedTime = DateTime.Now;
-            lastPlayedSoundIndex = SoundFileTimePairs.IndexOf(stPair);
-            stoppedPositionSound = CurrentSound.PlayPosition();
-
-            // Set name in wheel to just the station name
-            if (corrWheelCat != null && corrWheelCat.ItemList != null && corrWheelCat.ItemList.Count > 0) {
-                WheelCategoryItem radioWheelItem = corrWheelCat.ItemList[0];
-                radioWheelItem.Name = Name;
-            }
-
-            //CurrentSound.StopSound();
+            ResetWheelInfo();
             CurrentSoundIsPaused = true;
-            CurrentSound = null;
-
-            Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", false);
-            Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", false);
+            currentSound = null;
+            ResetAudioFlags();
         }
 
-        private void PlayNextSound() {
+        private void PlayNextSound()
+        {
             if (!HasPlayableSounds) return;
+            int currentIndex = currentSound == null ? -1 : programme.FindIndex(item => item.SoundFile == currentSound);
+            if (currentSound != null) currentSound.StopSound();
 
-            int currentSoundIndex = -1;
-            if (CurrentSound != null) {
-                currentSoundIndex = SoundFileTimePairs.FindIndex(s => s.SoundFile == CurrentSound);
-                CurrentSound.StopSound();
-            }
-
-            // Set next in list; -1 naturally advances to index 0.
-            currentSoundIndex = currentSoundIndex >= 0 && currentSoundIndex < SoundFileTimePairs.Count - 1
-                ? currentSoundIndex + 1
-                : 0;
-
-            CurrentSound = SoundFileTimePairs[currentSoundIndex].SoundFile;
-            CurrentSound.PlaySound(true);
-            if (CurrentSound.Sound == null) {
-                Logger.Log("WARNING: Failed to start next audio file on station '" + Name + "'.");
-                CurrentSound = null;
+            if (currentIndex >= programme.Count - 1 && !playback.Loop)
+            {
+                FinishPlayback();
                 return;
             }
-            UpdateRadioLengthWithCurrentSound();
+
+            int nextIndex = currentIndex >= 0 && currentIndex < programme.Count - 1 ? currentIndex + 1 : 0;
+            currentSound = programme[nextIndex].SoundFile;
+            if (!StartCurrentSound(true)) return;
+            UpdateProgrammeLength();
             UpdateWheelInfo();
             UpdateTrackUpdateTimer();
         }
 
-        public void PlayNextSong() {
-            if (CurrentSound != null) {
-                // If CurrentSound has a tracklist but isn't at the last song, skip to the next song in the tracklist.
-                if (CurrentSound.HasTrackList && CurrentSound.GetCurrentTrackIndex() < CurrentSound.Tracklist.Count - 1) {
-                    CurrentSound.SkipToNextTrack();
-                    UpdateWheelInfo();
-                    UpdateTrackUpdateTimer();
-                }
-                // Else, skip to the next SoundFile.
-                else {
-                    PlayNextSound();
-                }
+        internal void PlayNextSong()
+        {
+            if (currentSound == null) return;
+            if (currentSound.HasTrackList && currentSound.GetCurrentTrackIndex() < currentSound.Tracklist.Count - 1)
+            {
+                currentSound.SkipToNextTrack();
+                UpdateWheelInfo();
+                UpdateTrackUpdateTimer();
+            }
+            else
+            {
+                PlayNextSound();
             }
         }
 
-        public bool IsPlaying {
-            get { return CurrentSound != null && CurrentSound.IsPlaying(); }
+        private void FinishPlayback()
+        {
+            currentSound = null;
+            ResetWheelInfo();
+            ResetAudioFlags();
+            if (ReferenceEquals(CurrentPlaying, this)) CurrentPlaying = null;
+            RadioNativeFunctions.VanillaRadioFadedOut(false);
         }
 
-        public bool CurrentSoundIsPaused {
-            get {
-                return CurrentSound != null && CurrentSound.IsPaused;
-            }
-            set {
-                if (CurrentSound != null) CurrentSound.IsPaused = value;
-            }
+        private void UpdateProgrammeLength()
+        {
+            if (currentSound == null) return;
+            StationMediaItem item = programme.Find(candidate => candidate.SoundFile == currentSound);
+            if (item == null || currentSound.LengthAdded) return;
+            item.StartTime = TotalLength;
+            TotalLength += currentSound.Length;
+            currentSound.LengthAdded = true;
         }
 
-        public static RadioStation CurrentPlaying;
-        public static RadioStation NextQueuedStation;
+        internal void RescanSoundsTracklists()
+        {
+            foreach (StationMediaItem item in programme)
+                item.SoundFile.HasTrackList = item.SoundFile.TracklistExists(item.SoundFile.FilePath);
+            UpdateWheelInfo();
+            UpdateTrackUpdateTimer();
+        }
 
-        public static void ManageStations() {
-            if (CurrentPlaying == null) return;
+        private void UpdateWheelInfo()
+        {
+            if (currentSound == null || currentSound.Sound == null || wheelCategory == null ||
+                wheelCategory.ItemList == null || wheelCategory.ItemList.Count == 0) return;
+            wheelCategory.ItemList[0].Name = Name + "\n" + currentSound.DisplayName;
+        }
 
-            CurrentPlaying.Update();
+        internal void UpdateDashboardInfo()
+        {
+            if (currentSound == null || currentSound.Sound == null) return;
+            Ped player = Game.Player.Character;
+            if (player == null || !player.Exists() || !player.IsInVehicle()) return;
+            string[] info = (currentSound.DisplayName ?? string.Empty)
+                .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            RadioNativeFunctions.UpdateRadioScaleform(Name,
+                info.Length > 0 ? info[0] : string.Empty,
+                info.Length > 1 ? info[1] : string.Empty);
+        }
+
+        private void UpdateTrackUpdateTimer()
+        {
+            trackUpdateTimer = DateTime.Now.AddMilliseconds(
+                currentSound == null || currentSound.Sound == null ? 5000 : currentSound.TimeUntilNextTrack());
+        }
+
+        private void ResetWheelInfo()
+        {
+            if (wheelCategory != null && wheelCategory.ItemList != null && wheelCategory.ItemList.Count > 0)
+                wheelCategory.ItemList[0].Name = Name;
+        }
+
+        private static void ResetAudioFlags()
+        {
+            Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", false);
+            Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", false);
+        }
+
+        private static uint GetTimeFromPrevious(uint previous, uint duration, uint elapsed)
+        {
+            if (duration == 0) return 0;
+            return (uint)(((ulong)(previous % duration) + elapsed) % duration);
+        }
+
+        internal bool IsPlaying => currentSound != null && currentSound.IsPlaying();
+
+        internal bool CurrentSoundIsPaused
+        {
+            get { return currentSound != null && currentSound.IsPaused; }
+            set { if (currentSound != null) currentSound.IsPaused = value; }
+        }
+
+        public void Dispose()
+        {
+            foreach (StationMediaItem item in programme)
+                item.SoundFile.Dispose();
+            programme.Clear();
+        }
+
+        internal static RadioStation CurrentPlaying;
+        internal static RadioStation NextQueuedStation;
+
+        internal static void ManageStations()
+        {
+            if (CurrentPlaying != null) CurrentPlaying.Update();
         }
     }
 
-    class SoundFileTimePair {
-        public SoundFile SoundFile;
-        public uint StartTime;
-
-        public SoundFileTimePair(SoundFile sFile, uint time) {
-            SoundFile = sFile;
-            StartTime = time;
+    internal sealed class StationMediaItem
+    {
+        internal StationMediaItem(SoundFile soundFile, bool isCommercial)
+        {
+            SoundFile = soundFile;
+            IsCommercial = isCommercial;
         }
+
+        internal SoundFile SoundFile { get; }
+        internal bool IsCommercial { get; }
+        internal uint StartTime { get; set; }
     }
 }

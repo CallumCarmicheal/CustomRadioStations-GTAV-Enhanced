@@ -45,7 +45,7 @@ namespace CustomRadioStations
                 if (!Directory.Exists(AppPaths.RootDirectory)) Directory.CreateDirectory(AppPaths.RootDirectory);
                 Logger.Init();
                 Config.SetupSystemCulture();
-                Config.LoadINI();
+                Config.Load();
             }
             catch (Exception ex)
             {
@@ -339,17 +339,15 @@ namespace CustomRadioStations
                 return; // Return if loaded is still not true
             }
 
-            if (WheelVars.RadioWheels.Count == 0) return;
-
             if (GTAFunction.HasCheatStringJustBeenEntered("radio_reload"))
             {
-                Config.LoadINI();
-                Config.UpdateWheelsVisuals();
-                Config.ReloadStationINIs();
-                Config.RescanForTracklists();
-                UIScreen.ShowSubtitle("Custom Radio INIs reloaded:\n- settings.ini\n- station.ini files\n- Scanned for tracklists");
+                Config.Load();
+                SetupRadio();
+                UIScreen.ShowSubtitle("Custom Radio configuration reloaded:\n- settings.json\n- wheel.json and native-wheels.json\n- station.json and legacy station.ini\n- tracklist JSON metadata");
                 Wait(150);
             }
+
+            if (WheelVars.RadioWheels.Count == 0) return;
 
             if (VanillaOrCustomRadioWheelIsVisible())
             {
@@ -443,10 +441,12 @@ namespace CustomRadioStations
                     else if (ControlInput.IsJustPressed(ControlVolumeUp))
                     {
                         SoundFile.StepVolume(0.05f, 2);
+                        Config.Save();
                     }
                     else if (ControlInput.IsJustPressed(ControlVolumeDown))
                     {
                         SoundFile.StepVolume(-0.05f, 2);
+                        Config.Save();
                     }
                 }
             }

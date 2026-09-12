@@ -6,6 +6,7 @@ using System;
 using System.ComponentModel;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using Newtonsoft.Json;
 
 namespace CustomRadioStations
 {
@@ -83,74 +84,33 @@ namespace CustomRadioStations
 
         internal bool TracklistExists(string filepath)
         {
-            string iniPath = Path.ChangeExtension(filepath, ".ini");
-            bool tracklistExists = File.Exists(iniPath);
-            if (tracklistExists)
+            string tracklistPath = Path.ChangeExtension(filepath, ".tracklist.json");
+            if (!File.Exists(tracklistPath))
             {
-                Tracklist = new List<Track>();
+                Tracklist = null;
+                return false;
+            }
 
-                var lines = File.ReadAllLines(iniPath);
-                for (int i = 0; i < lines.Length; i++)
+            try
+            {
+                var serializerSettings = new JsonSerializerSettings
                 {
-                    if (lines[i].Length > 0)
-                        CreateTracklist(lines[i]);
-                }
-                // Metadata lookup assumes chronological entries. Accept hand-edited
-                // files in any order and normalize them once when loading.
-                Tracklist.Sort((left, right) => left.StartTime.CompareTo(right.StartTime));
+                    MissingMemberHandling = MissingMemberHandling.Ignore,
+                    ObjectCreationHandling = ObjectCreationHandling.Replace
+                };
+                TracklistConfig config = JsonConvert.DeserializeObject<TracklistConfig>(
+                    File.ReadAllText(tracklistPath), serializerSettings);
+                Tracklist = (config?.Tracks ?? new List<Track>())
+                    .Where(track => track != null)
+                    .OrderBy(track => track.StartTime)
+                    .ToList();
                 return Tracklist.Count > 0;
             }
-            Tracklist = null;
-            return false;
-        }
-
-        private void CreateTracklist(string inputFromINI)
-        {
-            if (string.IsNullOrWhiteSpace(inputFromINI) || inputFromINI.Length < 8)
-                return;
-
-            if (uint.TryParse(inputFromINI.Substring(0, 2), out uint h)
-                && inputFromINI.Length > 5
-                && inputFromINI[2] == ':'
-                && inputFromINI[5] == ':'
-                && uint.TryParse(inputFromINI.Substring(3, 2), out uint m)
-                && uint.TryParse(inputFromINI.Substring(6, 2), out uint s)
-                && m < 60
-                && s < 60)
+            catch (Exception ex)
             {
-                // Convert hours:minutes:seconds to milliseconds
-                uint startTime = (h * 60 * 60 * 1000)
-                    + (m * 60 * 1000)
-                    + (s * 1000);
-
-                // Skip all entries that have a timestamp past the length of the entire file
-                //if (startTime > Length) return; // Gonna let this slide for now, working on getting length only when sound is loaded...
-
-                if (inputFromINI.Length == 8)
-                {
-                    Tracklist.Add(new Track(startTime, "", ""));
-                    return;
-                }
-
-                // Get remainder of string
-                string artistTitle = inputFromINI.Substring(8);
-                
-                if (artistTitle.Contains("||"))
-                {
-                    // Separate it by the string ||
-                    string[] splitTexts = artistTitle.Split(new string[] { "||" }, StringSplitOptions.None);
-
-                    // Set Artist and Title with beginning and ending whitespaces removed.
-                    // Malformed metadata should never take the whole radio script down.
-                    var artist = splitTexts.Length > 0 ? splitTexts[0].Trim() : string.Empty;
-                    var title = splitTexts.Length > 1 ? splitTexts[1].Trim() : string.Empty;
-
-                    Tracklist.Add(new Track(startTime, artist, title));
-                }
-                else
-                {
-                    Tracklist.Add(new Track(startTime, "", artistTitle));
-                }
+                Logger.Log("WARNING: Failed to load tracklist JSON '" + tracklistPath + "': " + ex.Message);
+                Tracklist = null;
+                return false;
             }
         }
 

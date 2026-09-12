@@ -1,40 +1,40 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using GTA;
+using System.Collections.Generic;
 
 namespace CustomRadioStations
 {
-    class StationWheelPair
+    internal sealed class StationWheelPair
     {
-        public static List<StationWheelPair> List = new List<StationWheelPair>();
+        internal static readonly List<StationWheelPair> List = new List<StationWheelPair>();
 
-        public SelectorWheel.Wheel Wheel;
-        public SelectorWheel.WheelCategory Category;
-        public RadioStation Station;
+        internal SelectorWheel.Wheel Wheel { get; }
+        internal SelectorWheel.WheelCategory Category { get; }
+        internal RadioStation Station { get; }
+        internal string StationDirectory { get; }
+        internal string ConfigPath { get; }
+        internal bool IsLegacyIni { get; }
 
-        public string IniPath;
-
-        public StationWheelPair(SelectorWheel.Wheel wheel, SelectorWheel.WheelCategory category, RadioStation station)
+        internal StationWheelPair(SelectorWheel.Wheel wheel, SelectorWheel.WheelCategory category,
+            RadioStation station, string stationDirectory, string configPath, bool isLegacyIni)
         {
             Wheel = wheel;
             Category = category;
             Station = station;
+            StationDirectory = stationDirectory;
+            ConfigPath = configPath;
+            IsLegacyIni = isLegacyIni;
         }
-        
-        public void LoadStationINI(string path)
+
+        internal void ReloadLegacyDescription()
         {
-            IniPath = path;
-
+            if (!IsLegacyIni) return;
             Config.ForceDecimal();
-
-            ScriptSettings config = ScriptSettings.Load(path);
-
-            var description = config.GetValue<string>("GENERAL", "DESCRIPTION", string.Empty);
+            Settings.ScriptSettings config = Settings.ScriptSettings.Load(ConfigPath);
+            string description = config.GetValue<string>("GENERAL", "DESCRIPTION", string.Empty);
             Category.Description = (description ?? string.Empty).Replace("\\n", "\r\n");
         }
 
-        public void RescanStationTracklists()
+        internal void RescanStationTracklists()
         {
             Station.RescanSoundsTracklists();
         }

@@ -1,21 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using GTA;
+using Newtonsoft.Json;
+using System;
 using System.Drawing;
 using System.Globalization;
-using System.Windows.Forms;
 using System.IO;
-using GTA;
+using System.Windows.Forms;
 using Control = GTA.Control;
-using ScriptSettings = Settings.ScriptSettings;
 
-namespace CustomRadioStations {
-    public static class Config {
-        private const string INI_SECTION_GENERAL = "GENERAL",
-                                INI_SECTION_GRAPHICS = "GRAPHICS",
-                                INI_SECTION_KEYBOARD_CONTROLS = "KEYBOARD_CONTROLS",
-                                INI_SECTION_GAMEPAD_CONTROLS = "GAMEPAD_CONTROLS";
+namespace CustomRadioStations
+{
+    public static class Config
+    {
+        private static readonly JsonSerializerSettings JsonSettings = new JsonSerializerSettings
+        {
+            MissingMemberHandling = MissingMemberHandling.Ignore,
+            ObjectCreationHandling = ObjectCreationHandling.Replace
+        };
+
+        private static ApplicationSettings settings = new ApplicationSettings();
 
         public static bool CustomWheelAsDefault;
         public static int WheelActionDelay;
@@ -42,133 +44,194 @@ namespace CustomRadioStations {
         public static Control GP_Volume_Up;
         public static Control GP_Volume_Down;
 
-        public static void SaveINI() {
-            ForceDecimal();
-
-            ScriptSettings config = ScriptSettings.Load(AppPaths.SettingsFile);
-
-            var comment = ";Type 'radio_reload' into the cheat textbox (press ` to access) to reload settings.ini, NativeWheels.cfg, and all station.ini files.";
-            config.SetValue<float>(INI_SECTION_GENERAL, "DEFAULT VOLUME (0 to 1.0)", SoundFile.SoundEngine.SoundVolume, comment);
-            config.SetValue<bool>(INI_SECTION_GENERAL, "First Custom Wheel Is Default On Startup", CustomWheelAsDefault);
-            config.SetValue<int>(INI_SECTION_GENERAL, "WHEEL ACTION DELAY", WheelActionDelay);
-            config.SetValue<int>(INI_SECTION_GENERAL, "Load milliseconds (Higher number > increased load time but more stable)", LoadMS);
-            config.SetValue<int>(INI_SECTION_GENERAL, "Load Start Delay (Milliseconds)", LoadStartDelay);
-            config.SetValue<bool>(INI_SECTION_GENERAL, "Display Help Text and Subtitles", DisplayHelpText);
-            config.SetValue<bool>(INI_SECTION_GENERAL, "Enable Wheel Slowmotion", EnableWheelSlowmotion);
-
-            config.SetValue<int>(INI_SECTION_GRAPHICS, "ICON X SIZE", IconX);
-            config.SetValue<int>(INI_SECTION_GRAPHICS, "ICON Y SIZE", IconY);
-            config.SetValue<float>(INI_SECTION_GRAPHICS, "WHEEL RADIUS", WheelRadius);
-            config.SetValue<string>(INI_SECTION_GRAPHICS, "ICON BACKGROUND COLOR", GeneralHelper.ColorToHex(IconBG));
-            config.SetValue<string>(INI_SECTION_GRAPHICS, "ICON HIGHLIGHT COLOR", GeneralHelper.ColorToHex(IconHL));
-            comment = ";Size multiples - basically sets the background and highlight sizes to a" +
-                " percentage of ICON X SIZE by ICON Y SIZE.";
-            config.SetValue<double>(INI_SECTION_GRAPHICS, "BACKGROUND ICON SIZE MULTIPLE", IconBgSizeMultiple, comment);
-            config.SetValue<double>(INI_SECTION_GRAPHICS, "HIGHLIGHT ICON SIZE MULTIPLE", IconHlSizeMultiple);
-
-            comment = ";The keyboard toggle key control uses generic windows keys: https://docs.microsoft.com/en-us/dotnet/api/system.windows.forms.keys?view=netframework-4.7.2";
-            config.SetValue<Keys>(INI_SECTION_KEYBOARD_CONTROLS, "Toggle: Q +", KB_Toggle, comment);
-            comment = ";The rest are GTA controls. Here's a list: https://raw.githubusercontent.com/crosire/scripthookvdotnet/dev_v2/source/scripting/Controls.hpp";
-            config.SetValue<Control>(INI_SECTION_KEYBOARD_CONTROLS, "Skip Track", KB_Skip_Track, comment);
-            config.SetValue<Control>(INI_SECTION_KEYBOARD_CONTROLS, "Volume Up", KB_Volume_Up);
-            config.SetValue<Control>(INI_SECTION_KEYBOARD_CONTROLS, "Volume Down", KB_Volume_Down);
-
-            config.SetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Toggle: D-Pad Left +", GP_Toggle);
-            config.SetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Skip Track", GP_Skip_Track);
-            config.SetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Volume Up", GP_Volume_Up);
-            config.SetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Volume Down", GP_Volume_Down);
-
-            config.Save();
-        }
-
-        public static void LoadINI() {
-            ForceDecimal();
-
-            ScriptSettings config = ScriptSettings.Load(AppPaths.SettingsFile);
-
-            SoundFile.SoundEngine.SoundVolume = config.GetValue<float>(INI_SECTION_GENERAL, "DEFAULT VOLUME (0 to 1.0)", 0.3f);
-            CustomWheelAsDefault = config.GetValue<bool>(INI_SECTION_GENERAL, "First Custom Wheel Is Default On Startup", true);
-            WheelActionDelay = config.GetValue<int>(INI_SECTION_GENERAL, "WHEEL ACTION DELAY", 500);
-            LoadMS = config.GetValue<int>(INI_SECTION_GENERAL, "Load milliseconds (Higher number > increased load time but more stable)", 1);
-            LoadStartDelay = config.GetValue<int>(INI_SECTION_GENERAL, "Load Start Delay (Milliseconds)", 30000);
-            DisplayHelpText = config.GetValue<bool>(INI_SECTION_GENERAL, "Display Help Text and Subtitles", true);
-            EnableWheelSlowmotion = config.GetValue<bool>(INI_SECTION_GENERAL, "Enable Wheel Slowmotion", true);
-
-            IconX = config.GetValue<int>(INI_SECTION_GRAPHICS, "ICON X SIZE", 30);
-            IconY = config.GetValue<int>(INI_SECTION_GRAPHICS, "ICON Y SIZE", 30);
-            WheelRadius = config.GetValue<float>(INI_SECTION_GRAPHICS, "WHEEL RADIUS", 300f);
-            IconBG = GeneralHelper.HexToColor(config.GetValue<string>(INI_SECTION_GRAPHICS, "ICON BACKGROUND COLOR", "#CC000000"));
-            IconHL = GeneralHelper.HexToColor(config.GetValue<string>(INI_SECTION_GRAPHICS, "ICON HIGHLIGHT COLOR", "#FF00CFEE"));
-            IconBgSizeMultiple = config.GetValue<double>(INI_SECTION_GRAPHICS, "BACKGROUND ICON SIZE MULTIPLE", 1.35);
-            IconHlSizeMultiple = config.GetValue<double>(INI_SECTION_GRAPHICS, "HIGHLIGHT ICON SIZE MULTIPLE", 1.45);
-
-            KB_Toggle = config.GetValue<Keys>(INI_SECTION_KEYBOARD_CONTROLS, "Toggle: Q +", Keys.E);
-            KB_Skip_Track = config.GetValue<Control>(INI_SECTION_KEYBOARD_CONTROLS, "Skip Track", Control.PhoneRight);
-            KB_Volume_Up = config.GetValue<Control>(INI_SECTION_KEYBOARD_CONTROLS, "Volume Up", Control.PhoneUp);
-            KB_Volume_Down = config.GetValue<Control>(INI_SECTION_KEYBOARD_CONTROLS, "Volume Down", Control.PhoneDown);
-
-            GP_Toggle = config.GetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Toggle: D-Pad Left +", Control.VehicleDuck);
-            GP_Skip_Track = config.GetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Skip Track", Control.VehicleHandbrake);
-            GP_Volume_Up = config.GetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Volume Up", Control.MoveUpOnly);
-            GP_Volume_Down = config.GetValue<Control>(INI_SECTION_GAMEPAD_CONTROLS, "Volume Down", Control.MoveDownOnly);
-
-            SaveINI();
-        }
-
-        public static (int iconX, int iconY, float wheelRadius) LoadWheelINI(string directory) {
-            ForceDecimal();
-
-            ScriptSettings config = ScriptSettings.Load(Path.Combine(directory, AppPaths.WheelSettingsFileName));
-
-            int iconX = config.GetValue<int>(INI_SECTION_GRAPHICS, "ICON X SIZE", IconX);
-            int iconY = config.GetValue<int>(INI_SECTION_GRAPHICS, "ICON Y SIZE", IconY);
-            float wheelRadius = config.GetValue<float>(INI_SECTION_GRAPHICS, "WHEEL RADIUS", WheelRadius);
-            return (iconX, iconY, wheelRadius);
-        }
-
-        public static void UpdateWheelsVisuals() {
-            foreach (var pair in StationWheelPair.List) {
-                // Go up two levels from pair.IniPath to get wheel settings directory
-                string path = pair.IniPath;
-                for (int i = 0; i < 2; i++) {
-                    path = System.IO.Path.GetDirectoryName(path);
+        public static void Load()
+        {
+            bool shouldCreate = !File.Exists(AppPaths.SettingsFile);
+            if (!shouldCreate)
+            {
+                try
+                {
+                    settings = JsonConvert.DeserializeObject<ApplicationSettings>(
+                        File.ReadAllText(AppPaths.SettingsFile), JsonSettings) ?? new ApplicationSettings();
                 }
+                catch (Exception ex)
+                {
+                    Logger.Log("ERROR: Failed to load global settings JSON '" + AppPaths.SettingsFile + "': " + ex.Message);
+                    settings = new ApplicationSettings();
+                }
+            }
 
-                var wheelIni = LoadWheelINI(path);
+            NormalizeSettings();
+            ApplySettings();
 
-                pair.Wheel.TextureSize = new Size(wheelIni.iconX, wheelIni.iconY);
-                pair.Wheel.Radius = wheelIni.wheelRadius;
-                pair.Wheel.SetCategoryBackgroundIcons(AppPaths.BackgroundIconFile, IconBG, IconBgSizeMultiple, AppPaths.HighlightIconFile, IconHL, IconHlSizeMultiple);
+            if (shouldCreate)
+                Save();
+        }
+
+        public static void Save()
+        {
+            try
+            {
+                settings.General.MasterVolume = SoundFile.SoundEngine.SoundVolume;
+                settings.General.CustomWheelAsDefault = CustomWheelAsDefault;
+                settings.General.WheelActionDelayMs = WheelActionDelay;
+                settings.General.LoadYieldMs = LoadMS;
+                settings.General.LoadStartDelayMs = LoadStartDelay;
+                settings.General.DisplayHelpText = DisplayHelpText;
+                settings.General.EnableWheelSlowMotion = EnableWheelSlowmotion;
+
+                settings.Graphics.IconWidth = IconX;
+                settings.Graphics.IconHeight = IconY;
+                settings.Graphics.WheelRadius = WheelRadius;
+                settings.Graphics.IconBackgroundColor = GeneralHelper.ColorToHex(IconBG);
+                settings.Graphics.IconHighlightColor = GeneralHelper.ColorToHex(IconHL);
+                settings.Graphics.BackgroundIconSizeMultiplier = IconBgSizeMultiple;
+                settings.Graphics.HighlightIconSizeMultiplier = IconHlSizeMultiple;
+
+                settings.KeyboardControls.ToggleModifier = KB_Toggle;
+                settings.KeyboardControls.SkipTrack = KB_Skip_Track;
+                settings.KeyboardControls.VolumeUp = KB_Volume_Up;
+                settings.KeyboardControls.VolumeDown = KB_Volume_Down;
+
+                settings.GamepadControls.ToggleModifier = GP_Toggle;
+                settings.GamepadControls.SkipTrack = GP_Skip_Track;
+                settings.GamepadControls.VolumeUp = GP_Volume_Up;
+                settings.GamepadControls.VolumeDown = GP_Volume_Down;
+
+                Directory.CreateDirectory(AppPaths.RootDirectory);
+                File.WriteAllText(AppPaths.SettingsFile, JsonConvert.SerializeObject(settings, Formatting.Indented));
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("ERROR: Failed to save global settings JSON '" + AppPaths.SettingsFile + "': " + ex.Message);
             }
         }
 
-        public static void ReloadStationINIs() {
-            StationWheelPair.List.ForEach(x => x.LoadStationINI(x.IniPath));
+        public static (int iconX, int iconY, float wheelRadius) LoadWheelSettings(string directory)
+        {
+            string path = Path.Combine(directory, AppPaths.WheelSettingsFileName);
+            if (!File.Exists(path)) return (IconX, IconY, WheelRadius);
+
+            try
+            {
+                WheelSettings wheel = JsonConvert.DeserializeObject<WheelSettings>(File.ReadAllText(path), JsonSettings)
+                    ?? new WheelSettings();
+                int iconX = wheel.IconWidth.GetValueOrDefault(IconX);
+                int iconY = wheel.IconHeight.GetValueOrDefault(IconY);
+                float radius = wheel.Radius.GetValueOrDefault(WheelRadius);
+
+                if (iconX <= 0 || iconY <= 0 || radius <= 0f)
+                {
+                    Logger.Log("WARNING: Invalid wheel.json dimensions in '" + path + "'; using global defaults.");
+                    return (IconX, IconY, WheelRadius);
+                }
+
+                return (iconX, iconY, radius);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("WARNING: Failed to load wheel JSON '" + path + "': " + ex.Message);
+                return (IconX, IconY, WheelRadius);
+            }
         }
 
-        public static void RescanForTracklists() {
-            StationWheelPair.List.ForEach(x => x.RescanStationTracklists());
+        public static void RescanForTracklists()
+        {
+            StationWheelPair.List.ForEach(pair => pair.RescanStationTracklists());
         }
 
         public static CultureInfo culture;
-        public static void SetupSystemCulture() {
+
+        public static void SetupSystemCulture()
+        {
             culture = new CultureInfo(System.Threading.Thread.CurrentThread.CurrentCulture.Name, true);
             culture.NumberFormat.NumberDecimalSeparator = ".";
             ForceDecimal();
         }
 
-        public static void ForceDecimal() {
-            System.Threading.Thread.CurrentThread.CurrentCulture = culture;
+        public static void ForceDecimal()
+        {
+            if (culture != null)
+                System.Threading.Thread.CurrentThread.CurrentCulture = culture;
         }
 
-        public static int loadCounter = 0;      // Count how many audio files are loaded
-        public static int loadInterval = 10;    // Add a Wait() every 10 loaded audio files
-        public static void LoadTick() {
-            if (loadCounter % loadInterval == 0) {
-                Script.Wait(LoadMS);
-            }
+        public static int loadCounter;
+        public static int loadInterval = 10;
 
+        public static void LoadTick()
+        {
+            if (loadCounter % loadInterval == 0)
+                Script.Wait(LoadMS);
             loadCounter++;
+        }
+
+        private static void NormalizeSettings()
+        {
+            settings.General = settings.General ?? new GeneralSettings();
+            settings.Graphics = settings.Graphics ?? new GraphicsSettings();
+            settings.KeyboardControls = settings.KeyboardControls ?? new KeyboardControlSettings();
+            settings.GamepadControls = settings.GamepadControls ?? new GamepadControlSettings();
+
+            settings.General.MasterVolume = Clamp(settings.General.MasterVolume, 0f, 1f, "general.masterVolume");
+            settings.General.WheelActionDelayMs = Math.Max(0, settings.General.WheelActionDelayMs);
+            settings.General.LoadYieldMs = Math.Max(0, settings.General.LoadYieldMs);
+            settings.General.LoadStartDelayMs = Math.Max(0, settings.General.LoadStartDelayMs);
+            settings.Graphics.IconWidth = Math.Max(1, settings.Graphics.IconWidth);
+            settings.Graphics.IconHeight = Math.Max(1, settings.Graphics.IconHeight);
+            settings.Graphics.WheelRadius = Math.Max(1f, settings.Graphics.WheelRadius);
+            settings.Graphics.BackgroundIconSizeMultiplier = Math.Max(0.1, settings.Graphics.BackgroundIconSizeMultiplier);
+            settings.Graphics.HighlightIconSizeMultiplier = Math.Max(0.1, settings.Graphics.HighlightIconSizeMultiplier);
+        }
+
+        private static void ApplySettings()
+        {
+            SoundFile.SoundEngine.SoundVolume = settings.General.MasterVolume;
+            CustomWheelAsDefault = settings.General.CustomWheelAsDefault;
+            WheelActionDelay = settings.General.WheelActionDelayMs;
+            LoadMS = settings.General.LoadYieldMs;
+            LoadStartDelay = settings.General.LoadStartDelayMs;
+            DisplayHelpText = settings.General.DisplayHelpText;
+            EnableWheelSlowmotion = settings.General.EnableWheelSlowMotion;
+
+            IconX = settings.Graphics.IconWidth;
+            IconY = settings.Graphics.IconHeight;
+            WheelRadius = settings.Graphics.WheelRadius;
+            IconBG = ParseColor(settings.Graphics.IconBackgroundColor, "#CC000000", "graphics.iconBackgroundColor");
+            IconHL = ParseColor(settings.Graphics.IconHighlightColor, "#FF00CFEE", "graphics.iconHighlightColor");
+            IconBgSizeMultiple = settings.Graphics.BackgroundIconSizeMultiplier;
+            IconHlSizeMultiple = settings.Graphics.HighlightIconSizeMultiplier;
+
+            KB_Toggle = settings.KeyboardControls.ToggleModifier;
+            KB_Skip_Track = settings.KeyboardControls.SkipTrack;
+            KB_Volume_Up = settings.KeyboardControls.VolumeUp;
+            KB_Volume_Down = settings.KeyboardControls.VolumeDown;
+            GP_Toggle = settings.GamepadControls.ToggleModifier;
+            GP_Skip_Track = settings.GamepadControls.SkipTrack;
+            GP_Volume_Up = settings.GamepadControls.VolumeUp;
+            GP_Volume_Down = settings.GamepadControls.VolumeDown;
+        }
+
+        private static Color ParseColor(string value, string fallback, string settingName)
+        {
+            try
+            {
+                return GeneralHelper.HexToColor(value);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("WARNING: Invalid " + settingName + " value '" + value + "': " + ex.Message);
+                return GeneralHelper.HexToColor(fallback);
+            }
+        }
+
+        private static float Clamp(float value, float min, float max, string settingName)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value))
+            {
+                Logger.Log("WARNING: Invalid " + settingName + "; using " + min + ".");
+                return min;
+            }
+            return Math.Max(min, Math.Min(max, value));
         }
     }
 }

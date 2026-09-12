@@ -8,13 +8,14 @@ namespace CustomRadioStations
     internal static class AppPaths
     {
         internal const string RootDirectory = @"scripts\Custom Radio Stations";
-        internal const string SettingsFile = RootDirectory + @"\settings.ini";
+        internal const string SettingsFile = RootDirectory + @"\settings.json";
         internal const string MainLogFile = RootDirectory + @"\CustomRadioStations.log";
         internal const string NativeStationsLogFile = RootDirectory + @"\NativeStations.log";
-        internal const string NativeWheelsFile = RootDirectory + @"\NativeWheels.cfg";
+        internal const string NativeWheelsFile = RootDirectory + @"\native-wheels.json";
         internal const string BackgroundIconFile = RootDirectory + @"\iconbg.png";
         internal const string HighlightIconFile = RootDirectory + @"\iconhl.png";
-        internal const string WheelSettingsFileName = "settings.ini";
+        internal const string WheelSettingsFileName = "wheel.json";
+        internal const string StationJsonFileName = "station.json";
         internal const string StationSettingsFileName = "station.ini";
     }
 }
