@@ -14,6 +14,10 @@ namespace GTAVFunctions {
             return Function.Call<bool>(Hash.IS_DISABLED_CONTROL_PRESSED, WheelInputGroup, (int)control);
         }
 
+        internal static bool IsEnabledPressed(Control control) {
+            return Function.Call<bool>(Hash.IS_CONTROL_PRESSED, WheelInputGroup, (int)control);
+        }
+
         internal static bool IsJustPressed(Control control) {
             return Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, WheelInputGroup, (int)control);
         }

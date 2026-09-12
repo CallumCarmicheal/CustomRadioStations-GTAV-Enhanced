@@ -37,7 +37,8 @@ namespace CustomRadioStations {
         }
 
         private static string NormalizeTagValue(string value) {
-            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
             return value.Replace("\r", " ").Replace("\n", " ").Trim();
         }
     }

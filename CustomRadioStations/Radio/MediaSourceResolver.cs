@@ -24,7 +24,8 @@ namespace CustomRadioStations {
 
         internal IReadOnlyList<string> Resolve(IEnumerable<string> entries, string defaultRoot, string sourceKind) {
             var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (entries == null) return results.ToArray();
+            if (entries == null)
+                return results.ToArray();
 
             foreach (string entry in entries) {
                 try {
@@ -133,7 +134,8 @@ namespace CustomRadioStations {
             string current = root;
             string remainder = fullPattern.Substring(root.Length);
             foreach (string segment in remainder.Split(new[] { Path.DirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries)) {
-                if (ContainsWildcard(segment)) break;
+                if (ContainsWildcard(segment))
+                    break;
                 current = Path.Combine(current, segment);
             }
 

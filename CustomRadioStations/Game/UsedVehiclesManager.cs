@@ -1,11 +1,11 @@
-﻿using System;
+﻿using GTA;
+using GTA.Native;
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
-using GTA;
-using GTA.Native;
 
 namespace CustomRadioStations {
     static class UsedVehiclesManager {
@@ -20,7 +20,8 @@ namespace CustomRadioStations {
         }
 
         private static void AddVehicle(Vehicle vehicle, StationWheelPair pair) {
-            if (vehicle == null || !vehicle.Exists()) return;
+            if (vehicle == null || !vehicle.Exists())
+                return;
 
             if (Vehicles.Count >= 20)
                 Vehicles.RemoveAt(0);
@@ -47,11 +48,13 @@ namespace CustomRadioStations {
             if (IsUsedVehicle(vehicle)) {
                 var item = GetFromList(vehicle);
 
-                if (item.radioInfo == null) return;
+                if (item.radioInfo == null)
+                    return;
 
                 //StationWheelPair pair = StationWheelPair.List.Find(x => x.Station == item.radioInfo.Station);
                 StationWheelPair pair = StationWheelPair.List.Find(x => x.Equals(item.radioInfo));
-                if (pair == null) return;
+                if (pair == null)
+                    return;
 
                 WheelVars.CurrentRadioWheel = pair.Wheel;
                 WheelVars.CurrentRadioWheel.SelectedCategory = pair.Category;

@@ -17,7 +17,8 @@ namespace CustomRadioStations {
         internal static Color GetCurrent(Color configuredFallback) {
             try {
                 Ped player = Game.Player.Character;
-                if (player == null || !player.Exists()) return configuredFallback;
+                if (player == null || !player.Exists())
+                    return configuredFallback;
 
                 uint model = unchecked((uint)player.Model.Hash);
                 switch (model) {

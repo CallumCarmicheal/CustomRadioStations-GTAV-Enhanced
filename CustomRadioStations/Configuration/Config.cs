@@ -71,7 +71,8 @@ namespace CustomRadioStations {
         }
 
         private static bool UpgradeSettings() {
-            if (settings.Version >= CurrentSettingsVersion) return false;
+            if (settings.Version >= CurrentSettingsVersion)
+                return false;
 
             settings.Graphics = settings.Graphics ?? new GraphicsSettings();
             if (settings.Graphics.IconWidth == LegacyDefaultIconSize &&
@@ -124,7 +125,8 @@ namespace CustomRadioStations {
 
         public static (int iconX, int iconY, float wheelRadius) LoadWheelSettings(string directory) {
             string path = Path.Combine(directory, AppPaths.WheelSettingsFileName);
-            if (!File.Exists(path)) return (IconX, IconY, WheelRadius);
+            if (!File.Exists(path))
+                return (IconX, IconY, WheelRadius);
 
             try {
                 WheelSettings wheel = JsonConvert.DeserializeObject<WheelSettings>(File.ReadAllText(path), JsonSettings)

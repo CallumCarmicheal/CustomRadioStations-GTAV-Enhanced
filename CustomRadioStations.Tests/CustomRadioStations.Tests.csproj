@@ -47,6 +47,7 @@
     <Compile Include="..\CustomRadioStations\Radio\StationDefinition.cs" Link="StationDefinition.cs" />
     <Compile Include="..\CustomRadioStations\Utilities\HoldRepeatState.cs" Link="HoldRepeatState.cs" />
     <Compile Include="..\CustomRadioStations\Utilities\RadialSelectionHysteresis.cs" Link="RadialSelectionHysteresis.cs" />
+    <Compile Include="..\CustomRadioStations\Game\RadioWheelAvailability.cs" Link="RadioWheelAvailability.cs" />
     <Compile Include="..\CustomRadioStations\UI\WheelDisplayMetrics.cs" Link="WheelDisplayMetrics.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

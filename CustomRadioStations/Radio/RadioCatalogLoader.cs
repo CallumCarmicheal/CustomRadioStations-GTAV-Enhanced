@@ -49,7 +49,8 @@ namespace CustomRadioStations {
         }
 
         private static void EnsureRootDirectory() {
-            if (Directory.Exists(AppPaths.RootDirectory)) return;
+            if (Directory.Exists(AppPaths.RootDirectory))
+                return;
             Directory.CreateDirectory(AppPaths.RootDirectory);
             Logger.Log("Created missing custom radio directory: " + AppPaths.RootDirectory);
         }
@@ -111,11 +112,13 @@ namespace CustomRadioStations {
 
             if (File.Exists(jsonPath)) {
                 // JSON has complete precedence, including when it is malformed.
-                if (!StationConfigLoader.TryLoad(stationDirectory, out definition)) return;
+                if (!StationConfigLoader.TryLoad(stationDirectory, out definition))
+                    return;
                 Logger.Log("Loaded JSON station: " + definition.Name + " (" + definition.Id + ")");
             } else if (File.Exists(iniPath)) {
                 definition = LoadLegacyDefinition(stationDirectory, iniPath);
-                if (definition == null) return;
+                if (definition == null)
+                    return;
                 Logger.Log("Loaded legacy INI station: " + definition.Name);
             } else {
                 Logger.Log("Skipping station folder without station.json or station.ini: " + stationDirectory);
@@ -154,7 +157,8 @@ namespace CustomRadioStations {
             }
 
             var pair = new StationWheelPair(wheel, category, station, stationDirectory, definition.ConfigPath, definition.IsLegacyIni);
-            if (definition.IsLegacyIni) pair.ReloadLegacyDescription();
+            if (definition.IsLegacyIni)
+                pair.ReloadLegacyDescription();
             StationWheelPair.List.Add(pair);
         }
 
@@ -173,8 +177,10 @@ namespace CustomRadioStations {
             var tracks = new List<string>();
             var commercials = new List<string>();
             foreach (string file in files) {
-                if (IsLegacyCommercial(file)) commercials.Add(file);
-                else tracks.Add(file);
+                if (IsLegacyCommercial(file))
+                    commercials.Add(file);
+                else
+                    tracks.Add(file);
             }
             if (tracks.Count == 0) {
                 Logger.Log("Skipping legacy station without playable track files: " + stationDirectory);

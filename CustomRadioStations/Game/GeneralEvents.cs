@@ -1,10 +1,10 @@
-﻿using System;
+﻿using GTA;
+using GTA.Native;
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-
-using GTA;
-using GTA.Native;
 
 namespace EventHelper {
     public delegate void PlayerEnteredVehicle(Vehicle vehicle);
@@ -31,7 +31,8 @@ namespace EventHelper {
         }
 
         private static void UpdatePlayerEnteredExitedVehicle() {
-            if (Player == null || !Player.Exists()) return;
+            if (Player == null || !Player.Exists())
+                return;
 
             if (Player.IsInVehicle() && Player.CurrentVehicle != null && Player.CurrentVehicle.Exists()) {
                 enteredVehicleNewHandle = Player.CurrentVehicle.Handle;
@@ -65,7 +66,8 @@ namespace EventHelper {
         }
 
         private static void UpdatePlayerVehicleEngineTurnedOn() {
-            if (PlayerVehicle == null) return;
+            if (PlayerVehicle == null)
+                return;
 
             if (PlayerVehicle.IsEngineRunning) {
                 if (!engineTurnedOnToggle) {
@@ -81,7 +83,8 @@ namespace EventHelper {
 
         public static void Update() {
             Player = Game.Player.Character;
-            if (Player == null || !Player.Exists()) return;
+            if (Player == null || !Player.Exists())
+                return;
 
             PlayerVehicle = Player.CurrentVehicle;
 

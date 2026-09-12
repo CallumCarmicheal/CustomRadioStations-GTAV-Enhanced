@@ -18,19 +18,29 @@ namespace CustomRadioStations {
         }
 
         [JsonProperty("version")]
-        public int Version { get; set; }
+        public int Version {
+            get; set;
+        }
 
         [JsonProperty("general")]
-        public GeneralSettings General { get; set; }
+        public GeneralSettings General {
+            get; set;
+        }
 
         [JsonProperty("graphics")]
-        public GraphicsSettings Graphics { get; set; }
+        public GraphicsSettings Graphics {
+            get; set;
+        }
 
         [JsonProperty("keyboardControls")]
-        public KeyboardControlSettings KeyboardControls { get; set; }
+        public KeyboardControlSettings KeyboardControls {
+            get; set;
+        }
 
         [JsonProperty("gamepadControls")]
-        public GamepadControlSettings GamepadControls { get; set; }
+        public GamepadControlSettings GamepadControls {
+            get; set;
+        }
     }
 
     internal sealed class GeneralSettings {
@@ -123,13 +133,19 @@ namespace CustomRadioStations {
 
     internal sealed class WheelSettings {
         [JsonProperty("iconWidth")]
-        public int? IconWidth { get; set; }
+        public int? IconWidth {
+            get; set;
+        }
 
         [JsonProperty("iconHeight")]
-        public int? IconHeight { get; set; }
+        public int? IconHeight {
+            get; set;
+        }
 
         [JsonProperty("radius")]
-        public float? Radius { get; set; }
+        public float? Radius {
+            get; set;
+        }
     }
 
     internal sealed class NativeWheelConfiguration {
@@ -138,7 +154,9 @@ namespace CustomRadioStations {
         }
 
         [JsonProperty("wheels")]
-        public List<NativeWheelSettings> Wheels { get; set; }
+        public List<NativeWheelSettings> Wheels {
+            get; set;
+        }
     }
 
     internal sealed class NativeWheelSettings {
@@ -147,9 +165,13 @@ namespace CustomRadioStations {
         }
 
         [JsonProperty("name")]
-        public string Name { get; set; }
+        public string Name {
+            get; set;
+        }
 
         [JsonProperty("stations")]
-        public List<string> Stations { get; set; }
+        public List<string> Stations {
+            get; set;
+        }
     }
 }

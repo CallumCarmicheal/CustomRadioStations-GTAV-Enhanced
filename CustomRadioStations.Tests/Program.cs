@@ -23,6 +23,7 @@ namespace CustomRadioStations {
                 TestTrackDisplayMetadata();
                 TestHoldRepeat();
                 TestRadialSelectionHysteresis();
+                TestRadioWheelAvailability();
                 TestWheelDisplayMetricsAndIconVariants();
                 Console.WriteLine("Passed " + passed + " station configuration tests.");
                 return 0;
@@ -30,7 +31,8 @@ namespace CustomRadioStations {
                 Console.Error.WriteLine(ex);
                 return 1;
             } finally {
-                if (Directory.Exists(root)) Directory.Delete(root, true);
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
             }
         }
 
@@ -201,8 +203,24 @@ namespace CustomRadioStations {
                 "radial angular distance uses shortest arc");
         }
 
+        private static void TestRadioWheelAvailability() {
+            Assert(RadioWheelAvailability.CanShow(true, true, true, true, false),
+                "radio wheel opens when GTA accepts the input and shows its radio HUD");
+            Assert(!RadioWheelAvailability.CanShow(true, false, true, false, false),
+                "consumed phone or interaction-menu input cannot open custom wheel");
+            Assert(!RadioWheelAvailability.CanShow(true, true, true, false, false),
+                "custom wheel waits for GTA radio HUD authorization");
+            Assert(!RadioWheelAvailability.CanShow(false, false, true, false, true),
+                "visible custom wheel closes when radio input is released");
+            Assert(RadioWheelAvailability.CanShow(true, false, true, false, true),
+                "open custom wheel can retain its disabled input");
+            Assert(!RadioWheelAvailability.CanShow(true, true, false, true, false),
+                "player control restrictions suppress custom wheel");
+        }
+
         private static void Assert(bool condition, string name) {
-            if (!condition) throw new InvalidOperationException("FAILED: " + name);
+            if (!condition)
+                throw new InvalidOperationException("FAILED: " + name);
             passed++;
             Console.WriteLine("PASS: " + name);
         }

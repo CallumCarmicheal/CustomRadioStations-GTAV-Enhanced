@@ -68,11 +68,13 @@ namespace CustomRadioStations {
 
             foreach (char character in decomposed) {
                 UnicodeCategory category = CharUnicodeInfo.GetUnicodeCategory(character);
-                if (category == UnicodeCategory.NonSpacingMark) continue;
+                if (category == UnicodeCategory.NonSpacingMark)
+                    continue;
 
                 char lower = char.ToLowerInvariant(character);
                 if ((lower >= 'a' && lower <= 'z') || (lower >= '0' && lower <= '9')) {
-                    if (pendingSeparator && slug.Length > 0) slug.Append('-');
+                    if (pendingSeparator && slug.Length > 0)
+                        slug.Append('-');
                     slug.Append(lower);
                     pendingSeparator = false;
                 } else {
@@ -80,7 +82,8 @@ namespace CustomRadioStations {
                 }
             }
 
-            if (slug.Length > 0) return slug.ToString();
+            if (slug.Length > 0)
+                return slug.ToString();
             return "station-" + StableHash(source).ToString("x8", CultureInfo.InvariantCulture);
         }
 
@@ -134,14 +137,16 @@ namespace CustomRadioStations {
         }
 
         private static string ResolveIcon(string configuredIcon, string stationDirectory, string stationName) {
-            if (string.IsNullOrWhiteSpace(configuredIcon)) return null;
+            if (string.IsNullOrWhiteSpace(configuredIcon))
+                return null;
 
             try {
                 string normalized = configuredIcon.Trim().Replace('/', Path.DirectorySeparatorChar);
                 string path = Path.GetFullPath(Path.IsPathRooted(normalized)
                     ? normalized
                     : Path.Combine(stationDirectory, normalized));
-                if (StationIconVariantResolver.HasAnyVariant(path)) return path;
+                if (StationIconVariantResolver.HasAnyVariant(path))
+                    return path;
                 Logger.Log("WARNING: Icon for station '" + stationName + "' was not found: " + path);
             } catch (Exception ex) {
                 Logger.Log("WARNING: Invalid icon path for station '" + stationName + "': " + ex.Message);

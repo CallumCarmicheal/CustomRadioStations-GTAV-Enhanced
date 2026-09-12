@@ -19,7 +19,8 @@ namespace CustomRadioStations {
 
         internal static void Init(string path = AppPaths.MainLogFile) {
             EnsureParentDirectory(path);
-            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(path))
+                File.Delete(path);
         }
     }
 }

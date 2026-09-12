@@ -21,7 +21,8 @@ namespace CustomRadioStations {
 
         public static void UpdateRadioScaleform(string station, string artist, string track) {
             try {
-                if (dashboardDisabled || DashboardScaleform == null || !DashboardScaleform.IsValid || !DashboardScaleform.IsLoaded) return;
+                if (dashboardDisabled || DashboardScaleform == null || !DashboardScaleform.IsValid || !DashboardScaleform.IsLoaded)
+                    return;
 
                 // Dashboard scaleform still exists in Enhanced, but keep this best-effort:
                 // a UI asset change should not take down radio playback.
@@ -36,16 +37,22 @@ namespace CustomRadioStations {
 
 
         public static void DisposeDashboardScaleform() {
-            try { DashboardScaleform?.Dispose(); } finally { DashboardScaleform = null; }
+            try {
+                DashboardScaleform?.Dispose();
+            } finally { DashboardScaleform = null; }
         }
 
         // Only works for vehicle radio.
         public static bool _IS_PLAYER_VEHICLE_RADIO_ENABLED() {
-            try { return Function.Call<bool>((Hash)0x5F43D83FD6738741); } catch { return Game.Player.Character != null && Game.Player.Character.IsInVehicle(); }
+            try {
+                return Function.Call<bool>((Hash)0x5F43D83FD6738741);
+            } catch { return Game.Player.Character != null && Game.Player.Character.IsInVehicle(); }
         }
 
         public static bool IsRadioHudComponentVisible() {
-            try { return Function.Call<bool>(Hash.IS_HUD_COMPONENT_ACTIVE, 16); } catch (Exception ex) {
+            try {
+                return Function.Call<bool>(Hash.IS_HUD_COMPONENT_ACTIVE, 16);
+            } catch (Exception ex) {
                 if (!radioHudFailureLogged) {
                     radioHudFailureLogged = true;
                     Logger.Log("WARNING: Could not query radio HUD state: " + ex.Message);
@@ -55,19 +62,25 @@ namespace CustomRadioStations {
         }
 
         public static int GET_PLAYER_RADIO_STATION_INDEX() {
-            try { return Function.Call<int>(Hash.GET_PLAYER_RADIO_STATION_INDEX); } catch { return 255; }
+            try {
+                return Function.Call<int>(Hash.GET_PLAYER_RADIO_STATION_INDEX);
+            } catch { return 255; }
         }
 
         public static void SET_RADIO_TO_STATION_INDEX(int index) {
             if (index == 255) {
                 SetVanillaRadioOff();
             } else {
-                try { Function.Call(Hash.SET_RADIO_TO_STATION_INDEX, index); } catch { }
+                try {
+                    Function.Call(Hash.SET_RADIO_TO_STATION_INDEX, index);
+                } catch { }
             }
         }
 
         public static string GET_RADIO_STATION_NAME(int index) {
-            try { return Function.Call<string>(Hash.GET_RADIO_STATION_NAME, index); } catch (Exception ex) {
+            try {
+                return Function.Call<string>(Hash.GET_RADIO_STATION_NAME, index);
+            } catch (Exception ex) {
                 if (!stationQueryFailureLogged) {
                     stationQueryFailureLogged = true;
                     Logger.Log("WARNING: Could not query GTA radio station names; native wheel organization is disabled: " + ex.Message);
@@ -77,7 +90,9 @@ namespace CustomRadioStations {
         }
 
         public static void SET_RADIO_TO_STATION_NAME(string name) {
-            try { Function.Call(Hash.SET_RADIO_TO_STATION_NAME, name); } catch { }
+            try {
+                Function.Call(Hash.SET_RADIO_TO_STATION_NAME, name);
+            } catch { }
         }
 
         public static string GetRadioStationProperName(string name) {
@@ -104,7 +119,8 @@ namespace CustomRadioStations {
         /// <param name="stationName">Name returned by GET_RADIO_STATION_NAME. Not the fancy name.</param>
         /// <param name="hide">true = hide or remove from wheel</param>
         public static void _LOCK_RADIO_STATION(string stationName, bool hide) {
-            if (string.IsNullOrEmpty(stationName)) return;
+            if (string.IsNullOrEmpty(stationName))
+                return;
             try {
                 Function.Call((Hash)0x477D9DB48F889591, stationName, hide); // _LOCK_RADIO_STATION
             } catch (Exception ex) {
@@ -144,9 +160,11 @@ namespace CustomRadioStations {
 
         public static void SetVehicleRadioStationOff() {
             Ped player = Game.Player.Character;
-            if (player == null || !player.Exists()) return;
+            if (player == null || !player.Exists())
+                return;
             Vehicle vehicle = player.CurrentVehicle;
-            if (vehicle == null || !vehicle.Exists()) return;
+            if (vehicle == null || !vehicle.Exists())
+                return;
 
             Function.Call(Hash.SET_VEH_RADIO_STATION, vehicle, "OFF");
         }
@@ -167,16 +185,23 @@ namespace CustomRadioStations {
         }
 
         public static bool IS_MOBILE_PHONE_RADIO_ACTIVE() {
-            try { return Function.Call<bool>(Hash.IS_MOBILE_PHONE_RADIO_ACTIVE); } catch { return false; }
+            try {
+                return Function.Call<bool>(Hash.IS_MOBILE_PHONE_RADIO_ACTIVE);
+            } catch { return false; }
         }
 
         public static void SET_MOBILE_PHONE_RADIO_STATE(bool on) {
-            try { Function.Call(Hash.SET_MOBILE_PHONE_RADIO_STATE, on); } catch { }
+            try {
+                Function.Call(Hash.SET_MOBILE_PHONE_RADIO_STATE, on);
+            } catch { }
         }
 
         static string _GET_LABEL_TEXT(string text) {
-            if (string.IsNullOrEmpty(text)) return string.Empty;
-            try { return Function.Call<string>((Hash)0x7B5280EBA9840C72, text) ?? string.Empty; } catch { return text; }
+            if (string.IsNullOrEmpty(text))
+                return string.Empty;
+            try {
+                return Function.Call<string>((Hash)0x7B5280EBA9840C72, text) ?? string.Empty;
+            } catch { return text; }
         }
     }
 }

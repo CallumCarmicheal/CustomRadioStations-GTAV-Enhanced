@@ -74,6 +74,7 @@
     <Compile Include="Game\GeneralEvents.cs" />
     <Compile Include="Game\GTAVFunctions.cs" />
     <Compile Include="Game\RadioNativeFunctions.cs" />
+    <Compile Include="Game\RadioWheelAvailability.cs" />
     <Compile Include="Game\UsedVehiclesManager.cs" />
     <Compile Include="Infrastructure\AppPaths.cs" />
     <Compile Include="Infrastructure\GameFocusPauseMonitor.cs" />

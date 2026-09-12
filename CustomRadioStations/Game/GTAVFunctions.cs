@@ -1,12 +1,14 @@
-﻿using System;
+﻿using GTA; // This is a reference that is needed! do not edit this
+using GTA.Math;
+using GTA.Native; // This is a reference that is needed! do not edit this
+
+using GTAMath;
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using GTA; // This is a reference that is needed! do not edit this
-using GTA.Native; // This is a reference that is needed! do not edit this
-using GTA.Math;
-using GTAMath;
 
 namespace GTAVFunctions {
     public static class GTAFunction {
@@ -189,7 +191,11 @@ namespace GTAVFunctions {
             SetVehicleDamage(victim, damageAmount);
             SetVehicleVisualDamage(victim, attackPos, visualDamageAmount, radiusOfDamage);
             victim.ApplyForce(forceDirection * forceDirectionMultiplier, forceRotation * forceRotationMultiplier);
-            if (victim.Model.IsBike || victim.Model.IsBicycle) { if (victim.Driver != null && victim.Driver.Exists()) { Function.Call(Hash.KNOCK_PED_OFF_VEHICLE, victim.Driver); } }
+            if (victim.Model.IsBike || victim.Model.IsBicycle) {
+                if (victim.Driver != null && victim.Driver.Exists()) {
+                    Function.Call(Hash.KNOCK_PED_OFF_VEHICLE, victim.Driver);
+                }
+            }
         }
 
         public static void SetVehicleVisualDamage(Vehicle v, Vector3 worldCoord, float visualDamageAmount = 200f, float radiusOfDamage = 250f, bool p6 = true) {

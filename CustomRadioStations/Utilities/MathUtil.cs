@@ -44,10 +44,11 @@
 * 
 * https://tohjo.eu/dapkcuf/citizenmp/blob/c8710f0a3cf076c7f2a8fcbb22ed2902116f4f4c/client/clrcore/Math/MathUtil.cs
 */
-using System;
 using GTA; // This is a reference that is needed! do not edit this
-using GTA.Native; // This is a reference that is needed! do not edit this
 using GTA.Math;
+using GTA.Native; // This is a reference that is needed! do not edit this
+
+using System;
 
 namespace GTAMath {
     public static class MathUtil {
@@ -391,7 +392,8 @@ namespace GTAMath {
         /// <returns>Result of the wrapping.</returns>
         /// <exception cref="ArgumentException">Is thrown when <paramref name="min"/> is greater than <paramref name="max"/>.</exception>
         public static float Wrap(float value, float min, float max) {
-            if (NearEqual(min, max)) return min;
+            if (NearEqual(min, max))
+                return min;
 
             double mind = min;
             double maxd = max;

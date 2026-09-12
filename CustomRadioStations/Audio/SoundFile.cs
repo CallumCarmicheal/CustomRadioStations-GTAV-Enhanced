@@ -1,12 +1,14 @@
 ﻿using MiniAudioEx.Core.StandardAPI;
-using System.IO;
-using System.Collections.Generic;
-using System.Linq;
+
+using Newtonsoft.Json;
+
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using Newtonsoft.Json;
 
 namespace CustomRadioStations {
     class SoundFile {
@@ -21,7 +23,8 @@ namespace CustomRadioStations {
             get {
                 if (HasTrackList) {
                     Track t = GetCurrentTrack();
-                    if (t == null) return PreviewDisplayName;
+                    if (t == null)
+                        return PreviewDisplayName;
                     return TrackMetadataReader.FormatDisplayName(t.Artist, t.Title, _displayName);
                 } else {
                     return _displayName;
@@ -47,10 +50,14 @@ namespace CustomRadioStations {
         /// <summary>
         /// If Length has been added to this sound's corresponding station
         /// </summary>
-        public bool LengthAdded { get; set; }
+        public bool LengthAdded {
+            get; set;
+        }
 
         public bool HasTrackList;
-        public List<Track> Tracklist { get; private set; }
+        public List<Track> Tracklist {
+            get; private set;
+        }
 
         //public float MaximumDistance = 20f;
         //public float MinimumDistance = 1f;
@@ -107,7 +114,8 @@ namespace CustomRadioStations {
         }
 
         public Track GetCurrentTrack() {
-            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0) return null;
+            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0)
+                return null;
 
             //Track trk = Tracklist.FirstOrDefault(t => t.StartTime <= PlayPosition());
             Track trk = Tracklist.LastOrDefault(t => PlayPosition() >= t.StartTime);
@@ -120,42 +128,51 @@ namespace CustomRadioStations {
         }
 
         public int GetCurrentTrackIndex() {
-            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0) return -1;
+            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0)
+                return -1;
 
             return Tracklist.IndexOf(GetCurrentTrack());
         }
 
         public Track GetNextTrack() {
-            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0) return null;
+            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0)
+                return null;
 
             Track t = GetCurrentTrack();
-            if (t == null) return Tracklist[0];
+            if (t == null)
+                return Tracklist[0];
 
             int index = Tracklist.IndexOf(t);
             return index < 0 || index >= Tracklist.Count - 1 ? Tracklist[0] : Tracklist[index + 1];
         }
 
         public void SkipToNextTrack() {
-            if (!HasTrackList || Sound == null) return;
+            if (!HasTrackList || Sound == null)
+                return;
 
             Track next = GetNextTrack();
-            if (next != null) Sound.PlayPosition = next.StartTime;
+            if (next != null)
+                Sound.PlayPosition = next.StartTime;
         }
 
         public uint TimeUntilNextTrack() {
-            if (Sound == null) return 0;
+            if (Sound == null)
+                return 0;
             uint pPos = PlayPosition();
             uint remaining = Length > pPos ? Length - pPos : 0u;
-            if (!HasTrackList) return remaining;
+            if (!HasTrackList)
+                return remaining;
 
             Track t = GetNextTrack();
-            if (t == null) return remaining;
+            if (t == null)
+                return remaining;
 
             return t.StartTime > pPos ? t.StartTime - pPos + 1 : remaining;
         }
 
         public void PlaySound(bool resume, bool playLooped = false, bool playPaused = false, bool allowMultipleInstances = false, bool allowSoundEffects = false) {
-            if (Clip == null) return;
+            if (Clip == null)
+                return;
 
             if (!allowMultipleInstances && Sound != null && !Sound.Finished && !IsPaused)
                 return;
@@ -172,7 +189,8 @@ namespace CustomRadioStations {
 
             try {
                 Sound = SoundEngine.Play2D(Clip, playLooped, playPaused);
-                if (Sound == null) return;
+                if (Sound == null)
+                    return;
 
                 if (Length == 0)
                     Length = Sound.PlayLength;
@@ -186,17 +204,20 @@ namespace CustomRadioStations {
         }
 
         public void StopSound() {
-            if (Sound == null || Sound.Finished) return;
+            if (Sound == null || Sound.Finished)
+                return;
             Sound.Stop();
         }
 
         public bool IsPaused {
             get {
-                if (Sound == null) return false;
+                if (Sound == null)
+                    return false;
                 return Sound.Paused;
             }
             set {
-                if (Sound == null || Sound.Finished) return;
+                if (Sound == null || Sound.Finished)
+                    return;
                 Sound.Paused = value;
             }
         }
@@ -231,18 +252,21 @@ namespace CustomRadioStations {
         public static MiniAudioEngine SoundEngine = new MiniAudioEngine();
 
         public static void ManageSoundEngine() {
-            if (SoundEngine == null) return;
+            if (SoundEngine == null)
+                return;
             SoundEngine.Update();
         }
 
         public static void StepVolume(float step, int decimals) {
-            if (SoundEngine == null) return;
+            if (SoundEngine == null)
+                return;
             float temp = (float)Math.Round(SoundEngine.SoundVolume + step, decimals, MidpointRounding.ToEven);
             SoundEngine.SoundVolume = temp.LimitToRange(0f, 1f);
         }
 
         public static void DisposeSoundEngine() {
-            if (SoundEngine == null) return;
+            if (SoundEngine == null)
+                return;
             SoundEngine.Dispose();
         }
     }
@@ -287,7 +311,9 @@ namespace CustomRadioStations {
         }
 
         public uint PlayPosition {
-            get { return FramesToMilliseconds(source.Cursor); }
+            get {
+                return FramesToMilliseconds(source.Cursor);
+            }
             set {
                 ulong frame = MillisecondsToFrames(value);
                 ulong length = source.Length;
@@ -298,13 +324,18 @@ namespace CustomRadioStations {
         }
 
         public uint PlayLength {
-            get { return FramesToMilliseconds(source.Length); }
+            get {
+                return FramesToMilliseconds(source.Length);
+            }
         }
 
         public bool Paused {
-            get { return paused; }
+            get {
+                return paused;
+            }
             set {
-                if (disposed || finished || paused == value) return;
+                if (disposed || finished || paused == value)
+                    return;
 
                 if (value) {
                     source.Stop();
@@ -337,12 +368,17 @@ namespace CustomRadioStations {
         }
 
         public float Volume {
-            get { return source.Volume; }
-            set { source.Volume = value.LimitToRange(0f, 1f); }
+            get {
+                return source.Volume;
+            }
+            set {
+                source.Volume = value.LimitToRange(0f, 1f);
+            }
         }
 
         public void Stop() {
-            if (disposed) return;
+            if (disposed)
+                return;
             source.Stop();
             paused = false;
             finished = true;
@@ -356,7 +392,8 @@ namespace CustomRadioStations {
         }
 
         public void Dispose() {
-            if (disposed) return;
+            if (disposed)
+                return;
             disposed = true;
             source.End -= OnPlaybackEnded;
             source.Dispose();
@@ -365,14 +402,16 @@ namespace CustomRadioStations {
 
         private static uint FramesToMilliseconds(ulong frames) {
             int sampleRate = AudioContext.SampleRate;
-            if (sampleRate <= 0) return 0;
+            if (sampleRate <= 0)
+                return 0;
             ulong milliseconds = (frames * 1000UL) / (ulong)sampleRate;
             return milliseconds > uint.MaxValue ? uint.MaxValue : (uint)milliseconds;
         }
 
         private static ulong MillisecondsToFrames(uint milliseconds) {
             int sampleRate = AudioContext.SampleRate;
-            if (sampleRate <= 0) return 0;
+            if (sampleRate <= 0)
+                return 0;
             return ((ulong)milliseconds * (ulong)sampleRate) / 1000UL;
         }
     }
@@ -393,7 +432,9 @@ namespace CustomRadioStations {
         }
 
         public float SoundVolume {
-            get { return disposed ? 0f : AudioContext.MasterVolume; }
+            get {
+                return disposed ? 0f : AudioContext.MasterVolume;
+            }
             set {
                 if (!disposed)
                     AudioContext.MasterVolume = value.LimitToRange(0f, 1f);
@@ -401,7 +442,8 @@ namespace CustomRadioStations {
         }
 
         internal MiniAudioSound Play2D(AudioClip clip, bool looped, bool startPaused) {
-            if (disposed) return null;
+            if (disposed)
+                return null;
             var sound = new MiniAudioSound(this, clip, looped, startPaused);
             sounds.Add(sound);
             return sound;
@@ -417,11 +459,14 @@ namespace CustomRadioStations {
         }
 
         public void Dispose() {
-            if (disposed) return;
+            if (disposed)
+                return;
 
             // Dispose a copy because MiniAudioSound.Dispose unregisters itself.
             foreach (MiniAudioSound sound in sounds.ToArray()) {
-                try { sound.Dispose(); } catch { }
+                try {
+                    sound.Dispose();
+                } catch { }
             }
             sounds.Clear();
 
@@ -438,7 +483,8 @@ namespace CustomRadioStations {
         private static extern IntPtr LoadLibrary(string lpFileName);
 
         internal static void LoadFromScriptDirectory() {
-            if (nativeModule != IntPtr.Zero) return;
+            if (nativeModule != IntPtr.Zero)
+                return;
 
             string assemblyDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             string appBase = AppDomain.CurrentDomain.BaseDirectory;
@@ -450,7 +496,8 @@ namespace CustomRadioStations {
             };
 
             foreach (string candidate in candidates) {
-                if (string.IsNullOrEmpty(candidate) || !File.Exists(candidate)) continue;
+                if (string.IsNullOrEmpty(candidate) || !File.Exists(candidate))
+                    continue;
 
                 nativeModule = LoadLibrary(candidate);
                 if (nativeModule != IntPtr.Zero)

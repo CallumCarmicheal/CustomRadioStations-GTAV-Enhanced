@@ -6,12 +6,24 @@ namespace CustomRadioStations {
     internal sealed class StationWheelPair {
         internal static readonly List<StationWheelPair> List = new List<StationWheelPair>();
 
-        internal SelectorWheel.Wheel Wheel { get; }
-        internal SelectorWheel.WheelCategory Category { get; }
-        internal RadioStation Station { get; }
-        internal string StationDirectory { get; }
-        internal string ConfigPath { get; }
-        internal bool IsLegacyIni { get; }
+        internal SelectorWheel.Wheel Wheel {
+            get;
+        }
+        internal SelectorWheel.WheelCategory Category {
+            get;
+        }
+        internal RadioStation Station {
+            get;
+        }
+        internal string StationDirectory {
+            get;
+        }
+        internal string ConfigPath {
+            get;
+        }
+        internal bool IsLegacyIni {
+            get;
+        }
 
         internal StationWheelPair(SelectorWheel.Wheel wheel, SelectorWheel.WheelCategory category,
             RadioStation station, string stationDirectory, string configPath, bool isLegacyIni) {
@@ -24,7 +36,8 @@ namespace CustomRadioStations {
         }
 
         internal void ReloadLegacyDescription() {
-            if (!IsLegacyIni) return;
+            if (!IsLegacyIni)
+                return;
             Config.ForceDecimal();
             Settings.ScriptSettings config = Settings.ScriptSettings.Load(ConfigPath);
             string description = config.GetValue<string>("GENERAL", "DESCRIPTION", string.Empty);

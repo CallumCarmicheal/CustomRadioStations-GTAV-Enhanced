@@ -27,7 +27,9 @@ namespace CustomRadioStations {
 
             // Emit at most one step per game frame. If a frame stalls, advance the
             // deadline past "now" instead of applying a burst of queued volume jumps.
-            do { nextRepeatAt = nextRepeatAt.Value + repeatInterval; }
+            do {
+                nextRepeatAt = nextRepeatAt.Value + repeatInterval;
+            }
             while (nextRepeatAt.Value <= now);
             return true;
         }

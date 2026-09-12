@@ -1,16 +1,19 @@
-﻿using System;
+﻿using GTA;
+using GTA.Math;
+using GTA.Native;
+
+using GTAVFunctions;
+
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Text.RegularExpressions;
-using System.Windows.Forms;
 using System.Drawing;
 using System.IO;
-using GTA;
-using GTA.Native;
-using GTA.Math;
-using GTAVFunctions;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
 using Control = GTA.Control;
 using CustomSprite = GTA.UI.CustomSprite;
 using Font = GTA.UI.Font;
@@ -30,7 +33,9 @@ namespace SelectorWheel {
     }
 
     public class Wheel {
-        public string WheelName { get; set; }
+        public string WheelName {
+            get; set;
+        }
         private bool _visible;
         public int CurrentCatIndex = 0;
         public List<WheelCategory> Categories = new List<WheelCategory>();
@@ -55,11 +60,15 @@ namespace SelectorWheel {
         Color TextureCatBgHighlightColor;
         double TextureCatBgHighlightSizeMultiple;
 
-        public Func<Color> HighlightColorProvider { private get; set; }
+        public Func<Color> HighlightColorProvider {
+            private get; set;
+        }
 
         private Size _textureSize;
         public Size TextureSize {
-            get { return _textureSize; }
+            get {
+                return _textureSize;
+            }
             set {
                 // CustomSprite sizes are expressed in screen pixels. The old DrawTexture
                 // renderer needed a fixed 16:9 width correction, but retaining it here
@@ -117,7 +126,9 @@ namespace SelectorWheel {
         /// Show/Hide the selection wheel.
         /// </summary>
         public bool Visible {
-            get { return _visible; }
+            get {
+                return _visible;
+            }
             set {
                 //start and end screen effects, etc. before toggling.
 
@@ -197,7 +208,8 @@ namespace SelectorWheel {
         public void ProcessSelectorWheel() {
             // Now needs to be called alongside ProcessSelectorWheel().
             //ControlTransitions();
-            if (!Visible) return;
+            if (!Visible)
+                return;
 
             DisableControls();
             ControlCategorySelection();
@@ -338,7 +350,8 @@ namespace SelectorWheel {
         }
 
         void CalculateFromStartAngle(float startAngle, int numCategories) {
-            if (numCategories < 1) return;
+            if (numCategories < 1)
+                return;
             float angleOffset = 360 / numCategories;
             for (int i = 0; i < numCategories; i++) {
                 Categories[i].position2D = PointOnCircleInPercentage(Radius, startAngle, OriginInPixels);
@@ -353,12 +366,18 @@ namespace SelectorWheel {
         /// Set this before calling CalculateCategoryPlacement() or it won't apply.
         /// </summary>
         public Vector2 Origin {
-            get { return _origin; }
-            set { _origin = value; }
+            get {
+                return _origin;
+            }
+            set {
+                _origin = value;
+            }
         }
 
         public Vector2 OriginInPixels {
-            get { return new Vector2(UIHelper.XPercentageToPixel(_origin.X), UIHelper.YPercentageToPixel(_origin.Y)); }
+            get {
+                return new Vector2(UIHelper.XPercentageToPixel(_origin.X), UIHelper.YPercentageToPixel(_origin.Y));
+            }
         }
 
         private float AddXPixelDistanceToPercent(float percent, int pixelDist) {
@@ -491,7 +510,9 @@ namespace SelectorWheel {
         void ControlCategorySelection() {
             Color selectedHighlightColor = TextureCatBgHighlightColor;
             if (HighlightColorProvider != null) {
-                try { selectedHighlightColor = HighlightColorProvider(); } catch { }
+                try {
+                    selectedHighlightColor = HighlightColorProvider();
+                } catch { }
             }
 
             foreach (var cat in Categories) {
@@ -550,7 +571,8 @@ namespace SelectorWheel {
         }
 
         private void DrawDescription(string description) {
-            if (string.IsNullOrWhiteSpace(description)) return;
+            if (string.IsNullOrWhiteSpace(description))
+                return;
 
             const float fontSize = 0.35f;
             const float centerX = 0.5f;
@@ -735,8 +757,10 @@ namespace SelectorWheel {
         }
 
         public static int NextClosestIndexWithWrap<T>(List<T> list, int currIndex, int toIndex) {
-            if (currIndex == toIndex) return currIndex;
-            if (currIndex >= list.Count || toIndex >= list.Count) return 0;
+            if (currIndex == toIndex)
+                return currIndex;
+            if (currIndex >= list.Count || toIndex >= list.Count)
+                return 0;
             int dist = toIndex > currIndex ? toIndex - currIndex : currIndex - toIndex;
             int distThroughZero = toIndex < currIndex ? list.Count - currIndex + toIndex : list.Count - toIndex + currIndex;
             if (distThroughZero < dist) {
@@ -766,7 +790,8 @@ namespace SelectorWheel {
             var ud = WheelUpDownValue();
             var lr = WheelLeftRightValue();
 
-            if (Math.Abs(ud) < keyboardDeadzone && Math.Abs(lr) < keyboardDeadzone) return WheelDirection.NotMoving;
+            if (Math.Abs(ud) < keyboardDeadzone && Math.Abs(lr) < keyboardDeadzone)
+                return WheelDirection.NotMoving;
 
             if (Math.Abs(ud) > Math.Abs(lr)) {
                 return ud > 0f ? WheelDirection.MovingDown : WheelDirection.MovingUp;
@@ -780,7 +805,8 @@ namespace SelectorWheel {
             if (temp < Categories.Count - 1) {
                 temp++;
             } else {
-                if (wrap) temp = 0;
+                if (wrap)
+                    temp = 0;
             }
             return temp;
         }
@@ -790,14 +816,16 @@ namespace SelectorWheel {
             if (temp > 0) {
                 temp--;
             } else {
-                if (wrap) temp = Categories.Count - 1;
+                if (wrap)
+                    temp = Categories.Count - 1;
             }
             return temp;
         }
 
         private bool IndexIsWithinCategoryPercentRange(int index, float startInclusive, float endInclusive) {
             float percentage = index / (float)Categories.Count;
-            if (endInclusive == 1f && index == 0) return true;
+            if (endInclusive == 1f && index == 0)
+                return true;
             return percentage >= startInclusive && percentage <= endInclusive ? true : false;
         }
 
@@ -810,7 +838,8 @@ namespace SelectorWheel {
         }
 
         float CategoryAngle(int index) {
-            if (index < 0 || index >= Categories.Count) return 0f;
+            if (index < 0 || index >= Categories.Count)
+                return 0f;
 
             Vector2 origin = OriginInPixels;
             Vector2 category = Categories[index].position2D;
@@ -841,12 +870,16 @@ namespace SelectorWheel {
 
         void ControlItemSelection() {
             if (Control_GoToNextItemInCategory_Pressed()) {
-                if (SelectedCategory.SelectedItem.ItemTexture != null && SelectedCategory.ItemCount() > 1) { SelectedCategory.SelectedItem.ItemTexture.StopDraw(); }
+                if (SelectedCategory.SelectedItem.ItemTexture != null && SelectedCategory.ItemCount() > 1) {
+                    SelectedCategory.SelectedItem.ItemTexture.StopDraw();
+                }
                 SelectedCategory.GoToNextItem();
                 ItemChange(SelectedCategory, SelectedCategory.SelectedItem, false, GoTo.Next);
                 Audio.PlaySoundFrontendAndForget(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
             } else if (Control_GoToPreviousItemInCategory_Pressed()) {
-                if (SelectedCategory.SelectedItem.ItemTexture != null && SelectedCategory.ItemCount() > 1) { SelectedCategory.SelectedItem.ItemTexture.StopDraw(); }
+                if (SelectedCategory.SelectedItem.ItemTexture != null && SelectedCategory.ItemCount() > 1) {
+                    SelectedCategory.SelectedItem.ItemTexture.StopDraw();
+                }
                 SelectedCategory.GoToPreviousItem();
                 ItemChange(SelectedCategory, SelectedCategory.SelectedItem, false, GoTo.Prev);
                 Audio.PlaySoundFrontendAndForget(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
@@ -972,8 +1005,12 @@ namespace SelectorWheel {
         public Texture CategoryTexture;
         public Texture BackgroundTexture;
         public Texture HighlightTexture;
-        public string Description { get; set; }
-        public bool IsRadioOff { get; set; }
+        public string Description {
+            get; set;
+        }
+        public bool IsRadioOff {
+            get; set;
+        }
 
         /// <summary>
         /// Instantiates a new category for use in a selection wheel.
@@ -1014,7 +1051,9 @@ namespace SelectorWheel {
         }
 
         public List<WheelCategoryItem> ItemList {
-            get { return Items; }
+            get {
+                return Items;
+            }
         }
 
         public bool IsItemSelected(WheelCategoryItem item) {
@@ -1025,7 +1064,9 @@ namespace SelectorWheel {
         }
 
         public WheelCategoryItem SelectedItem {
-            get { return Items.ElementAt(CurrentItemIndex); }
+            get {
+                return Items.ElementAt(CurrentItemIndex);
+            }
         }
 
         public void GoToNextItem() {
@@ -1048,7 +1089,9 @@ namespace SelectorWheel {
     public class WheelCategoryItem {
         public string Name;
         public Texture ItemTexture;
-        public string Description { get; set; }
+        public string Description {
+            get; set;
+        }
 
         /// <summary>
         /// Instantiate a new item to be later added to a WheelCategory.
@@ -1070,9 +1113,15 @@ namespace SelectorWheel {
     }
 
     public class Texture {
-        public string Path { get; set; }
-        public int Index { get; set; }
-        public int DrawLevel { get; set; }
+        public string Path {
+            get; set;
+        }
+        public int Index {
+            get; set;
+        }
+        public int DrawLevel {
+            get; set;
+        }
 
         private CustomSprite _sprite;
         private bool _validationAttempted;
@@ -1084,8 +1133,9 @@ namespace SelectorWheel {
             // directories there (and acquire a trailing slash), so resolve them while
             // still in managed code. Station icons were already absolute; bundled wheel
             // assets such as selection-ring.png exposed this difference.
-            try { Path = System.IO.Path.GetFullPath(path); }
-            catch { Path = path; }
+            try {
+                Path = System.IO.Path.GetFullPath(path);
+            } catch { Path = path; }
             Index = index;
         }
 
@@ -1102,7 +1152,8 @@ namespace SelectorWheel {
         }
 
         public void Draw(int level, int time, Point pos, PointF center, Size size, float rotation, Color color, float aspectRatio) {
-            if (!CanUseTexture()) return;
+            if (!CanUseTexture())
+                return;
 
             // SHVDN3 replaces GTA.UI.DrawTexture with GTA.UI.CustomSprite.
             // The live wheel rendering uses a 0.5/0.5 center, which maps directly to Centered=true.
@@ -1137,7 +1188,8 @@ namespace SelectorWheel {
         }
 
         public void LoadTexture() {
-            if (_sprite != null || !CanUseTexture()) return;
+            if (_sprite != null || !CanUseTexture())
+                return;
 
             try {
                 _sprite = new CustomSprite(Path, SizeF.Empty, PointF.Empty, Color.White, 0f, false);
@@ -1148,14 +1200,18 @@ namespace SelectorWheel {
         }
 
         public void StopDraw() {
-            if (_sprite == null) return;
-            try { _sprite.Enabled = false; }
-            catch (Exception ex) { FailTexture("disable", ex); }
+            if (_sprite == null)
+                return;
+            try {
+                _sprite.Enabled = false;
+            } catch (Exception ex) { FailTexture("disable", ex); }
         }
 
         private bool CanUseTexture() {
-            if (_failed) return false;
-            if (_validationAttempted) return true;
+            if (_failed)
+                return false;
+            if (_validationAttempted)
+                return true;
             _validationAttempted = true;
 
             try {
@@ -1173,7 +1229,8 @@ namespace SelectorWheel {
         private void FailTexture(string operation, Exception exception) {
             _failed = true;
             try {
-                if (_sprite != null) _sprite.Enabled = false;
+                if (_sprite != null)
+                    _sprite.Enabled = false;
             } catch { }
             _sprite = null;
 
@@ -1216,11 +1273,21 @@ namespace SelectorWheel {
 
             if (withRectangle) {
                 switch (FontType) {
-                case Font.ChaletLondon: rectYPosDivisor = 15f; break;
-                case Font.HouseScript: rectYPosDivisor = 23f; break;
-                case Font.RockstarTag: rectYPosDivisor = 25f; break;
-                case Font.ChaletComprimeCologne: rectYPosDivisor = 30f; break;
-                case Font.Pricedown: rectYPosDivisor = 35f; break;
+                case Font.ChaletLondon:
+                    rectYPosDivisor = 15f;
+                    break;
+                case Font.HouseScript:
+                    rectYPosDivisor = 23f;
+                    break;
+                case Font.RockstarTag:
+                    rectYPosDivisor = 25f;
+                    break;
+                case Font.ChaletComprimeCologne:
+                    rectYPosDivisor = 30f;
+                    break;
+                case Font.Pricedown:
+                    rectYPosDivisor = 35f;
+                    break;
                 }
 
                 float adjWidth = MeasureStringWidthNoConvert(Message, FontType, FontSize);

@@ -1,20 +1,27 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Newtonsoft.Json;
 
-using Newtonsoft.Json;
+using System;
+using System.Collections.Generic;
 
 namespace CustomRadioStations {
     class Track {
         [JsonProperty("startTimeMs")]
-        public uint StartTime { get; set; }
+        public uint StartTime {
+            get; set;
+        }
 
         [JsonProperty("artist")]
-        public string Artist { get; set; }
+        public string Artist {
+            get; set;
+        }
 
         [JsonProperty("title")]
-        public string Title { get; set; }
+        public string Title {
+            get; set;
+        }
 
-        public Track() { }
+        public Track() {
+        }
 
         public Track(uint startTime, string artist, string title) {
             StartTime = startTime;
@@ -33,6 +40,8 @@ namespace CustomRadioStations {
         }
 
         [JsonProperty("tracks")]
-        public List<Track> Tracks { get; set; }
+        public List<Track> Tracks {
+            get; set;
+        }
     }
 }

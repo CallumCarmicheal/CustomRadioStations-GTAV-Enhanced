@@ -1,5 +1,6 @@
 using MiniAudioEx.Core.StandardAPI;
 using MiniAudioEx.Native;
+
 using System;
 using System.Reflection;
 using System.Runtime.InteropServices;

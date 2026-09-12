@@ -22,14 +22,17 @@ namespace CustomRadioStations {
         }
 
         private void Poll(object state) {
-            if (disposed) return;
+            if (disposed)
+                return;
 
             try {
                 IntPtr gameWindow = Process.GetCurrentProcess().MainWindowHandle;
-                if (gameWindow == IntPtr.Zero) return;
+                if (gameWindow == IntPtr.Zero)
+                    return;
 
                 bool isForeground = GetForegroundWindow() == gameWindow;
-                if (wasForeground == isForeground) return;
+                if (wasForeground == isForeground)
+                    return;
                 wasForeground = isForeground;
                 AudioPauseCoordinator.SetFocusPaused(!isForeground);
             } catch {
@@ -38,7 +41,8 @@ namespace CustomRadioStations {
         }
 
         public void Dispose() {
-            if (disposed) return;
+            if (disposed)
+                return;
             disposed = true;
             timer.Dispose();
             AudioPauseCoordinator.SetFocusPaused(false);

@@ -1,12 +1,15 @@
 ﻿using GTA;
 using GTA.Native;
-using System;
-using System.Windows.Forms;
-using System.IO;
-using System.Collections.Generic;
-using System.Linq;
+
 using GTAVFunctions;
+
 using Newtonsoft.Json;
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Windows.Forms;
 
 namespace CustomRadioStations {
     public class NativeWheelOrganizerScript : Script {
@@ -32,11 +35,13 @@ namespace CustomRadioStations {
         }
 
         private void OnAbort(object sender, EventArgs e) {
-            if (nativeWheelWasApplied) UnhideAllStations();
+            if (nativeWheelWasApplied)
+                UnhideAllStations();
         }
 
         void UnhideAllStations() {
-            if (maxStationCount <= 0) return;
+            if (maxStationCount <= 0)
+                return;
             for (int i = 0; i < maxStationCount; i++) {
                 string station = RadioNativeFunctions.GET_RADIO_STATION_NAME(i);
                 if (!string.IsNullOrWhiteSpace(station))
@@ -60,7 +65,8 @@ namespace CustomRadioStations {
 
             for (int i = 0; i < maxStationCount; i++) {
                 string stationName = RadioNativeFunctions.GET_RADIO_STATION_NAME(i);
-                if (string.IsNullOrWhiteSpace(stationName)) continue;
+                if (string.IsNullOrWhiteSpace(stationName))
+                    continue;
                 validStationNames.Add(stationName);
                 string s = "Name: " + stationName + " || Proper name: " + RadioNativeFunctions.GetRadioStationProperName(i);
                 Logger.Log(s, AppPaths.NativeStationsLogFile);
@@ -70,7 +76,8 @@ namespace CustomRadioStations {
         }
 
         void GetOrganizationLists() {
-            if (!File.Exists(AppPaths.NativeWheelsFile) || validStationNames == null || validStationNames.Count == 0) return;
+            if (!File.Exists(AppPaths.NativeWheelsFile) || validStationNames == null || validStationNames.Count == 0)
+                return;
 
             try {
                 var serializerSettings = new JsonSerializerSettings {
@@ -81,7 +88,8 @@ namespace CustomRadioStations {
                     File.ReadAllText(AppPaths.NativeWheelsFile), serializerSettings);
 
                 foreach (NativeWheelSettings wheelSettings in config?.Wheels ?? new List<NativeWheelSettings>()) {
-                    if (wheelSettings == null || string.IsNullOrWhiteSpace(wheelSettings.Name)) continue;
+                    if (wheelSettings == null || string.IsNullOrWhiteSpace(wheelSettings.Name))
+                        continue;
                     var wheel = new NativeWheel(wheelSettings.Name.Trim());
                     foreach (string station in wheelSettings.Stations ?? new List<string>()) {
                         string stationName = station?.Trim();
@@ -91,7 +99,8 @@ namespace CustomRadioStations {
                             wheel.stationList.Add(stationName);
                         }
                     }
-                    if (wheel.stationList.Count > 0) NativeWheel.WheelList.Add(wheel);
+                    if (wheel.stationList.Count > 0)
+                        NativeWheel.WheelList.Add(wheel);
                 }
             } catch (Exception ex) {
                 Logger.Log("Failed to load native-wheels.json: " + ex.Message + ". Native wheel organization will remain disabled.", AppPaths.NativeStationsLogFile);
@@ -113,12 +122,14 @@ namespace CustomRadioStations {
 
         void OnTick(object sender, EventArgs e) {
             if (GTAFunction.HasCheatStringJustBeenEntered("radio_reload")) {
-                if (nativeWheelWasApplied) UnhideAllStations();
+                if (nativeWheelWasApplied)
+                    UnhideAllStations();
                 nativeWheelWasApplied = false;
                 NativeWheel.WheelList = new List<NativeWheel>();
                 currentWheel = null;
                 LogAllStations();
-                if (maxStationCount > 0) GetOrganizationLists();
+                if (maxStationCount > 0)
+                    GetOrganizationLists();
                 loaded = true;
                 Wait(150);
             }
@@ -126,7 +137,8 @@ namespace CustomRadioStations {
             if (RadioNativeFunctions.IsRadioHudComponentVisible()) {
                 if (!loaded && Game.Player.CanControlCharacter) {
                     LogAllStations();
-                    if (maxStationCount > 0) GetOrganizationLists();
+                    if (maxStationCount > 0)
+                        GetOrganizationLists();
                     loaded = true;
                 }
 
@@ -148,7 +160,8 @@ namespace CustomRadioStations {
 
                 Event_JUST_OPENED_OnNextOpen = false;
             } else {
-                if (!loaded) return;
+                if (!loaded)
+                    return;
 
                 if (!Event_JUST_OPENED_OnNextOpen) {
                     OnJustClosed();
@@ -163,7 +176,8 @@ namespace CustomRadioStations {
             ControlNextWheel = GTAFunction.UsingGamepad() ? GTA.Control.VehicleAccelerate : GTA.Control.WeaponWheelPrev;
             ControlPrevWheel = GTAFunction.UsingGamepad() ? GTA.Control.VehicleBrake : GTA.Control.WeaponWheelNext;
 
-            if (!Config.DisplayHelpText) return;
+            if (!Config.DisplayHelpText)
+                return;
 
             if (StationWheelPair.List.Count == 0) {
                 GTAFunction.DisplayHelpTextThisFrame(
@@ -194,7 +208,8 @@ namespace CustomRadioStations {
         }
 
         void ControlWheelChange() {
-            if (!WheelListIsPopulated() || currentWheel == null) return;
+            if (!WheelListIsPopulated() || currentWheel == null)
+                return;
 
             if (ControlInput.IsJustPressed(ControlNextWheel)) {
                 currentWheel = NativeWheel.WheelList.GetNext(currentWheel);
@@ -206,7 +221,8 @@ namespace CustomRadioStations {
         }
 
         void UpdateWheelThisFrame() {
-            if (!WheelListIsPopulated() || currentWheel == null || validStationNames == null) return;
+            if (!WheelListIsPopulated() || currentWheel == null || validStationNames == null)
+                return;
 
             // Unhide all listed radios
             foreach (var station in currentWheel.stationList) {

@@ -13,12 +13,14 @@ namespace CustomRadioStations {
         internal const float VirtualHeight = 720f;
 
         internal static float GetVirtualWidth(int outputWidth, int outputHeight) {
-            if (outputWidth <= 0 || outputHeight <= 0) return 1280f;
+            if (outputWidth <= 0 || outputHeight <= 0)
+                return 1280f;
             return VirtualHeight * outputWidth / outputHeight;
         }
 
         internal static int GetRequiredIconPixels(int virtualWidth, int virtualHeight, int outputHeight) {
-            if (outputHeight <= 0) outputHeight = (int)VirtualHeight;
+            if (outputHeight <= 0)
+                outputHeight = (int)VirtualHeight;
             int largestVirtualDimension = Math.Max(1, Math.Max(virtualWidth, virtualHeight));
             return Math.Max(1, (int)Math.Ceiling(largestVirtualDimension * outputHeight / VirtualHeight));
         }
@@ -33,7 +35,8 @@ namespace CustomRadioStations {
 
         internal static string Resolve(string configuredPath, int requiredPixels) {
             List<IconVariant> variants = GetAvailableVariants(configuredPath);
-            if (variants.Count == 0) return null;
+            if (variants.Count == 0)
+                return null;
 
             IconVariant selected = variants.FirstOrDefault(candidate => candidate.Pixels >= requiredPixels)
                 ?? variants[variants.Count - 1];
@@ -42,7 +45,8 @@ namespace CustomRadioStations {
 
         private static List<IconVariant> GetAvailableVariants(string configuredPath) {
             var result = new List<IconVariant>();
-            if (string.IsNullOrWhiteSpace(configuredPath)) return result;
+            if (string.IsNullOrWhiteSpace(configuredPath))
+                return result;
 
             try {
                 string fullPath = Path.GetFullPath(configuredPath);
@@ -85,8 +89,12 @@ namespace CustomRadioStations {
                 Pixels = pixels;
             }
 
-            internal string Path { get; }
-            internal int Pixels { get; }
+            internal string Path {
+                get;
+            }
+            internal int Pixels {
+                get;
+            }
         }
     }
 

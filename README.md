@@ -118,6 +118,8 @@ Volume controls change the master volume by 5% immediately when pressed. Holding
 
 Controller radial selection uses a `0.20` stick deadzone and 4 degrees of angular hysteresis by default, preventing selection flicker near the boundary between stations. These can be adjusted with `gamepadControls.radialDeadzone` and `gamepadControls.radialHysteresisDegrees` in `settings.json`.
 
+A custom wheel opens only after GTA accepts the radio-wheel input and activates its own radio HUD. Phone, interaction-menu, pause, and other frontend contexts that consume the normal radio control therefore suppress the custom wheel as well.
+
 ## JSON settings
 
 All application-owned configuration is JSON going forward:

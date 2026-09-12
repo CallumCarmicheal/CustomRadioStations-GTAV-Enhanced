@@ -4,7 +4,8 @@ namespace CustomRadioStations {
     internal static class RadialSelectionHysteresis {
         internal static bool ShouldSwitch(float currentCenterDegrees, float inputDegrees,
             int itemCount, float hysteresisDegrees) {
-            if (itemCount <= 1) return false;
+            if (itemCount <= 1)
+                return false;
 
             float halfSector = 180f / itemCount;
             float safeHysteresis = Math.Max(0f, Math.Min(hysteresisDegrees, halfSector * 0.45f));

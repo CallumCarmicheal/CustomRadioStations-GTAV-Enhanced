@@ -1,12 +1,17 @@
-﻿using GTA;
+﻿using EventHelper;
+
+using GTA;
 using GTA.Native;
-using System;
-using System.Windows.Forms;
-using System.IO;
-using UIScreen = GTA.UI.Screen;
-using SelectorWheel;
+
 using GTAVFunctions;
-using EventHelper;
+
+using SelectorWheel;
+
+using System;
+using System.IO;
+using System.Windows.Forms;
+
+using UIScreen = GTA.UI.Screen;
 
 namespace CustomRadioStations {
     public class MainScript : Script {
@@ -40,7 +45,7 @@ namespace CustomRadioStations {
             // malformed settings file should produce a log instead of preventing SHVDN
             // from constructing the script at all.
             try {
-                if (!Directory.Exists(AppPaths.RootDirectory)) 
+                if (!Directory.Exists(AppPaths.RootDirectory))
                     Directory.CreateDirectory(AppPaths.RootDirectory);
 
                 Logger.Init();
@@ -48,7 +53,9 @@ namespace CustomRadioStations {
                 Config.Load();
             } catch (Exception ex) {
                 initializationFailure = ex.ToString();
-                try { Logger.Log("FATAL: Startup dependency/configuration failure: " + ex); } catch { }
+                try {
+                    Logger.Log("FATAL: Startup dependency/configuration failure: " + ex);
+                } catch { }
             }
 
             if (initializationFailure == null)
@@ -65,14 +72,30 @@ namespace CustomRadioStations {
         private void OnAbort(object sender, EventArgs e) {
             // Cleanup is intentionally best-effort: an unavailable Enhanced native or an
             // already-disposed audio engine must not turn script shutdown into a crash.
-            try { focusPauseMonitor?.Dispose(); } catch { }
-            try { AudioPauseCoordinator.Reset(); } catch { }
-            try { Game.TimeScale = 1f; } catch { }
-            try { SoundFile.DisposeSoundEngine(); } catch { }
-            try { RadioNativeFunctions.DisposeDashboardScaleform(); } catch { }
-            try { Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER); } catch { }
-            try { Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", false); } catch { }
-            try { Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", false); } catch { }
+            try {
+                focusPauseMonitor?.Dispose();
+            } catch { }
+            try {
+                AudioPauseCoordinator.Reset();
+            } catch { }
+            try {
+                Game.TimeScale = 1f;
+            } catch { }
+            try {
+                SoundFile.DisposeSoundEngine();
+            } catch { }
+            try {
+                RadioNativeFunctions.DisposeDashboardScaleform();
+            } catch { }
+            try {
+                Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER);
+            } catch { }
+            try {
+                Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", false);
+            } catch { }
+            try {
+                Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", false);
+            } catch { }
             try {
                 if (Function.Call<bool>(Hash.IS_AUDIO_SCENE_ACTIVE, "DEATH_SCENE")) {
                     Function.Call(Hash.STOP_AUDIO_SCENE, "DEATH_SCENE");
@@ -99,7 +122,8 @@ namespace CustomRadioStations {
 
                     StationWheelPair pair = StationWheelPair.List.Find(candidate =>
                         candidate.Wheel == radioWheel && candidate.Category == selectedCategory);
-                    if (pair == null) return;
+                    if (pair == null)
+                        return;
 
                     ActionQueued = ActionOptions.PlayQueued;
                     RadioStation.NextQueuedStation = pair.Station;
@@ -135,7 +159,8 @@ namespace CustomRadioStations {
 
         void SetupEvents() {
             GeneralEvents.OnPlayerEnteredVehicle += (veh) => {
-                if (veh == null || !veh.Exists() || StationWheelPair.List.Count == 0) return;
+                if (veh == null || !veh.Exists() || StationWheelPair.List.Count == 0)
+                    return;
 
                 bool vehWasEngineRunning = veh.IsEngineRunning;
 
@@ -154,7 +179,8 @@ namespace CustomRadioStations {
 
                 // In case the timeout above caused the loop to break,
                 // We will not continue because the vehicle is dead.
-                if (!veh.IsEngineRunning) return;
+                if (!veh.IsEngineRunning)
+                    return;
 
                 if (UsedVehiclesManager.IsUsedVehicle(veh)) {
                     if (UsedVehiclesManager.GetVehicleStationInfo(veh) == null) {
@@ -217,7 +243,8 @@ namespace CustomRadioStations {
             };
 
             GeneralEvents.OnPlayerExitedVehicle += (veh) => {
-                if (veh == null) return;
+                if (veh == null)
+                    return;
 
                 /*if (!IsMobileRadioEnabled())
                 {
@@ -257,7 +284,9 @@ namespace CustomRadioStations {
             if (initializationFailure != null) {
                 if (!loaded && Game.Player != null && Game.Player.CanControlCharacter) {
                     loaded = true;
-                    try { UIScreen.ShowSubtitle("Custom Radio Stations could not start. Check CustomRadioStations.log."); } catch { }
+                    try {
+                        UIScreen.ShowSubtitle("Custom Radio Stations could not start. Check CustomRadioStations.log.");
+                    } catch { }
                 }
                 return;
             }
@@ -267,9 +296,11 @@ namespace CustomRadioStations {
             HandleGamePause();
 
             if (!loaded) {
-                if (Game.Player == null || !Game.Player.CanControlCharacter) return;
+                if (Game.Player == null || !Game.Player.CanControlCharacter)
+                    return;
 
-                if (loadDelayTimer == null) loadDelayTimer = DateTime.Now.AddMilliseconds(Config.LoadStartDelay);
+                if (loadDelayTimer == null)
+                    loadDelayTimer = DateTime.Now.AddMilliseconds(Config.LoadStartDelay);
 
                 if (loadDelayTimer < DateTime.Now || RuntimeState.HasLoadedOnce) {
                     if (Config.DisplayHelpText)
@@ -284,7 +315,8 @@ namespace CustomRadioStations {
                             SetupEvents();
                     } catch (Exception ex) {
                         Logger.Log("FATAL: Failed to initialize custom radio: " + ex);
-                        if (Config.DisplayHelpText) UIScreen.ShowSubtitle("Custom Radio Stations failed to initialize. Check CustomRadioStations.log.");
+                        if (Config.DisplayHelpText)
+                            UIScreen.ShowSubtitle("Custom Radio Stations failed to initialize. Check CustomRadioStations.log.");
                         loaded = true;
                         return;
                     }
@@ -321,7 +353,8 @@ namespace CustomRadioStations {
                 Wait(150);
             }
 
-            if (WheelVars.RadioWheels.Count == 0) return;
+            if (WheelVars.RadioWheels.Count == 0)
+                return;
 
             if (VanillaOrCustomRadioWheelIsVisible()) {
                 if (GTAFunction.UsingGamepad()) {
@@ -490,7 +523,9 @@ namespace CustomRadioStations {
             bool pauseRequested = IsPauseControlJustPressed(GTA.Control.FrontendPause) ||
                 IsPauseControlJustPressed(GTA.Control.FrontendPauseAlternate);
             bool pauseMenuActive = false;
-            try { pauseMenuActive = Game.IsPaused; } catch { }
+            try {
+                pauseMenuActive = Game.IsPaused;
+            } catch { }
             AudioPauseCoordinator.SetGamePaused(pauseRequested || pauseMenuActive);
         }
 
@@ -566,7 +601,8 @@ namespace CustomRadioStations {
         }
 
         bool CanDoQueuedAction() {
-            if (inputTimer == null) return false;
+            if (inputTimer == null)
+                return false;
 
             if (inputTimer < DateTime.Now) {
                 inputTimer = null;
@@ -607,16 +643,24 @@ namespace CustomRadioStations {
         }
 
         bool VanillaOrCustomRadioWheelIsVisible() {
-            //return /*_IS_PLAYER_VEHICLE_RADIO_ENABLED() &&*/ ControlInput.IsPressed(GTA.Control.VehicleRadioWheel) && Game.Player.CanControlCharacter;
             Ped player = Game.Player.Character;
-            if (player == null || !player.Exists()) return false;
+            if (player == null || !player.Exists())
+                return false;
 
-            if (ControlInput.IsPressed(GTA.Control.VehicleRadioWheel) && Game.Player.CanControlCharacter) {
+            bool customWheelVisible = WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Visible;
+            bool canShowWheel = RadioWheelAvailability.CanShow(
+                ControlInput.IsPressed(GTA.Control.VehicleRadioWheel),
+                ControlInput.IsEnabledPressed(GTA.Control.VehicleRadioWheel),
+                Game.Player.CanControlCharacter,
+                RadioNativeFunctions.IsRadioHudComponentVisible(),
+                customWheelVisible);
+
+            if (canShowWheel) {
                 if (player.IsInVehicle() && RadioNativeFunctions._IS_PLAYER_VEHICLE_RADIO_ENABLED()) {
                     return true;
                 } else if (player.IsOnFoot) {
-                    if (RadioNativeFunctions.IsRadioHudComponentVisible() ||
-                        (WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Visible) ||
+                    if (customWheelVisible ||
+                        RadioNativeFunctions.IsRadioHudComponentVisible() ||
                         IsCurrentCustomStationPlaying()) {
                         return true;
                     }
@@ -637,10 +681,12 @@ namespace CustomRadioStations {
         }
 
         void OnKeyUp(object sender, KeyEventArgs e) {
-            if (e.KeyCode != Config.KB_Toggle) return;
+            if (e.KeyCode != Config.KB_Toggle)
+                return;
 
             if (!loaded) {
-                if (Config.DisplayHelpText) UIScreen.ShowSubtitle("Custom Radio not loaded yet, please try again later!");
+                if (Config.DisplayHelpText)
+                    UIScreen.ShowSubtitle("Custom Radio not loaded yet, please try again later!");
                 return;
             }
 
