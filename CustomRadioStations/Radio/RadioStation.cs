@@ -21,10 +21,8 @@ namespace CustomRadioStations {
 
         private SoundFile currentSound;
         private bool hasPlayedOnce;
-        private bool allSoundsPlayedOnce;
         private int lastPlayedSoundIndex;
         private int lastCommercialIndex = -1;
-        private uint stoppedPositionStation;
         private uint stoppedPositionSound;
         private DateTime lastPlayedTime;
         private DateTime trackUpdateTimer = DateTime.Now;
@@ -190,21 +188,23 @@ namespace CustomRadioStations {
 
             if (!hasPlayedOnce) {
                 lastPlayedSoundIndex = IsBroadcastMode ? initialProgrammeIndex : 0;
-                currentSound = programme[lastPlayedSoundIndex].SoundFile;
-                if (!StartCurrentSound())
+                int startedIndex;
+                if (!TryStartProgrammeItem(lastPlayedSoundIndex, false, IsBroadcastMode && playback.Loop, out startedIndex))
                     return;
+                lastPlayedSoundIndex = startedIndex;
                 currentSound.Sound.PlayPosition = IsBroadcastMode ? GetInitialBroadcastPosition() : 0u;
                 currentSound.Sound.Paused = false;
                 UpdateProgrammeLength();
                 hasPlayedOnce = true;
                 UpdateWheelInfo();
             } else if (IsBroadcastMode) {
-                if (!allSoundsPlayedOnce && lastPlayedSoundIndex == programme.Count - 1)
-                    allSoundsPlayedOnce = true;
                 ResumeBroadcastContinuity();
             } else {
                 ResumePlaylist();
             }
+
+            if (currentSound == null || currentSound.Sound == null)
+                return;
 
             Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", true);
             Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", true);
@@ -224,54 +224,128 @@ namespace CustomRadioStations {
 
         private void ResumePlaylist() {
             int index = Math.Max(0, Math.Min(lastPlayedSoundIndex, programme.Count - 1));
-            currentSound = programme[index].SoundFile;
-            if (!StartCurrentSound(true))
+            int startedIndex;
+            if (!TryStartProgrammeItem(index, true, false, out startedIndex))
                 return;
+            lastPlayedSoundIndex = startedIndex;
             uint maximum = currentSound.Length > 0 ? currentSound.Length - 1 : 0;
-            currentSound.Sound.PlayPosition = Math.Min(maximum, stoppedPositionSound);
+            currentSound.Sound.PlayPosition = startedIndex == index ? Math.Min(maximum, stoppedPositionSound) : 0u;
             CurrentSoundIsPaused = false;
             UpdateProgrammeLength();
             UpdateWheelInfo();
         }
 
         private void ResumeBroadcastContinuity() {
-            uint elapsed = lastPlayedTime == default(DateTime)
-                ? 0u
-                : (uint)Math.Min(uint.MaxValue, Math.Max(0d, (DateTime.Now - lastPlayedTime).TotalMilliseconds));
+            ulong elapsed = lastPlayedTime == default(DateTime)
+                ? 0UL
+                : (ulong)Math.Max(0d, (DateTime.Now - lastPlayedTime).TotalMilliseconds);
             int safeLastIndex = Math.Max(0, Math.Min(lastPlayedSoundIndex, programme.Count - 1));
-            SoundFile lastSound = programme[safeLastIndex].SoundFile;
 
-            if (allSoundsPlayedOnce && TotalLength > 0) {
-                uint newPosition = GetTimeFromPrevious(stoppedPositionStation, TotalLength, elapsed);
-                StationMediaItem item = programme.LastOrDefault(candidate => newPosition >= candidate.StartTime) ?? programme[0];
-                currentSound = item.SoundFile;
-                if (!StartCurrentSound(true))
+            uint[] knownLengths = programme.Select(item => item.SoundFile.Length).ToArray();
+            if (knownLengths.All(length => length > 0)) {
+                BroadcastPosition target = BroadcastTimeline.Advance(
+                    knownLengths, safeLastIndex, stoppedPositionSound, elapsed, playback.Loop);
+                if (target.Finished) {
+                    FinishPlayback();
                     return;
-                UpdateProgrammeLength();
-                currentSound.Sound.PlayPosition = Math.Min(currentSound.Length > 0 ? currentSound.Length - 1 : 0,
-                    newPosition >= item.StartTime ? newPosition - item.StartTime : 0);
-            } else {
-                uint remaining = lastSound.Length > stoppedPositionSound ? lastSound.Length - stoppedPositionSound : 0;
-                if (elapsed < remaining) {
-                    currentSound = lastSound;
-                    if (!StartCurrentSound(true))
-                        return;
-                    currentSound.Sound.PlayPosition = Math.Min(currentSound.Length > 0 ? currentSound.Length - 1 : 0,
-                        stoppedPositionSound + elapsed);
-                    UpdateProgrammeLength();
-                } else {
-                    int nextIndex = safeLastIndex < programme.Count - 1 ? safeLastIndex + 1 : 0;
-                    currentSound = programme[nextIndex].SoundFile;
-                    if (!StartCurrentSound(true))
-                        return;
-                    UpdateProgrammeLength();
                 }
+
+                int startedIndex;
+                if (!TryStartProgrammeItem(target.Index, true, playback.Loop, out startedIndex)) {
+                    FinishPlayback();
+                    return;
+                }
+                lastPlayedSoundIndex = startedIndex;
+                currentSound.Sound.PlayPosition = startedIndex == target.Index
+                    ? Math.Min(currentSound.Length > 0 ? currentSound.Length - 1 : 0, target.Position)
+                    : 0u;
+                UpdateProgrammeLength();
+            } else if (!ResumeBroadcastWithUnknownLengths(safeLastIndex, stoppedPositionSound, elapsed)) {
+                FinishPlayback();
+                return;
             }
 
             CurrentSoundIsPaused = false;
             UpdateWheelInfo();
             if (currentSound != null && currentSound.HasTrackList)
                 UpdateTrackUpdateTimer();
+        }
+
+        private bool ResumeBroadcastWithUnknownLengths(int startIndex, uint startPosition, ulong elapsed) {
+            int index = startIndex;
+            uint position = startPosition;
+            int consecutiveFailures = 0;
+
+            while (true) {
+                currentSound = programme[index].SoundFile;
+                if (!StartCurrentSound(true)) {
+                    consecutiveFailures++;
+                    if (consecutiveFailures >= programme.Count)
+                        return false;
+                    if (!TryGetNextProgrammeIndex(index, playback.Loop, out index))
+                        return false;
+                    position = 0u;
+                    continue;
+                }
+
+                consecutiveFailures = 0;
+                UpdateProgrammeLength();
+                uint length = currentSound.Length;
+                ulong remaining = length > position ? (ulong)(length - position) : 0UL;
+                if (length > 0 && elapsed < remaining) {
+                    lastPlayedSoundIndex = index;
+                    currentSound.Sound.PlayPosition = position + (uint)elapsed;
+                    return true;
+                }
+
+                if (remaining > 0)
+                    elapsed -= remaining;
+                currentSound.StopSound();
+
+                if (!TryGetNextProgrammeIndex(index, playback.Loop, out index))
+                    return false;
+                position = 0u;
+
+                if (playback.Loop && programme.All(item => item.SoundFile.Length > 0)) {
+                    ulong totalLength = (ulong)programme.Sum(item => (long)item.SoundFile.Length);
+                    if (totalLength > 0)
+                        elapsed %= totalLength;
+                }
+            }
+        }
+
+        private bool TryStartProgrammeItem(int startIndex, bool resume, bool allowWrap, out int startedIndex) {
+            startedIndex = -1;
+            if (programme.Count == 0)
+                return false;
+
+            int index = Math.Max(0, Math.Min(startIndex, programme.Count - 1));
+            for (int attempts = 0; attempts < programme.Count; attempts++) {
+                currentSound = programme[index].SoundFile;
+                if (StartCurrentSound(resume)) {
+                    startedIndex = index;
+                    return true;
+                }
+
+                if (!TryGetNextProgrammeIndex(index, allowWrap, out index))
+                    break;
+            }
+
+            currentSound = null;
+            return false;
+        }
+
+        private bool TryGetNextProgrammeIndex(int currentIndex, bool allowWrap, out int nextIndex) {
+            if (currentIndex < programme.Count - 1) {
+                nextIndex = currentIndex + 1;
+                return true;
+            }
+            if (allowWrap && programme.Count > 0) {
+                nextIndex = 0;
+                return true;
+            }
+            nextIndex = -1;
+            return false;
         }
 
         internal void Stop() {
@@ -281,7 +355,6 @@ namespace CustomRadioStations {
             if (item == null)
                 return;
 
-            stoppedPositionStation = item.StartTime + currentSound.PlayPosition();
             stoppedPositionSound = currentSound.PlayPosition();
             lastPlayedSoundIndex = programme.IndexOf(item);
             lastPlayedTime = DateTime.Now;
@@ -305,9 +378,12 @@ namespace CustomRadioStations {
             }
 
             int nextIndex = currentIndex >= 0 && currentIndex < programme.Count - 1 ? currentIndex + 1 : 0;
-            currentSound = programme[nextIndex].SoundFile;
-            if (!StartCurrentSound(true))
+            int startedIndex;
+            if (!TryStartProgrammeItem(nextIndex, true, playback.Loop, out startedIndex)) {
+                FinishPlayback();
                 return;
+            }
+            lastPlayedSoundIndex = startedIndex;
             UpdateProgrammeLength();
             CurrentSoundIsPaused = false;
             UpdateWheelInfo();
@@ -403,11 +479,6 @@ namespace CustomRadioStations {
             Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", false);
         }
 
-        private static uint GetTimeFromPrevious(uint previous, uint duration, uint elapsed) {
-            if (duration == 0)
-                return 0;
-            return (uint)(((ulong)(previous % duration) + elapsed) % duration);
-        }
 
         internal bool IsPlaying => currentSound != null && currentSound.IsPlaying();
 
@@ -464,10 +535,32 @@ namespace CustomRadioStations {
         private static bool focusPaused;
         private static bool suspended;
         private static RadioStation pausedStation;
+        private static DateTime pauseInputLatchUntil;
+        private static bool observedPauseMenu;
 
-        internal static void SetGamePaused(bool value) {
+        internal static void ReportGamePauseState(bool pauseMenuActive, bool pauseInputPressed) {
             lock (SyncRoot) {
-                gamePaused = value;
+                if (pauseInputPressed)
+                    LatchPauseInput();
+
+                if (pauseMenuActive) {
+                    observedPauseMenu = true;
+                    gamePaused = true;
+                } else if (observedPauseMenu) {
+                    observedPauseMenu = false;
+                    pauseInputLatchUntil = DateTime.MinValue;
+                    gamePaused = false;
+                } else {
+                    gamePaused = DateTime.UtcNow < pauseInputLatchUntil;
+                }
+                Apply();
+            }
+        }
+
+        internal static void NotifyPauseInput() {
+            lock (SyncRoot) {
+                LatchPauseInput();
+                gamePaused = true;
                 Apply();
             }
         }
@@ -499,6 +592,8 @@ namespace CustomRadioStations {
             lock (SyncRoot) {
                 gamePaused = false;
                 focusPaused = false;
+                observedPauseMenu = false;
+                pauseInputLatchUntil = DateTime.MinValue;
                 ResumeOwnedStation();
                 suspended = false;
             }
@@ -525,6 +620,10 @@ namespace CustomRadioStations {
             if (pausedStation != null && ReferenceEquals(RadioStation.CurrentPlaying, pausedStation))
                 pausedStation.CurrentSoundIsPaused = false;
             pausedStation = null;
+        }
+
+        private static void LatchPauseInput() {
+            pauseInputLatchUntil = DateTime.UtcNow.AddMilliseconds(750);
         }
     }
 }

@@ -43,6 +43,7 @@
     <Compile Include="..\CustomRadioStations\Configuration\Settings.cs" Link="Settings.cs" />
     <Compile Include="..\CustomRadioStations\Audio\Track.cs" Link="Track.cs" />
     <Compile Include="..\CustomRadioStations\Audio\TrackMetadataReader.cs" Link="TrackMetadataReader.cs" />
+    <Compile Include="..\CustomRadioStations\Radio\BroadcastTimeline.cs" Link="BroadcastTimeline.cs" />
     <Compile Include="..\CustomRadioStations\Radio\MediaSourceResolver.cs" Link="MediaSourceResolver.cs" />
     <Compile Include="..\CustomRadioStations\Radio\StationDefinition.cs" Link="StationDefinition.cs" />
     <Compile Include="..\CustomRadioStations\Utilities\HoldRepeatState.cs" Link="HoldRepeatState.cs" />

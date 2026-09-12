@@ -526,12 +526,14 @@ namespace CustomRadioStations {
             try {
                 pauseMenuActive = Game.IsPaused;
             } catch { }
-            AudioPauseCoordinator.SetGamePaused(pauseRequested || pauseMenuActive);
+            AudioPauseCoordinator.ReportGamePauseState(pauseMenuActive, pauseRequested);
         }
 
         private static bool IsPauseControlJustPressed(GTA.Control control) {
             try {
-                return Function.Call<bool>(Hash.IS_CONTROL_JUST_PRESSED, 0, (int)control) ||
+                return Game.IsControlJustPressed(control) ||
+                    Game.IsEnabledControlJustPressed(control) ||
+                    Function.Call<bool>(Hash.IS_CONTROL_JUST_PRESSED, 0, (int)control) ||
                     Function.Call<bool>(Hash.IS_CONTROL_JUST_PRESSED, ControlInput.WheelInputGroup, (int)control) ||
                     Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, ControlInput.WheelInputGroup, (int)control);
             } catch {
@@ -678,6 +680,8 @@ namespace CustomRadioStations {
         }
 
         void OnKeyDown(object sender, KeyEventArgs e) {
+            if (e.KeyCode == Keys.Escape)
+                AudioPauseCoordinator.NotifyPauseInput();
         }
 
         void OnKeyUp(object sender, KeyEventArgs e) {

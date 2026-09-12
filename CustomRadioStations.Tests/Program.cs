@@ -24,6 +24,7 @@ namespace CustomRadioStations {
                 TestHoldRepeat();
                 TestRadialSelectionHysteresis();
                 TestRadioWheelAvailability();
+                TestBroadcastTimeline();
                 TestWheelDisplayMetricsAndIconVariants();
                 Console.WriteLine("Passed " + passed + " station configuration tests.");
                 return 0;
@@ -121,6 +122,38 @@ namespace CustomRadioStations {
             Assert(config.Tracks.Count == 1 && config.Tracks[0].StartTime == 185000 &&
                 config.Tracks[0].Artist == "Artist" && config.Tracks[0].Title == "Song",
                 "JSON tracklist metadata is strongly typed");
+        }
+
+
+        private static void TestBroadcastTimeline() {
+            uint[] lengths = { 180000u, 240000u, 300000u, 360000u };
+
+            BroadcastPosition position = BroadcastTimeline.Advance(lengths, 2, 120000u, 60000u, true);
+            Assert(!position.Finished && position.Index == 2 && position.Position == 180000u,
+                "broadcast resume stays within current item when elapsed time fits");
+
+            position = BroadcastTimeline.Advance(lengths, 2, 120000u, 600000u, true);
+            Assert(!position.Finished && position.Index == 0 && position.Position == 60000u,
+                "broadcast resume crosses multiple items and wraps from a rotated start");
+
+            position = BroadcastTimeline.Advance(lengths, 3, 300000u, 660000u, true);
+            Assert(!position.Finished && position.Index == 2 && position.Position == 180000u,
+                "broadcast resume handles long gaps across several programme items");
+
+            ulong cycle = 0;
+            foreach (uint length in lengths)
+                cycle += length;
+            position = BroadcastTimeline.Advance(lengths, 1, 30000u, cycle + 90000u, true);
+            Assert(!position.Finished && position.Index == 1 && position.Position == 120000u,
+                "broadcast resume reduces full cycles without changing the target");
+
+            position = BroadcastTimeline.Advance(lengths, 3, 350000u, 20000u, false);
+            Assert(position.Finished, "non-looping broadcast finishes after the final programme item");
+
+            uint[] withZeroLength = { 180000u, 0u, 300000u };
+            position = BroadcastTimeline.Advance(withZeroLength, 0, 170000u, 20000u, true);
+            Assert(!position.Finished && position.Index == 2 && position.Position == 10000u,
+                "broadcast timeline safely skips zero-length entries");
         }
 
         private static void TestWheelDisplayMetricsAndIconVariants() {

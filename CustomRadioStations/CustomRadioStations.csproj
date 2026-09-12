@@ -81,6 +81,7 @@
     <Compile Include="Infrastructure\Logger.cs" />
     <Compile Include="Infrastructure\RuntimeState.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Radio\BroadcastTimeline.cs" />
     <Compile Include="Radio\RadioStation.cs" />
     <Compile Include="Radio\RadioCatalogLoader.cs" />
     <Compile Include="Radio\MediaSourceResolver.cs" />
