@@ -1,16 +1,16 @@
 using GTA;
+
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+
 using System.Collections.Generic;
 using System.Windows.Forms;
+
 using Control = GTA.Control;
 
-namespace CustomRadioStations
-{
-    internal sealed class ApplicationSettings
-    {
-        public ApplicationSettings()
-        {
+namespace CustomRadioStations {
+    internal sealed class ApplicationSettings {
+        public ApplicationSettings() {
             General = new GeneralSettings();
             Graphics = new GraphicsSettings();
             KeyboardControls = new KeyboardControlSettings();
@@ -30,8 +30,7 @@ namespace CustomRadioStations
         public GamepadControlSettings GamepadControls { get; set; }
     }
 
-    internal sealed class GeneralSettings
-    {
+    internal sealed class GeneralSettings {
         [JsonProperty("masterVolume")]
         public float MasterVolume { get; set; } = 0.3f;
 
@@ -54,8 +53,7 @@ namespace CustomRadioStations
         public bool EnableWheelSlowMotion { get; set; } = true;
     }
 
-    internal sealed class GraphicsSettings
-    {
+    internal sealed class GraphicsSettings {
         [JsonProperty("iconWidth")]
         public int IconWidth { get; set; } = 30;
 
@@ -78,8 +76,7 @@ namespace CustomRadioStations
         public double HighlightIconSizeMultiplier { get; set; } = 1.45;
     }
 
-    internal sealed class KeyboardControlSettings
-    {
+    internal sealed class KeyboardControlSettings {
         [JsonProperty("toggleModifier")]
         [JsonConverter(typeof(StringEnumConverter))]
         public Keys ToggleModifier { get; set; } = Keys.E;
@@ -97,8 +94,7 @@ namespace CustomRadioStations
         public Control VolumeDown { get; set; } = Control.PhoneDown;
     }
 
-    internal sealed class GamepadControlSettings
-    {
+    internal sealed class GamepadControlSettings {
         [JsonProperty("toggleModifier")]
         [JsonConverter(typeof(StringEnumConverter))]
         public Control ToggleModifier { get; set; } = Control.VehicleDuck;
@@ -116,8 +112,7 @@ namespace CustomRadioStations
         public Control VolumeDown { get; set; } = Control.MoveDownOnly;
     }
 
-    internal sealed class WheelSettings
-    {
+    internal sealed class WheelSettings {
         [JsonProperty("iconWidth")]
         public int? IconWidth { get; set; }
 
@@ -128,10 +123,8 @@ namespace CustomRadioStations
         public float? Radius { get; set; }
     }
 
-    internal sealed class NativeWheelConfiguration
-    {
-        public NativeWheelConfiguration()
-        {
+    internal sealed class NativeWheelConfiguration {
+        public NativeWheelConfiguration() {
             Wheels = new List<NativeWheelSettings>();
         }
 
@@ -139,10 +132,8 @@ namespace CustomRadioStations
         public List<NativeWheelSettings> Wheels { get; set; }
     }
 
-    internal sealed class NativeWheelSettings
-    {
-        public NativeWheelSettings()
-        {
+    internal sealed class NativeWheelSettings {
+        public NativeWheelSettings() {
             Stations = new List<string>();
         }
 

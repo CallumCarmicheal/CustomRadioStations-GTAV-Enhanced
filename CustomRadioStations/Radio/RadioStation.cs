@@ -1,15 +1,15 @@
 using GTA;
 using GTA.Native;
+
 using SelectorWheel;
+
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace CustomRadioStations
-{
-    internal sealed class RadioStation : IDisposable
-    {
+namespace CustomRadioStations {
+    internal sealed class RadioStation : IDisposable {
         internal static readonly Random random = new Random();
 
         private readonly WheelCategory wheelCategory;
@@ -29,8 +29,7 @@ namespace CustomRadioStations
         private DateTime lastPlayedTime;
         private DateTime trackUpdateTimer = DateTime.Now;
 
-        internal RadioStation(WheelCategory correspondingWheelCategory, StationDefinition definition)
-        {
+        internal RadioStation(WheelCategory correspondingWheelCategory, StationDefinition definition) {
             wheelCategory = correspondingWheelCategory;
             Id = definition.Id;
             Name = definition.Name;
@@ -51,11 +50,9 @@ namespace CustomRadioStations
 
         private bool IsBroadcastMode => string.Equals(playback.Mode, "broadcast", StringComparison.OrdinalIgnoreCase);
 
-        private void BuildProgramme()
-        {
+        private void BuildProgramme() {
             var tracks = new List<StationMediaItem>();
-            foreach (string source in trackSources)
-            {
+            foreach (string source in trackSources) {
                 SoundFile sound = TryCreateSound(source, "track");
                 if (sound != null) tracks.Add(new StationMediaItem(sound, false));
                 Config.LoadTick();
@@ -65,8 +62,7 @@ namespace CustomRadioStations
 
             int tracksUntilBreak = NextInclusive(commercialBreaks.MinTracksBetween, commercialBreaks.MaxTracksBetween);
             int tracksSinceBreak = 0;
-            foreach (StationMediaItem track in tracks)
-            {
+            foreach (StationMediaItem track in tracks) {
                 programme.Add(track);
                 tracksSinceBreak++;
 
@@ -75,8 +71,7 @@ namespace CustomRadioStations
                     continue;
 
                 int commercialCount = NextInclusive(commercialBreaks.MinCommercials, commercialBreaks.MaxCommercials);
-                for (int i = 0; i < commercialCount; i++)
-                {
+                for (int i = 0; i < commercialCount; i++) {
                     string source = GetNextCommercialSource();
                     SoundFile commercial = TryCreateSound(source, "commercial");
                     if (commercial != null) programme.Add(new StationMediaItem(commercial, true));
@@ -87,10 +82,8 @@ namespace CustomRadioStations
             }
         }
 
-        private string GetNextCommercialSource()
-        {
-            if (commercialSources.Count == 1)
-            {
+        private string GetNextCommercialSource() {
+            if (commercialSources.Count == 1) {
                 lastCommercialIndex = 0;
                 return commercialSources[0];
             }
@@ -102,30 +95,23 @@ namespace CustomRadioStations
             return commercialSources[next];
         }
 
-        private SoundFile TryCreateSound(string path, string kind)
-        {
-            try
-            {
-                if (string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase))
-                {
+        private SoundFile TryCreateSound(string path, string kind) {
+            try {
+                if (string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase)) {
                     string target = GeneralHelper.GetShortcutTargetFile(path);
                     if (string.IsNullOrEmpty(target))
                         throw new FileNotFoundException("Shortcut target does not exist.", path);
                     return new SoundFile(target, path);
                 }
                 return new SoundFile(path);
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Log("WARNING: Could not load " + kind + " '" + path + "' for station '" + Name + "': " + ex.Message);
                 return null;
             }
         }
 
-        private static void Shuffle<T>(IList<T> items)
-        {
-            for (int i = items.Count - 1; i > 0; i--)
-            {
+        private static void Shuffle<T>(IList<T> items) {
+            for (int i = items.Count - 1; i > 0; i--) {
                 int selected = random.Next(i + 1);
                 T value = items[selected];
                 items[selected] = items[i];
@@ -133,32 +119,26 @@ namespace CustomRadioStations
             }
         }
 
-        private static int NextInclusive(int minimum, int maximum)
-        {
+        private static int NextInclusive(int minimum, int maximum) {
             return minimum >= maximum ? minimum : random.Next(minimum, maximum + 1);
         }
 
-        internal void Update()
-        {
+        internal void Update() {
             if (currentSound == null || currentSound.Sound == null) return;
-            if (currentSound.HasTrackList && trackUpdateTimer < DateTime.Now)
-            {
+            if (currentSound.HasTrackList && trackUpdateTimer < DateTime.Now) {
                 UpdateWheelInfo();
                 UpdateTrackUpdateTimer();
             }
             if (currentSound.IsFinishedPlaying()) PlayNextSound();
         }
 
-        internal void Play()
-        {
-            if (!HasPlayableSounds)
-            {
+        internal void Play() {
+            if (!HasPlayableSounds) {
                 Logger.Log("WARNING: Station '" + Name + "' has no playable tracks; ignoring play request.");
                 return;
             }
 
-            if (!hasPlayedOnce)
-            {
+            if (!hasPlayedOnce) {
                 currentSound = programme[0].SoundFile;
                 if (!StartCurrentSound()) return;
                 currentSound.Sound.PlayPosition = IsBroadcastMode ? currentSound.GetRandomPlayPosition() : 0u;
@@ -166,15 +146,11 @@ namespace CustomRadioStations
                 UpdateProgrammeLength();
                 hasPlayedOnce = true;
                 UpdateWheelInfo();
-            }
-            else if (IsBroadcastMode)
-            {
+            } else if (IsBroadcastMode) {
                 if (!allSoundsPlayedOnce && lastPlayedSoundIndex == programme.Count - 1)
                     allSoundsPlayedOnce = true;
                 ResumeBroadcastContinuity();
-            }
-            else
-            {
+            } else {
                 ResumePlaylist();
             }
 
@@ -182,11 +158,9 @@ namespace CustomRadioStations
             Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", true);
         }
 
-        private bool StartCurrentSound(bool resume = false)
-        {
+        private bool StartCurrentSound(bool resume = false) {
             currentSound.PlaySound(resume, false, true);
-            if (currentSound.Sound == null)
-            {
+            if (currentSound.Sound == null) {
                 Logger.Log("WARNING: MiniAudioEx failed to start station '" + Name + "'.");
                 currentSound = null;
                 return false;
@@ -195,8 +169,7 @@ namespace CustomRadioStations
             return true;
         }
 
-        private void ResumePlaylist()
-        {
+        private void ResumePlaylist() {
             int index = Math.Max(0, Math.Min(lastPlayedSoundIndex, programme.Count - 1));
             currentSound = programme[index].SoundFile;
             if (!StartCurrentSound(true)) return;
@@ -207,16 +180,14 @@ namespace CustomRadioStations
             UpdateWheelInfo();
         }
 
-        private void ResumeBroadcastContinuity()
-        {
+        private void ResumeBroadcastContinuity() {
             uint elapsed = lastPlayedTime == default(DateTime)
                 ? 0u
                 : (uint)Math.Min(uint.MaxValue, Math.Max(0d, (DateTime.Now - lastPlayedTime).TotalMilliseconds));
             int safeLastIndex = Math.Max(0, Math.Min(lastPlayedSoundIndex, programme.Count - 1));
             SoundFile lastSound = programme[safeLastIndex].SoundFile;
 
-            if (allSoundsPlayedOnce && TotalLength > 0)
-            {
+            if (allSoundsPlayedOnce && TotalLength > 0) {
                 uint newPosition = GetTimeFromPrevious(stoppedPositionStation, TotalLength, elapsed);
                 StationMediaItem item = programme.LastOrDefault(candidate => newPosition >= candidate.StartTime) ?? programme[0];
                 currentSound = item.SoundFile;
@@ -224,20 +195,15 @@ namespace CustomRadioStations
                 UpdateProgrammeLength();
                 currentSound.Sound.PlayPosition = Math.Min(currentSound.Length > 0 ? currentSound.Length - 1 : 0,
                     newPosition >= item.StartTime ? newPosition - item.StartTime : 0);
-            }
-            else
-            {
+            } else {
                 uint remaining = lastSound.Length > stoppedPositionSound ? lastSound.Length - stoppedPositionSound : 0;
-                if (elapsed < remaining)
-                {
+                if (elapsed < remaining) {
                     currentSound = lastSound;
                     if (!StartCurrentSound(true)) return;
                     currentSound.Sound.PlayPosition = Math.Min(currentSound.Length > 0 ? currentSound.Length - 1 : 0,
                         stoppedPositionSound + elapsed);
                     UpdateProgrammeLength();
-                }
-                else
-                {
+                } else {
                     int nextIndex = safeLastIndex < programme.Count - 1 ? safeLastIndex + 1 : 0;
                     currentSound = programme[nextIndex].SoundFile;
                     if (!StartCurrentSound(true)) return;
@@ -250,8 +216,7 @@ namespace CustomRadioStations
             if (currentSound != null && currentSound.HasTrackList) UpdateTrackUpdateTimer();
         }
 
-        internal void Stop()
-        {
+        internal void Stop() {
             if (currentSound == null || currentSound.Sound == null) return;
             StationMediaItem item = programme.Find(candidate => candidate.SoundFile == currentSound);
             if (item == null) return;
@@ -266,14 +231,12 @@ namespace CustomRadioStations
             ResetAudioFlags();
         }
 
-        private void PlayNextSound()
-        {
+        private void PlayNextSound() {
             if (!HasPlayableSounds) return;
             int currentIndex = currentSound == null ? -1 : programme.FindIndex(item => item.SoundFile == currentSound);
             if (currentSound != null) currentSound.StopSound();
 
-            if (currentIndex >= programme.Count - 1 && !playback.Loop)
-            {
+            if (currentIndex >= programme.Count - 1 && !playback.Loop) {
                 FinishPlayback();
                 return;
             }
@@ -286,23 +249,18 @@ namespace CustomRadioStations
             UpdateTrackUpdateTimer();
         }
 
-        internal void PlayNextSong()
-        {
+        internal void PlayNextSong() {
             if (currentSound == null) return;
-            if (currentSound.HasTrackList && currentSound.GetCurrentTrackIndex() < currentSound.Tracklist.Count - 1)
-            {
+            if (currentSound.HasTrackList && currentSound.GetCurrentTrackIndex() < currentSound.Tracklist.Count - 1) {
                 currentSound.SkipToNextTrack();
                 UpdateWheelInfo();
                 UpdateTrackUpdateTimer();
-            }
-            else
-            {
+            } else {
                 PlayNextSound();
             }
         }
 
-        private void FinishPlayback()
-        {
+        private void FinishPlayback() {
             currentSound = null;
             ResetWheelInfo();
             ResetAudioFlags();
@@ -310,8 +268,7 @@ namespace CustomRadioStations
             RadioNativeFunctions.VanillaRadioFadedOut(false);
         }
 
-        private void UpdateProgrammeLength()
-        {
+        private void UpdateProgrammeLength() {
             if (currentSound == null) return;
             StationMediaItem item = programme.Find(candidate => candidate.SoundFile == currentSound);
             if (item == null || currentSound.LengthAdded) return;
@@ -320,23 +277,20 @@ namespace CustomRadioStations
             currentSound.LengthAdded = true;
         }
 
-        internal void RescanSoundsTracklists()
-        {
+        internal void RescanSoundsTracklists() {
             foreach (StationMediaItem item in programme)
                 item.SoundFile.HasTrackList = item.SoundFile.TracklistExists(item.SoundFile.FilePath);
             UpdateWheelInfo();
             UpdateTrackUpdateTimer();
         }
 
-        private void UpdateWheelInfo()
-        {
+        private void UpdateWheelInfo() {
             if (currentSound == null || currentSound.Sound == null || wheelCategory == null ||
                 wheelCategory.ItemList == null || wheelCategory.ItemList.Count == 0) return;
             wheelCategory.ItemList[0].Name = Name + "\n" + currentSound.DisplayName;
         }
 
-        internal void UpdateDashboardInfo()
-        {
+        internal void UpdateDashboardInfo() {
             if (currentSound == null || currentSound.Sound == null) return;
             Ped player = Game.Player.Character;
             if (player == null || !player.Exists() || !player.IsInVehicle()) return;
@@ -347,40 +301,34 @@ namespace CustomRadioStations
                 info.Length > 1 ? info[1] : string.Empty);
         }
 
-        private void UpdateTrackUpdateTimer()
-        {
+        private void UpdateTrackUpdateTimer() {
             trackUpdateTimer = DateTime.Now.AddMilliseconds(
                 currentSound == null || currentSound.Sound == null ? 5000 : currentSound.TimeUntilNextTrack());
         }
 
-        private void ResetWheelInfo()
-        {
+        private void ResetWheelInfo() {
             if (wheelCategory != null && wheelCategory.ItemList != null && wheelCategory.ItemList.Count > 0)
                 wheelCategory.ItemList[0].Name = Name;
         }
 
-        private static void ResetAudioFlags()
-        {
+        private static void ResetAudioFlags() {
             Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", false);
             Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", false);
         }
 
-        private static uint GetTimeFromPrevious(uint previous, uint duration, uint elapsed)
-        {
+        private static uint GetTimeFromPrevious(uint previous, uint duration, uint elapsed) {
             if (duration == 0) return 0;
             return (uint)(((ulong)(previous % duration) + elapsed) % duration);
         }
 
         internal bool IsPlaying => currentSound != null && currentSound.IsPlaying();
 
-        internal bool CurrentSoundIsPaused
-        {
+        internal bool CurrentSoundIsPaused {
             get { return currentSound != null && currentSound.IsPaused; }
             set { if (currentSound != null) currentSound.IsPaused = value; }
         }
 
-        public void Dispose()
-        {
+        public void Dispose() {
             foreach (StationMediaItem item in programme)
                 item.SoundFile.Dispose();
             programme.Clear();
@@ -389,16 +337,13 @@ namespace CustomRadioStations
         internal static RadioStation CurrentPlaying;
         internal static RadioStation NextQueuedStation;
 
-        internal static void ManageStations()
-        {
+        internal static void ManageStations() {
             if (CurrentPlaying != null) CurrentPlaying.Update();
         }
     }
 
-    internal sealed class StationMediaItem
-    {
-        internal StationMediaItem(SoundFile soundFile, bool isCommercial)
-        {
+    internal sealed class StationMediaItem {
+        internal StationMediaItem(SoundFile soundFile, bool isCommercial) {
             SoundFile = soundFile;
             IsCommercial = isCommercial;
         }

@@ -8,40 +8,32 @@ using GTA.Native; // This is a reference that is needed! do not edit this
 using GTA.Math;
 using GTAMath;
 
-namespace GTAVFunctions
-{
-    public static class GTAFunction
-    {
-        public enum RagdollType
-        {
+namespace GTAVFunctions {
+    public static class GTAFunction {
+        public enum RagdollType {
             Normal = 0,
             StiffBody = 1,
             NarrowLegStumble = 2,
             WideLegStuble = 3
         }
 
-        public static float GetEntitySpeed_MPS(Entity ent)
-        {
+        public static float GetEntitySpeed_MPS(Entity ent) {
             return Function.Call<float>(Hash.GET_ENTITY_SPEED, ent);
         }
 
-        public static float GetEntitySpeed_MPH(Entity ent)
-        {
+        public static float GetEntitySpeed_MPH(Entity ent) {
             return Function.Call<float>(Hash.GET_ENTITY_SPEED, ent) * 2.236936f;
         }
 
-        public static float GetEntitySpeed_KMPH(Entity ent)
-        {
+        public static float GetEntitySpeed_KMPH(Entity ent) {
             return Function.Call<float>(Hash.GET_ENTITY_SPEED, ent) * 3.6f;
         }
 
-        public static void SetEntityMaxSpeed_KMPH(Entity ent, float speed)
-        {
+        public static void SetEntityMaxSpeed_KMPH(Entity ent, float speed) {
             Function.Call(Hash.SET_ENTITY_MAX_SPEED, ent, speed / 3.6f);
         }
 
-        public static void EnablePedAmbientAnimations(Ped ped)
-        {
+        public static void EnablePedAmbientAnimations(Ped ped) {
             Function.Call(Hash.SET_BLOCKING_OF_NON_TEMPORARY_EVENTS, ped, false);
             Function.Call(Hash.SET_PED_CAN_PLAY_GESTURE_ANIMS, ped, true);
             Function.Call(Hash.SET_PED_CAN_PLAY_VISEME_ANIMS, ped, true, 0);
@@ -49,8 +41,7 @@ namespace GTAVFunctions
             Function.Call(Hash.SET_PED_CAN_PLAY_AMBIENT_BASE_ANIMS, ped, true);
         }
 
-        public static void DisablePedAmbientAnimations(Ped ped)
-        {
+        public static void DisablePedAmbientAnimations(Ped ped) {
             Function.Call(Hash.SET_BLOCKING_OF_NON_TEMPORARY_EVENTS, ped, true);
             Function.Call(Hash.SET_PED_CAN_PLAY_GESTURE_ANIMS, ped, false);
             Function.Call(Hash.SET_PED_CAN_PLAY_VISEME_ANIMS, ped, false, 0);
@@ -58,34 +49,28 @@ namespace GTAVFunctions
             Function.Call(Hash.SET_PED_CAN_PLAY_AMBIENT_BASE_ANIMS, ped, false);
         }
 
-        public static void ToggleInjuredAnimations(Ped ped, bool on)
-        {
+        public static void ToggleInjuredAnimations(Ped ped, bool on) {
             Function.Call((Hash)0x33A60D8BDD6E508C, ped, on); //_SET_PED_CAN_PLAY_INJURED_ANIMS
         }
 
-        public static void SetPedRagdoll(Ped p, int ms, RagdollType type)
-        {
+        public static void SetPedRagdoll(Ped p, int ms, RagdollType type) {
             Function.Call(Hash.SET_PED_CAN_RAGDOLL, p, true);
             Function.Call(Hash.SET_PED_TO_RAGDOLL, p, ms, ms, (int)type, 1, 1, 0);
         }
 
-        public static void PlayPedPainSound(Ped p)
-        {
+        public static void PlayPedPainSound(Ped p) {
             Function.Call(Hash.PLAY_PAIN, p, 33, 0, 0);
         }
 
-        public static void SetPedCollisionCapsule(Ped ped, float amount)
-        {
+        public static void SetPedCollisionCapsule(Ped ped, float amount) {
             Function.Call(Hash.SET_PED_CAPSULE, ped, amount);
         }
 
-        public static void SetCollision(Entity entity, bool toggle, bool keepPhysics)
-        {
+        public static void SetCollision(Entity entity, bool toggle, bool keepPhysics) {
             Function.Call(Hash.SET_ENTITY_COLLISION, entity, toggle, keepPhysics);
         }
 
-        public static void AttachToEntity(this Entity e1, Entity e2, int boneIndexE2, Vector3 offsetPos, Vector3 rotation, bool useSoftPinning = false, bool collisionBetweenEnts = false, bool entOneIsPed = false, int vertexIndex = 2, bool fixedRot = true)
-        {
+        public static void AttachToEntity(this Entity e1, Entity e2, int boneIndexE2, Vector3 offsetPos, Vector3 rotation, bool useSoftPinning = false, bool collisionBetweenEnts = false, bool entOneIsPed = false, int vertexIndex = 2, bool fixedRot = true) {
             Function.Call(Hash.ATTACH_ENTITY_TO_ENTITY, e1, e2, boneIndexE2, offsetPos.X, offsetPos.Y, offsetPos.Z, rotation.X, rotation.Y, rotation.Z, false, useSoftPinning, collisionBetweenEnts, entOneIsPed, vertexIndex, fixedRot);
         }
 
@@ -104,39 +89,32 @@ namespace GTAVFunctions
         /// <param name="loosePositioning">If set to false, both entities are attached in a rope-like fashion. If true, positioning is completely static.</param>
         /// <param name="breakForce">Pounds(?) of force required to break the attachment.</param>
         /// <param name="p18">Not known. Seems to be 2 in R* scripts. 0 works too.</param>
-        public static void AttachToPhysically(this Entity entityToAttach, Entity entityToAttachTo, int attachBoneIndex, int attachBoneIndex_EntityToAttachTo, Vector3 offsetPos1, Vector3 offsetPos2, Vector3 rotation, bool fixedRot = true, bool p15 = false, bool collision = false, bool loosePositioning = false, float breakForce = 10000000.0f, int p18 = 2)
-        {
+        public static void AttachToPhysically(this Entity entityToAttach, Entity entityToAttachTo, int attachBoneIndex, int attachBoneIndex_EntityToAttachTo, Vector3 offsetPos1, Vector3 offsetPos2, Vector3 rotation, bool fixedRot = true, bool p15 = false, bool collision = false, bool loosePositioning = false, float breakForce = 10000000.0f, int p18 = 2) {
             Function.Call(Hash.ATTACH_ENTITY_TO_ENTITY_PHYSICALLY, entityToAttach, entityToAttachTo, attachBoneIndex, attachBoneIndex_EntityToAttachTo, offsetPos1.X, offsetPos1.Y, offsetPos1.Z, offsetPos2.X, offsetPos2.Y, offsetPos2.Z, rotation.X, rotation.Y, rotation.Z, breakForce, fixedRot, p15, collision, loosePositioning, p18);
         }
 
-        public static void AttachToPhysically_Relative(this Entity entityToAttach, Entity entityToAttachTo, int attachBoneIndex, int attachBoneIndex_EntityToAttachTo, Vector3 offsetPos2, Vector3 offsetRotation, bool fixedRot = true, bool p15 = true, bool collision = false, bool loosePositioning = false, float breakForce = 10000000.0f, int p18 = 2)
-        {
+        public static void AttachToPhysically_Relative(this Entity entityToAttach, Entity entityToAttachTo, int attachBoneIndex, int attachBoneIndex_EntityToAttachTo, Vector3 offsetPos2, Vector3 offsetRotation, bool fixedRot = true, bool p15 = true, bool collision = false, bool loosePositioning = false, float breakForce = 10000000.0f, int p18 = 2) {
             entityToAttach.Detach();
             AttachToPhysically(entityToAttach, entityToAttachTo, attachBoneIndex, attachBoneIndex_EntityToAttachTo, Vector3.Zero, offsetPos2, entityToAttachTo.Rotation + offsetRotation, fixedRot, p15, collision, loosePositioning, breakForce, p18);
         }
 
-        public static int boneIndexByName(this Entity e, string b)
-        {
+        public static int boneIndexByName(this Entity e, string b) {
             return Function.Call<int>(Hash.GET_ENTITY_BONE_INDEX_BY_NAME, e, b);
         }
 
-        public static int boneIndexByID(this Ped p, int ID)
-        {
+        public static int boneIndexByID(this Ped p, int ID) {
             return Function.Call<int>(Hash.GET_PED_BONE_INDEX, p, ID);
         }
 
-        public static Vector3 RoundVector3D(Vector3 vector3d, int decimals)
-        {
+        public static Vector3 RoundVector3D(Vector3 vector3d, int decimals) {
             return new Vector3((float)Math.Round(vector3d.X, decimals), (float)Math.Round(vector3d.Y, decimals), (float)Math.Round(vector3d.Z, decimals));
         }
 
-        public static void Teleport(Entity entity, Vector3 position, bool clearArea = true)
-        {
+        public static void Teleport(Entity entity, Vector3 position, bool clearArea = true) {
             Function.Call(Hash.SET_ENTITY_COORDS, entity, position.X, position.Y, position.Z, 0, 0, 0, clearArea);
         }
 
-        public static void TeleportToGround(Entity entity, Vector3 position, Action methodToRunWhileTeleporting)
-        {
+        public static void TeleportToGround(Entity entity, Vector3 position, Action methodToRunWhileTeleporting) {
             bool groundFound = false;
             //float[] groundCheckHeight = 
             //    {
@@ -148,20 +126,17 @@ namespace GTAVFunctions
                     800.0f, 750.0f, 700.0f, 650.0f, 600.0f, 550.0f, 500.0f,
                     450.0f, 400.0f, 350.0f, 300.0f, 250.0f, 200.0f, 150.0f, 100.0f, 50.0f
                 };
-            for (int i = 0; i < groundCheckHeight.Length; i++)
-            {
+            for (int i = 0; i < groundCheckHeight.Length; i++) {
                 Function.Call(Hash.SET_ENTITY_COORDS_NO_OFFSET, entity, position.X, position.Y, groundCheckHeight[i], 0, 0, 1);
                 methodToRunWhileTeleporting();
                 Script.Wait(100);
                 float groundZ = GetGroundZ(new Vector3(position.X, position.Y, groundCheckHeight[i]), out groundFound);
-                if (groundFound)
-                {
+                if (groundFound) {
                     position.Z = groundZ + 3.0f;
                     break;
                 }
             }
-            if (!groundFound)
-            {
+            if (!groundFound) {
                 position.Z = 1000.0f;
             }
             entity.PositionNoOffset = position;
@@ -189,21 +164,18 @@ namespace GTAVFunctions
             return new Vector3(pos.X, pos.Y, GetGroundZ(pos, out temp));
         }
 
-        public static bool PositionIsAboveGroundZHeight(Vector3 pos, float height)
-        {
+        public static bool PositionIsAboveGroundZHeight(Vector3 pos, float height) {
             bool groundIsFound;
             float gz = GetGroundZ(pos, out groundIsFound);
             // Legacy debug subtitle(groundIsFound && pos.Z > gz + height ? "~r~" + (pos.Z - (gz + height)) : "false");
             return groundIsFound && pos.Z > gz + height ? true : false;
         }
 
-        public static bool IsWithinThisHeightAboveGround(this Vector3 position, float height)
-        {
+        public static bool IsWithinThisHeightAboveGround(this Vector3 position, float height) {
             return World.Raycast(position, Vector3.WorldDown, height, IntersectFlags.Map | IntersectFlags.Vehicles).DidHit;
         }
 
-        public static void DamagePed(Ped attacker, Ped victim, int damage, RagdollType type, int ragdollMS, Vector3 forceDirection = default(Vector3), float forceDirectionMultiplier = 1f, Vector3 forceRotation = default(Vector3), float forceRotationMultiplier = 1f)
-        {
+        public static void DamagePed(Ped attacker, Ped victim, int damage, RagdollType type, int ragdollMS, Vector3 forceDirection = default(Vector3), float forceDirectionMultiplier = 1f, Vector3 forceRotation = default(Vector3), float forceRotationMultiplier = 1f) {
             PlayPedPainSound(victim);
             SetPedRagdoll(victim, ragdollMS, type);
 
@@ -213,67 +185,55 @@ namespace GTAVFunctions
             Function.Call(Hash.APPLY_PED_DAMAGE_PACK, victim, "BigRunOverByVehicle", 1.0, 1.0);
         }
 
-        public static void DamageVehicle(Vector3 attackPos, Vehicle victim, int damageAmount, float visualDamageAmount = 800f, float radiusOfDamage = 1600f, Vector3 forceDirection = default(Vector3), float forceDirectionMultiplier = 1f, Vector3 forceRotation = default(Vector3), float forceRotationMultiplier = 1f)
-        {
+        public static void DamageVehicle(Vector3 attackPos, Vehicle victim, int damageAmount, float visualDamageAmount = 800f, float radiusOfDamage = 1600f, Vector3 forceDirection = default(Vector3), float forceDirectionMultiplier = 1f, Vector3 forceRotation = default(Vector3), float forceRotationMultiplier = 1f) {
             SetVehicleDamage(victim, damageAmount);
             SetVehicleVisualDamage(victim, attackPos, visualDamageAmount, radiusOfDamage);
             victim.ApplyForce(forceDirection * forceDirectionMultiplier, forceRotation * forceRotationMultiplier);
             if (victim.Model.IsBike || victim.Model.IsBicycle) { if (victim.Driver != null && victim.Driver.Exists()) { Function.Call(Hash.KNOCK_PED_OFF_VEHICLE, victim.Driver); } }
         }
 
-        public static void SetVehicleVisualDamage(Vehicle v, Vector3 worldCoord, float visualDamageAmount = 200f, float radiusOfDamage = 250f, bool p6 = true)
-        {
+        public static void SetVehicleVisualDamage(Vehicle v, Vector3 worldCoord, float visualDamageAmount = 200f, float radiusOfDamage = 250f, bool p6 = true) {
             Vector3 offset = v.GetPositionOffset(worldCoord);
             Function.Call(Hash.SET_VEHICLE_DAMAGE, v, offset.X, offset.Y, offset.Z, visualDamageAmount, radiusOfDamage, p6);
         }
 
-        public static void SetVehicleDamage(Vehicle v, int damageAmount)
-        {
+        public static void SetVehicleDamage(Vehicle v, int damageAmount) {
             v.Health -= damageAmount;
             v.BodyHealth -= damageAmount;
             v.EngineHealth -= damageAmount;
         }
 
-        public static void SetEntityProofs(Entity ent, bool bulletProof, bool fireProof, bool explosionProof, bool collisionProof, bool meleeProof, bool drownProof, bool p6 = true, bool p7 = true)
-        {
+        public static void SetEntityProofs(Entity ent, bool bulletProof, bool fireProof, bool explosionProof, bool collisionProof, bool meleeProof, bool drownProof, bool p6 = true, bool p7 = true) {
             Function.Call(Hash.SET_ENTITY_PROOFS, ent, bulletProof, fireProof, explosionProof, collisionProof, meleeProof, p6, p7, drownProof);
         }
 
-        public static bool EntityIsAnObject(this Entity e)
-        {
+        public static bool EntityIsAnObject(this Entity e) {
             return Function.Call<bool>(Hash.IS_ENTITY_AN_OBJECT, e);
         }
 
-        public static bool EntityIsAPed(this Entity e)
-        {
+        public static bool EntityIsAPed(this Entity e) {
             return Function.Call<bool>(Hash.IS_ENTITY_A_PED, e);
         }
 
-        public static bool EntityIsAVehicle(this Entity e)
-        {
+        public static bool EntityIsAVehicle(this Entity e) {
             return Function.Call<bool>(Hash.IS_ENTITY_A_VEHICLE, e);
         }
 
-        public static bool PedIsInStealthMode(Ped p)
-        {
+        public static bool PedIsInStealthMode(Ped p) {
             return Function.Call<bool>(Hash.GET_PED_STEALTH_MOVEMENT, p);
         }
 
-        public static bool HasCheatStringJustBeenEntered(string cheat)
-        {
+        public static bool HasCheatStringJustBeenEntered(string cheat) {
             return Function.Call<bool>((Hash)0x557E43C447E700A8, StringHash.AtStringHashUtf8(cheat, 0)); // _HAS_CHEAT_STRING_JUST_BEEN_ENTERED
         }
 
-        public static float CalculateRelativeValue(float input, float inputMin, float inputMax, float outputMin, float outputMax)
-        {
+        public static float CalculateRelativeValue(float input, float inputMin, float inputMax, float outputMin, float outputMax) {
             //http://stackoverflow.com/questions/22083199/method-for-calculating-a-value-relative-to-min-max-values
             //Making sure bounderies arent broken...
-            if (input > inputMax)
-            {
+            if (input > inputMax) {
                 input = inputMax;
             }
-            if (input < inputMin)
-            {
+            if (input < inputMin) {
                 input = inputMin;
             }
             //Return value in relation to min og max
@@ -285,33 +245,27 @@ namespace GTAVFunctions
             return relativeValue;
         }
 
-        public static float IncreaseNumber(this float input, float increment, float inputMax)
-        {
+        public static float IncreaseNumber(this float input, float increment, float inputMax) {
             return (input + increment) < inputMax ? input + increment : inputMax;
         }
 
-        public static float DecreaseNumber(this float input, float decrement, float inputMin)
-        {
+        public static float DecreaseNumber(this float input, float decrement, float inputMin) {
             return (input - decrement) > inputMin ? input - decrement : inputMin;
         }
 
-        public static void SetTimecycleModifier(string modifierName)
-        {
+        public static void SetTimecycleModifier(string modifierName) {
             Function.Call(Hash.SET_TIMECYCLE_MODIFIER, modifierName);
         }
 
-        public static void SetTimecycleModifierStrength(float strength)
-        {
+        public static void SetTimecycleModifierStrength(float strength) {
             Function.Call(Hash.SET_TIMECYCLE_MODIFIER_STRENGTH, strength);
         }
 
-        public static void ClearTimecycleModifier()
-        {
+        public static void ClearTimecycleModifier() {
             Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER);
         }
 
-        public static void DrawLine(Vector3 from, Vector3 to, System.Drawing.Color col)
-        {
+        public static void DrawLine(Vector3 from, Vector3 to, System.Drawing.Color col) {
             Function.Call(Hash.DRAW_LINE, from.X, from.Y, from.Z, to.X, to.Y, to.Z, col.R, col.G, col.B, col.A);
         }
 
@@ -322,31 +276,26 @@ namespace GTAVFunctions
         /// <param name="loopOnly"></param>
         /// <param name="beep"></param>
         /// <param name="shape"></param>
-        public static void DisplayHelpTextThisFrame(string text, bool foreverUntilNextHelpText = false, bool beep = true, int shape = -1)
-        {
+        public static void DisplayHelpTextThisFrame(string text, bool foreverUntilNextHelpText = false, bool beep = true, int shape = -1) {
             Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_HELP, "CELL_EMAIL_BCON"); //BEGIN_TEXT_COMMAND_DISPLAY_HELP jamyfafi
             //Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, text);
             AddLongString(text);
             Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_HELP, 0, foreverUntilNextHelpText, beep, shape); //END_TEXT_COMMAND_DISPLAY_HELP
         }
 
-        private static void AddLongString(string str)
-        {
+        private static void AddLongString(string str) {
             const int strLen = 99;
-            for (int i = 0; i < str.Length; i += strLen)
-            {
+            for (int i = 0; i < str.Length; i += strLen) {
                 string substr = str.Substring(i, Math.Min(strLen, str.Length - i));
                 Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, substr); //ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME
             }
         }
 
-        public static void ClearAllHelpMessages()
-        {
+        public static void ClearAllHelpMessages() {
             Function.Call(Hash.CLEAR_ALL_HELP_MESSAGES);
         }
 
-        public enum ControlString
-        {
+        public enum ControlString {
             INPUT_NEXT_CAMERA = 0,
             INPUT_LOOK_LR = 1,
             INPUT_LOOK_UD = 2,
@@ -687,50 +636,38 @@ namespace GTAVFunctions
             INPUT_MAP_POI = 337
         }
 
-        public static string InputString(GTA.Control control, int controlInt = -1)
-        {
+        public static string InputString(GTA.Control control, int controlInt = -1) {
             int controlID = controlInt == -1 ? (int)control : controlInt;
             return "~" + (ControlString)controlID + "~";
         }
 
-        public static string InputString(System.Windows.Forms.Keys key, int controlInt = -1)
-        {
+        public static string InputString(System.Windows.Forms.Keys key, int controlInt = -1) {
             return key.ToString();
         }
 
-        public static string InputString(string keyboardKey, GTA.Control control, int controlInt = -1)
-        {
-            if (!UsingGamepad())
-            {
+        public static string InputString(string keyboardKey, GTA.Control control, int controlInt = -1) {
+            if (!UsingGamepad()) {
                 return keyboardKey;
-            }
-            else
-            {
+            } else {
                 int controlID = controlInt == -1 ? (int)control : controlInt;
                 return "~" + (ControlString)controlID + "~";
             }
         }
 
-        public static string InputString(System.Windows.Forms.Keys key, GTA.Control control, int controlInt = -1)
-        {
-            if (!UsingGamepad())
-            {
+        public static string InputString(System.Windows.Forms.Keys key, GTA.Control control, int controlInt = -1) {
+            if (!UsingGamepad()) {
                 return key.ToString();
-            }
-            else
-            {
+            } else {
                 int controlID = controlInt == -1 ? (int)control : controlInt;
                 return "~" + (ControlString)controlID + "~";
             }
         }
 
-        public static bool UsingGamepad()
-        {
+        public static bool UsingGamepad() {
             return Game.LastInputMethod == InputMethod.GamePad;
         }
 
-        public static bool GetScreenCoordFromWorldCoord(Vector3 worldCoord, out float screenX, out float screenY)
-        {
+        public static bool GetScreenCoordFromWorldCoord(Vector3 worldCoord, out float screenX, out float screenY) {
             OutputArgument x = new OutputArgument();
             OutputArgument y = new OutputArgument();
             bool worldCoordIsNotOnScreen = Function.Call<bool>(Hash.GET_SCREEN_COORD_FROM_WORLD_COORD, worldCoord.X, worldCoord.Y, worldCoord.Z, x, y);
@@ -739,15 +676,11 @@ namespace GTAVFunctions
             return !worldCoordIsNotOnScreen;
         }
 
-        public static Vector2 GetTextureResolution(string dict, string name, out bool textureExists)
-        {
+        public static Vector2 GetTextureResolution(string dict, string name, out bool textureExists) {
             Vector3 WH = Function.Call<Vector3>(Hash.GET_TEXTURE_RESOLUTION, dict, name);
-            if (WH != new Vector3(4f, 4f, 0f))
-            {
+            if (WH != new Vector3(4f, 4f, 0f)) {
                 textureExists = true;
-            }
-            else
-            {
+            } else {
                 textureExists = false;
             }
             return new Vector2(WH.X, WH.Y);

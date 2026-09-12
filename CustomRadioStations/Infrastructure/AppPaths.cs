@@ -1,12 +1,10 @@
-namespace CustomRadioStations
-{
+namespace CustomRadioStations {
     /// <summary>
     /// Centralized paths for files stored under GTA's scripts directory.
     /// Keeping these values in one place prevents configuration, logging, and
     /// runtime discovery from silently drifting apart.
     /// </summary>
-    internal static class AppPaths
-    {
+    internal static class AppPaths {
         internal const string RootDirectory = @"scripts\Custom Radio Stations";
         internal const string SettingsFile = RootDirectory + @"\settings.json";
         internal const string MainLogFile = RootDirectory + @"\CustomRadioStations.log";

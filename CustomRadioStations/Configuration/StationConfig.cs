@@ -1,12 +1,10 @@
 using Newtonsoft.Json;
+
 using System.Collections.Generic;
 
-namespace CustomRadioStations
-{
-    internal sealed class StationConfig
-    {
-        public StationConfig()
-        {
+namespace CustomRadioStations {
+    internal sealed class StationConfig {
+        public StationConfig() {
             Tracks = new List<string> { "*" };
             Commercials = new List<string> { "*" };
             Playback = new PlaybackConfig();
@@ -38,10 +36,8 @@ namespace CustomRadioStations
         public CommercialBreakConfig CommercialBreaks { get; set; }
     }
 
-    internal sealed class PlaybackConfig
-    {
-        public PlaybackConfig()
-        {
+    internal sealed class PlaybackConfig {
+        public PlaybackConfig() {
             Mode = "broadcast";
             Shuffle = true;
             Volume = 1.0f;
@@ -61,10 +57,8 @@ namespace CustomRadioStations
         public bool Loop { get; set; }
     }
 
-    internal sealed class CommercialBreakConfig
-    {
-        public CommercialBreakConfig()
-        {
+    internal sealed class CommercialBreakConfig {
+        public CommercialBreakConfig() {
             Enabled = true;
             MinTracksBetween = 3;
             MaxTracksBetween = 6;

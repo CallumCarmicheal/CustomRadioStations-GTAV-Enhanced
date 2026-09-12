@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+
 using Newtonsoft.Json;
 
-namespace CustomRadioStations
-{
-    class Track
-    {
+namespace CustomRadioStations {
+    class Track {
         [JsonProperty("startTimeMs")]
         public uint StartTime { get; set; }
 
@@ -17,23 +16,19 @@ namespace CustomRadioStations
 
         public Track() { }
 
-        public Track(uint startTime, string artist, string title)
-        {
+        public Track(uint startTime, string artist, string title) {
             StartTime = startTime;
             Artist = artist;
             Title = title;
         }
 
-        public override string ToString()
-        {
+        public override string ToString() {
             return "Artist: " + Artist + "\n" + "Title: " + Title + "\n" + "Ms: " + StartTime;
         }
     }
 
-    internal sealed class TracklistConfig
-    {
-        public TracklistConfig()
-        {
+    internal sealed class TracklistConfig {
+        public TracklistConfig() {
             Tracks = new List<Track>();
         }
 

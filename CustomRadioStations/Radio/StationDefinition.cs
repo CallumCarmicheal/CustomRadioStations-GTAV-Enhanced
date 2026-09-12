@@ -1,9 +1,7 @@
 using System.Collections.Generic;
 
-namespace CustomRadioStations
-{
-    internal sealed class StationDefinition
-    {
+namespace CustomRadioStations {
+    internal sealed class StationDefinition {
         internal string Id { get; set; }
         internal string Name { get; set; }
         internal string Description { get; set; }

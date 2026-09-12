@@ -1,15 +1,15 @@
 using GTA.Math;
+
 using SelectorWheel;
+
 using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
 
-namespace CustomRadioStations
-{
-    internal static class RadioCatalogLoader
-    {
+namespace CustomRadioStations {
+    internal static class RadioCatalogLoader {
         private static readonly HashSet<string> LegacyExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             ".mp3", ".wav", ".flac", ".ogg", ".lnk"
@@ -17,16 +17,14 @@ namespace CustomRadioStations
 
         private static readonly HashSet<string> LoadedStationIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        internal static void Reload()
-        {
+        internal static void Reload() {
             ResetCatalog();
             EnsureRootDirectory();
             foreach (string wheelDirectory in GetDirectories(AppPaths.RootDirectory))
                 LoadWheel(wheelDirectory);
         }
 
-        private static void ResetCatalog()
-        {
+        private static void ResetCatalog() {
             if (RadioStation.CurrentPlaying != null)
                 RadioStation.CurrentPlaying.Stop();
             foreach (StationWheelPair pair in StationWheelPair.List)
@@ -41,15 +39,13 @@ namespace CustomRadioStations
             RadioStation.NextQueuedStation = null;
         }
 
-        private static void EnsureRootDirectory()
-        {
+        private static void EnsureRootDirectory() {
             if (Directory.Exists(AppPaths.RootDirectory)) return;
             Directory.CreateDirectory(AppPaths.RootDirectory);
             Logger.Log("Created missing custom radio directory: " + AppPaths.RootDirectory);
         }
 
-        private static void LoadWheel(string wheelDirectory)
-        {
+        private static void LoadWheel(string wheelDirectory) {
             Logger.Log("Loading wheel: " + wheelDirectory);
             var settings = Config.LoadWheelSettings(wheelDirectory);
             var wheel = new Wheel("Radio Wheel", wheelDirectory, 0, 0,
@@ -60,8 +56,7 @@ namespace CustomRadioStations
             foreach (string stationDirectory in stationDirectories)
                 LoadStation(wheel, stationDirectory);
 
-            if (wheel.Categories.Count == 0)
-            {
+            if (wheel.Categories.Count == 0) {
                 Logger.Log("Skipping empty wheel: " + Path.GetFileName(wheelDirectory));
                 return;
             }
@@ -73,38 +68,30 @@ namespace CustomRadioStations
             WheelVars.RadioWheels.Add(wheel);
         }
 
-        private static void LoadStation(Wheel wheel, string stationDirectory)
-        {
+        private static void LoadStation(Wheel wheel, string stationDirectory) {
             string jsonPath = Path.Combine(stationDirectory, AppPaths.StationJsonFileName);
             string iniPath = Path.Combine(stationDirectory, AppPaths.StationSettingsFileName);
             StationDefinition definition;
 
-            if (File.Exists(jsonPath))
-            {
+            if (File.Exists(jsonPath)) {
                 // JSON has complete precedence, including when it is malformed.
                 if (!StationConfigLoader.TryLoad(stationDirectory, out definition)) return;
                 Logger.Log("Loaded JSON station: " + definition.Name + " (" + definition.Id + ")");
-            }
-            else if (File.Exists(iniPath))
-            {
+            } else if (File.Exists(iniPath)) {
                 definition = LoadLegacyDefinition(stationDirectory, iniPath);
                 if (definition == null) return;
                 Logger.Log("Loaded legacy INI station: " + definition.Name);
-            }
-            else
-            {
+            } else {
                 Logger.Log("Skipping station folder without station.json or station.ini: " + stationDirectory);
                 return;
             }
 
-            if (!LoadedStationIds.Add(definition.Id))
-            {
+            if (!LoadedStationIds.Add(definition.Id)) {
                 Logger.Log("WARNING: Skipping station '" + definition.Name + "' because ID '" + definition.Id + "' is already in use.");
                 return;
             }
 
-            var category = new WheelCategory(definition.Name)
-            {
+            var category = new WheelCategory(definition.Name) {
                 Description = (definition.Description ?? string.Empty).Replace("\\n", "\r\n")
             };
             category.AddItem(new WheelCategoryItem(category.Name));
@@ -114,8 +101,7 @@ namespace CustomRadioStations
                 category.CategoryTexture = new Texture(definition.IconPath, wheel.Categories.IndexOf(category));
 
             var station = new RadioStation(category, definition);
-            if (!station.HasPlayableSounds)
-            {
+            if (!station.HasPlayableSounds) {
                 Logger.Log("Skipping station with no playable tracks: " + definition.Name);
                 station.Dispose();
                 wheel.RemoveCategory(category);
@@ -128,38 +114,31 @@ namespace CustomRadioStations
             StationWheelPair.List.Add(pair);
         }
 
-        private static StationDefinition LoadLegacyDefinition(string stationDirectory, string iniPath)
-        {
+        private static StationDefinition LoadLegacyDefinition(string stationDirectory, string iniPath) {
             string[] files;
-            try
-            {
+            try {
                 files = Directory.GetFiles(stationDirectory, "*.*", SearchOption.TopDirectoryOnly)
                     .Where(path => LegacyExtensions.Contains(Path.GetExtension(path)))
                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Log("ERROR: Failed to scan legacy station '" + stationDirectory + "': " + ex.Message);
                 return null;
             }
 
             var tracks = new List<string>();
             var commercials = new List<string>();
-            foreach (string file in files)
-            {
+            foreach (string file in files) {
                 if (IsLegacyCommercial(file)) commercials.Add(file);
                 else tracks.Add(file);
             }
-            if (tracks.Count == 0)
-            {
+            if (tracks.Count == 0) {
                 Logger.Log("Skipping legacy station without playable track files: " + stationDirectory);
                 return null;
             }
 
             string name = Path.GetFileName(stationDirectory);
-            return new StationDefinition
-            {
+            return new StationDefinition {
                 Id = StationConfigLoader.CreateStableId(name),
                 Name = name,
                 Description = string.Empty,
@@ -168,8 +147,7 @@ namespace CustomRadioStations
                 Tracks = tracks,
                 Commercials = commercials,
                 Playback = new PlaybackConfig(),
-                CommercialBreaks = new CommercialBreakConfig
-                {
+                CommercialBreaks = new CommercialBreakConfig {
                     Enabled = true,
                     MinTracksBetween = 3,
                     MaxTracksBetween = 3,
@@ -179,22 +157,18 @@ namespace CustomRadioStations
             };
         }
 
-        private static bool IsLegacyCommercial(string path)
-        {
+        private static bool IsLegacyCommercial(string path) {
             if (Path.GetFileNameWithoutExtension(path).IndexOf("[Commercial]", StringComparison.OrdinalIgnoreCase) >= 0)
                 return true;
             if (!string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase))
                 return false;
-            try
-            {
+            try {
                 string target = GeneralHelper.GetShortcutTargetFile(path);
                 return Path.GetFileNameWithoutExtension(target).IndexOf("[Commercial]", StringComparison.OrdinalIgnoreCase) >= 0;
-            }
-            catch { return false; }
+            } catch { return false; }
         }
 
-        private static string[] GetDirectories(string path)
-        {
+        private static string[] GetDirectories(string path) {
             return Directory.GetDirectories(path, "*", SearchOption.TopDirectoryOnly)
                 .OrderBy(directory => directory, StringComparer.OrdinalIgnoreCase)
                 .ToArray();

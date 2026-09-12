@@ -1,18 +1,18 @@
 using GTA;
+
 using Newtonsoft.Json;
+
 using System;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Windows.Forms;
+
 using Control = GTA.Control;
 
-namespace CustomRadioStations
-{
-    public static class Config
-    {
-        private static readonly JsonSerializerSettings JsonSettings = new JsonSerializerSettings
-        {
+namespace CustomRadioStations {
+    public static class Config {
+        private static readonly JsonSerializerSettings JsonSettings = new JsonSerializerSettings {
             MissingMemberHandling = MissingMemberHandling.Ignore,
             ObjectCreationHandling = ObjectCreationHandling.Replace
         };
@@ -44,18 +44,13 @@ namespace CustomRadioStations
         public static Control GP_Volume_Up;
         public static Control GP_Volume_Down;
 
-        public static void Load()
-        {
+        public static void Load() {
             bool shouldCreate = !File.Exists(AppPaths.SettingsFile);
-            if (!shouldCreate)
-            {
-                try
-                {
+            if (!shouldCreate) {
+                try {
                     settings = JsonConvert.DeserializeObject<ApplicationSettings>(
                         File.ReadAllText(AppPaths.SettingsFile), JsonSettings) ?? new ApplicationSettings();
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     Logger.Log("ERROR: Failed to load global settings JSON '" + AppPaths.SettingsFile + "': " + ex.Message);
                     settings = new ApplicationSettings();
                 }
@@ -68,10 +63,8 @@ namespace CustomRadioStations
                 Save();
         }
 
-        public static void Save()
-        {
-            try
-            {
+        public static void Save() {
+            try {
                 settings.General.MasterVolume = SoundFile.SoundEngine.SoundVolume;
                 settings.General.CustomWheelAsDefault = CustomWheelAsDefault;
                 settings.General.WheelActionDelayMs = WheelActionDelay;
@@ -100,57 +93,47 @@ namespace CustomRadioStations
 
                 Directory.CreateDirectory(AppPaths.RootDirectory);
                 File.WriteAllText(AppPaths.SettingsFile, JsonConvert.SerializeObject(settings, Formatting.Indented));
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Log("ERROR: Failed to save global settings JSON '" + AppPaths.SettingsFile + "': " + ex.Message);
             }
         }
 
-        public static (int iconX, int iconY, float wheelRadius) LoadWheelSettings(string directory)
-        {
+        public static (int iconX, int iconY, float wheelRadius) LoadWheelSettings(string directory) {
             string path = Path.Combine(directory, AppPaths.WheelSettingsFileName);
             if (!File.Exists(path)) return (IconX, IconY, WheelRadius);
 
-            try
-            {
+            try {
                 WheelSettings wheel = JsonConvert.DeserializeObject<WheelSettings>(File.ReadAllText(path), JsonSettings)
                     ?? new WheelSettings();
                 int iconX = wheel.IconWidth.GetValueOrDefault(IconX);
                 int iconY = wheel.IconHeight.GetValueOrDefault(IconY);
                 float radius = wheel.Radius.GetValueOrDefault(WheelRadius);
 
-                if (iconX <= 0 || iconY <= 0 || radius <= 0f)
-                {
+                if (iconX <= 0 || iconY <= 0 || radius <= 0f) {
                     Logger.Log("WARNING: Invalid wheel.json dimensions in '" + path + "'; using global defaults.");
                     return (IconX, IconY, WheelRadius);
                 }
 
                 return (iconX, iconY, radius);
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Log("WARNING: Failed to load wheel JSON '" + path + "': " + ex.Message);
                 return (IconX, IconY, WheelRadius);
             }
         }
 
-        public static void RescanForTracklists()
-        {
+        public static void RescanForTracklists() {
             StationWheelPair.List.ForEach(pair => pair.RescanStationTracklists());
         }
 
         public static CultureInfo culture;
 
-        public static void SetupSystemCulture()
-        {
+        public static void SetupSystemCulture() {
             culture = new CultureInfo(System.Threading.Thread.CurrentThread.CurrentCulture.Name, true);
             culture.NumberFormat.NumberDecimalSeparator = ".";
             ForceDecimal();
         }
 
-        public static void ForceDecimal()
-        {
+        public static void ForceDecimal() {
             if (culture != null)
                 System.Threading.Thread.CurrentThread.CurrentCulture = culture;
         }
@@ -158,15 +141,13 @@ namespace CustomRadioStations
         public static int loadCounter;
         public static int loadInterval = 10;
 
-        public static void LoadTick()
-        {
+        public static void LoadTick() {
             if (loadCounter % loadInterval == 0)
                 Script.Wait(LoadMS);
             loadCounter++;
         }
 
-        private static void NormalizeSettings()
-        {
+        private static void NormalizeSettings() {
             settings.General = settings.General ?? new GeneralSettings();
             settings.Graphics = settings.Graphics ?? new GraphicsSettings();
             settings.KeyboardControls = settings.KeyboardControls ?? new KeyboardControlSettings();
@@ -183,8 +164,7 @@ namespace CustomRadioStations
             settings.Graphics.HighlightIconSizeMultiplier = Math.Max(0.1, settings.Graphics.HighlightIconSizeMultiplier);
         }
 
-        private static void ApplySettings()
-        {
+        private static void ApplySettings() {
             SoundFile.SoundEngine.SoundVolume = settings.General.MasterVolume;
             CustomWheelAsDefault = settings.General.CustomWheelAsDefault;
             WheelActionDelay = settings.General.WheelActionDelayMs;
@@ -211,23 +191,17 @@ namespace CustomRadioStations
             GP_Volume_Down = settings.GamepadControls.VolumeDown;
         }
 
-        private static Color ParseColor(string value, string fallback, string settingName)
-        {
-            try
-            {
+        private static Color ParseColor(string value, string fallback, string settingName) {
+            try {
                 return GeneralHelper.HexToColor(value);
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Log("WARNING: Invalid " + settingName + " value '" + value + "': " + ex.Message);
                 return GeneralHelper.HexToColor(fallback);
             }
         }
 
-        private static float Clamp(float value, float min, float max, string settingName)
-        {
-            if (float.IsNaN(value) || float.IsInfinity(value))
-            {
+        private static float Clamp(float value, float min, float max, string settingName) {
+            if (float.IsNaN(value) || float.IsInfinity(value)) {
                 Logger.Log("WARNING: Invalid " + settingName + "; using " + min + ".");
                 return min;
             }

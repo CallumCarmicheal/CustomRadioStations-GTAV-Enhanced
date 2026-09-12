@@ -8,10 +8,8 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Newtonsoft.Json;
 
-namespace CustomRadioStations
-{
-    class SoundFile
-    {
+namespace CustomRadioStations {
+    class SoundFile {
         public MiniAudioSound Sound;
         private AudioClip Clip;
 
@@ -19,18 +17,13 @@ namespace CustomRadioStations
         public string FilePath;
 
         private string _displayName;
-        public string DisplayName
-        {
-            get
-            {
-                if (HasTrackList)
-                {
+        public string DisplayName {
+            get {
+                if (HasTrackList) {
                     Track t = GetCurrentTrack();
                     if (t == null) return "";
                     return t.Artist + "\n" + t.Title;
-                }
-                else
-                {
+                } else {
                     return _displayName;
                 }
             }
@@ -53,8 +46,7 @@ namespace CustomRadioStations
 
         private static Random random = new Random();
 
-        public SoundFile(string filepath)
-        {
+        public SoundFile(string filepath) {
             FilePath = filepath;
             Clip = new AudioClip(filepath, true);
             FileName = Path.GetFileNameWithoutExtension(filepath);
@@ -62,8 +54,7 @@ namespace CustomRadioStations
             HasTrackList = TracklistExists(filepath);
         }
 
-        public SoundFile(string filepath, string shortcutPath)
-        {
+        public SoundFile(string filepath, string shortcutPath) {
             FilePath = shortcutPath;
             Clip = new AudioClip(filepath, true);
             FileName = Path.GetFileNameWithoutExtension(filepath);
@@ -71,30 +62,24 @@ namespace CustomRadioStations
             HasTrackList = TracklistExists(shortcutPath);
         }
 
-        private string DisplayNameFromFilename()
-        {
+        private string DisplayNameFromFilename() {
             string[] sections = FileName.Split(new string[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
             string str = "";
-            foreach (var s in sections)
-            {
+            foreach (var s in sections) {
                 str += s.Trim() + "\n";
             }
             return str;
         }
 
-        internal bool TracklistExists(string filepath)
-        {
+        internal bool TracklistExists(string filepath) {
             string tracklistPath = Path.ChangeExtension(filepath, ".tracklist.json");
-            if (!File.Exists(tracklistPath))
-            {
+            if (!File.Exists(tracklistPath)) {
                 Tracklist = null;
                 return false;
             }
 
-            try
-            {
-                var serializerSettings = new JsonSerializerSettings
-                {
+            try {
+                var serializerSettings = new JsonSerializerSettings {
                     MissingMemberHandling = MissingMemberHandling.Ignore,
                     ObjectCreationHandling = ObjectCreationHandling.Replace
                 };
@@ -105,41 +90,33 @@ namespace CustomRadioStations
                     .OrderBy(track => track.StartTime)
                     .ToList();
                 return Tracklist.Count > 0;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Log("WARNING: Failed to load tracklist JSON '" + tracklistPath + "': " + ex.Message);
                 Tracklist = null;
                 return false;
             }
         }
 
-        public Track GetCurrentTrack()
-        {
+        public Track GetCurrentTrack() {
             if (!HasTrackList || Tracklist == null || Tracklist.Count == 0) return null;
 
             //Track trk = Tracklist.FirstOrDefault(t => t.StartTime <= PlayPosition());
             Track trk = Tracklist.LastOrDefault(t => PlayPosition() >= t.StartTime);
 
-            if (trk == default(Track))
-            {
+            if (trk == default(Track)) {
                 return null;
-            }
-            else
-            {
+            } else {
                 return trk;
             }
         }
 
-        public int GetCurrentTrackIndex()
-        {
+        public int GetCurrentTrackIndex() {
             if (!HasTrackList || Tracklist == null || Tracklist.Count == 0) return -1;
 
             return Tracklist.IndexOf(GetCurrentTrack());
         }
 
-        public Track GetNextTrack()
-        {
+        public Track GetNextTrack() {
             if (!HasTrackList || Tracklist == null || Tracklist.Count == 0) return null;
 
             Track t = GetCurrentTrack();
@@ -149,16 +126,14 @@ namespace CustomRadioStations
             return index < 0 || index >= Tracklist.Count - 1 ? Tracklist[0] : Tracklist[index + 1];
         }
 
-        public void SkipToNextTrack()
-        {
+        public void SkipToNextTrack() {
             if (!HasTrackList || Sound == null) return;
 
             Track next = GetNextTrack();
             if (next != null) Sound.PlayPosition = next.StartTime;
         }
 
-        public uint TimeUntilNextTrack()
-        {
+        public uint TimeUntilNextTrack() {
             if (Sound == null) return 0;
             uint pPos = PlayPosition();
             uint remaining = Length > pPos ? Length - pPos : 0u;
@@ -170,8 +145,7 @@ namespace CustomRadioStations
             return t.StartTime > pPos ? t.StartTime - pPos + 1 : remaining;
         }
 
-        public uint GetRandomPlayPosition(float percentMinBound = 0.2f, float percentMaxBound = 0.7f)
-        {
+        public uint GetRandomPlayPosition(float percentMinBound = 0.2f, float percentMaxBound = 0.7f) {
             if (Sound == null || Sound.PlayLength == 0) return 0;
             uint min = (uint)(percentMinBound * Sound.PlayLength);
             uint max = (uint)(percentMaxBound * Sound.PlayLength);
@@ -186,92 +160,75 @@ namespace CustomRadioStations
             return result;
         }
 
-        public void PlaySound(bool resume, bool playLooped = false, bool playPaused = false, bool allowMultipleInstances = false, bool allowSoundEffects = false)
-        {
+        public void PlaySound(bool resume, bool playLooped = false, bool playPaused = false, bool allowMultipleInstances = false, bool allowSoundEffects = false) {
             if (Clip == null) return;
 
             if (!allowMultipleInstances && Sound != null && !Sound.Finished && !IsPaused)
                 return;
 
-            if (resume && IsPaused)
-            {
+            if (resume && IsPaused) {
                 IsPaused = false;
                 return;
             }
 
-            if (Sound != null)
-            {
+            if (Sound != null) {
                 Sound.Dispose();
                 Sound = null;
             }
 
-            try
-            {
+            try {
                 Sound = SoundEngine.Play2D(Clip, playLooped, playPaused);
                 if (Sound == null) return;
 
                 if (Length == 0)
                     Length = Sound.PlayLength;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Log("ERROR: MiniAudioEx failed to start '" + FileName + "': " + ex.Message);
-                if (Sound != null)
-                {
+                if (Sound != null) {
                     Sound.Dispose();
                     Sound = null;
                 }
             }
         }
 
-        public void StopSound()
-        {
+        public void StopSound() {
             if (Sound == null || Sound.Finished) return;
             Sound.Stop();
         }
 
-        public bool IsPaused
-        {
-            get
-            {
+        public bool IsPaused {
+            get {
                 if (Sound == null) return false;
                 return Sound.Paused;
             }
-            set
-            {
+            set {
                 if (Sound == null || Sound.Finished) return;
                 Sound.Paused = value;
             }
         }
 
-        public bool IsPlaying()
-        {
+        public bool IsPlaying() {
             return Sound != null && !Sound.Finished;
         }
 
-        public bool IsFinishedPlaying()
-        {
+        public bool IsFinishedPlaying() {
             return Sound == null || Sound.Finished;
         }
 
         /// <summary>
         /// Returns the current playback position in milliseconds.
         /// </summary>
-        public uint PlayPosition()
-        {
+        public uint PlayPosition() {
             return Sound == null ? 0u : Sound.PlayPosition;
         }
 
-        public void Dispose()
-        {
-            if (Sound != null)
-            {
+        public void Dispose() {
+            if (Sound != null) {
                 Sound.Dispose();
                 Sound = null;
             }
 
-            if (Clip != null)
-            {
+            if (Clip != null) {
                 Clip.Dispose();
                 Clip = null;
             }
@@ -279,21 +236,18 @@ namespace CustomRadioStations
 
         public static MiniAudioEngine SoundEngine = new MiniAudioEngine();
 
-        public static void ManageSoundEngine()
-        {
+        public static void ManageSoundEngine() {
             if (SoundEngine == null) return;
             SoundEngine.Update();
         }
 
-        public static void StepVolume(float step, int decimals)
-        {
+        public static void StepVolume(float step, int decimals) {
             if (SoundEngine == null) return;
             float temp = (float)Math.Round(SoundEngine.SoundVolume + step, decimals, MidpointRounding.ToEven);
             SoundEngine.SoundVolume = temp.LimitToRange(0f, 1f);
         }
 
-        public static void DisposeSoundEngine()
-        {
+        public static void DisposeSoundEngine() {
             if (SoundEngine == null) return;
             SoundEngine.Dispose();
         }
@@ -303,8 +257,7 @@ namespace CustomRadioStations
     /// Small compatibility handle that keeps the old SoundFile/RadioStation timing API
     /// expressed in milliseconds while MiniAudioEx exposes its cursor in PCM frames.
     /// </summary>
-    sealed class MiniAudioSound : IDisposable
-    {
+    sealed class MiniAudioSound : IDisposable {
         private readonly MiniAudioEngine engine;
         private readonly AudioClip clip;
         private readonly AudioSource source;
@@ -313,8 +266,7 @@ namespace CustomRadioStations
         private bool finished;
         private bool disposed;
 
-        internal MiniAudioSound(MiniAudioEngine engine, AudioClip clip, bool looped, bool startPaused)
-        {
+        internal MiniAudioSound(MiniAudioEngine engine, AudioClip clip, bool looped, bool startPaused) {
             this.engine = engine;
             this.clip = clip;
             this.looped = looped;
@@ -326,14 +278,12 @@ namespace CustomRadioStations
             source.Loop = looped;
 
             // A zero-length, non-playing source means the decoder/open operation failed.
-            if (source.Length == 0 && !source.IsPlaying)
-            {
+            if (source.Length == 0 && !source.IsPlaying) {
                 source.Dispose();
                 throw new InvalidDataException("MiniAudioEx could not decode or open: " + clip.FilePath);
             }
 
-            if (startPaused)
-            {
+            if (startPaused) {
                 source.Stop();
                 source.Cursor = 0;
                 paused = true;
@@ -342,11 +292,9 @@ namespace CustomRadioStations
             source.Volume = 1f;
         }
 
-        public uint PlayPosition
-        {
+        public uint PlayPosition {
             get { return FramesToMilliseconds(source.Cursor); }
-            set
-            {
+            set {
                 ulong frame = MillisecondsToFrames(value);
                 ulong length = source.Length;
                 source.Cursor = length > 0 && frame >= length ? length - 1 : frame;
@@ -355,20 +303,16 @@ namespace CustomRadioStations
             }
         }
 
-        public uint PlayLength
-        {
+        public uint PlayLength {
             get { return FramesToMilliseconds(source.Length); }
         }
 
-        public bool Paused
-        {
+        public bool Paused {
             get { return paused; }
-            set
-            {
+            set {
                 if (disposed || finished || paused == value) return;
 
-                if (value)
-                {
+                if (value) {
                     source.Stop();
                     paused = true;
                     return;
@@ -387,12 +331,9 @@ namespace CustomRadioStations
             }
         }
 
-        public bool Finished
-        {
-            get
-            {
-                if (!finished && !paused && !looped && !source.IsPlaying)
-                {
+        public bool Finished {
+            get {
+                if (!finished && !paused && !looped && !source.IsPlaying) {
                     ulong length = source.Length;
                     if (length > 0 && source.Cursor >= length)
                         finished = true;
@@ -401,31 +342,26 @@ namespace CustomRadioStations
             }
         }
 
-        public float Volume
-        {
+        public float Volume {
             get { return source.Volume; }
             set { source.Volume = value.LimitToRange(0f, 1f); }
         }
 
-        public void Stop()
-        {
+        public void Stop() {
             if (disposed) return;
             source.Stop();
             paused = false;
             finished = true;
         }
 
-        private void OnPlaybackEnded()
-        {
-            if (!looped)
-            {
+        private void OnPlaybackEnded() {
+            if (!looped) {
                 paused = false;
                 finished = true;
             }
         }
 
-        public void Dispose()
-        {
+        public void Dispose() {
             if (disposed) return;
             disposed = true;
             source.End -= OnPlaybackEnded;
@@ -433,16 +369,14 @@ namespace CustomRadioStations
             engine.Unregister(this);
         }
 
-        private static uint FramesToMilliseconds(ulong frames)
-        {
+        private static uint FramesToMilliseconds(ulong frames) {
             int sampleRate = AudioContext.SampleRate;
             if (sampleRate <= 0) return 0;
             ulong milliseconds = (frames * 1000UL) / (ulong)sampleRate;
             return milliseconds > uint.MaxValue ? uint.MaxValue : (uint)milliseconds;
         }
 
-        private static ulong MillisecondsToFrames(uint milliseconds)
-        {
+        private static ulong MillisecondsToFrames(uint milliseconds) {
             int sampleRate = AudioContext.SampleRate;
             if (sampleRate <= 0) return 0;
             return ((ulong)milliseconds * (ulong)sampleRate) / 1000UL;
@@ -453,55 +387,46 @@ namespace CustomRadioStations
     /// Process-local MiniAudioEx owner. The public surface intentionally mirrors the
     /// tiny engine surface that the rest of CRS historically used.
     /// </summary>
-    sealed class MiniAudioEngine : IDisposable
-    {
+    sealed class MiniAudioEngine : IDisposable {
         private const uint SampleRate = 48000;
         private const uint Channels = 2;
         private readonly List<MiniAudioSound> sounds = new List<MiniAudioSound>();
         private bool disposed;
 
-        internal MiniAudioEngine()
-        {
+        internal MiniAudioEngine() {
             MiniAudioNativeLoader.LoadFromScriptDirectory();
             AudioContext.Initialize(SampleRate, Channels);
         }
 
-        public float SoundVolume
-        {
+        public float SoundVolume {
             get { return disposed ? 0f : AudioContext.MasterVolume; }
-            set
-            {
+            set {
                 if (!disposed)
                     AudioContext.MasterVolume = value.LimitToRange(0f, 1f);
             }
         }
 
-        internal MiniAudioSound Play2D(AudioClip clip, bool looped, bool startPaused)
-        {
+        internal MiniAudioSound Play2D(AudioClip clip, bool looped, bool startPaused) {
             if (disposed) return null;
             var sound = new MiniAudioSound(this, clip, looped, startPaused);
             sounds.Add(sound);
             return sound;
         }
 
-        internal void Update()
-        {
+        internal void Update() {
             if (!disposed)
                 AudioContext.Update();
         }
 
-        internal void Unregister(MiniAudioSound sound)
-        {
+        internal void Unregister(MiniAudioSound sound) {
             sounds.Remove(sound);
         }
 
-        public void Dispose()
-        {
+        public void Dispose() {
             if (disposed) return;
 
             // Dispose a copy because MiniAudioSound.Dispose unregisters itself.
-            foreach (MiniAudioSound sound in sounds.ToArray())
-            {
+            foreach (MiniAudioSound sound in sounds.ToArray()) {
                 try { sound.Dispose(); } catch { }
             }
             sounds.Clear();
@@ -511,16 +436,14 @@ namespace CustomRadioStations
         }
     }
 
-    static class MiniAudioNativeLoader
-    {
+    static class MiniAudioNativeLoader {
         private const string NativeLibraryName = "miniaudioex.dll";
         private static IntPtr nativeModule;
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern IntPtr LoadLibrary(string lpFileName);
 
-        internal static void LoadFromScriptDirectory()
-        {
+        internal static void LoadFromScriptDirectory() {
             if (nativeModule != IntPtr.Zero) return;
 
             string assemblyDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
@@ -532,8 +455,7 @@ namespace CustomRadioStations
                 string.IsNullOrEmpty(appBase) ? null : Path.Combine(appBase, NativeLibraryName),
             };
 
-            foreach (string candidate in candidates)
-            {
+            foreach (string candidate in candidates) {
                 if (string.IsNullOrEmpty(candidate) || !File.Exists(candidate)) continue;
 
                 nativeModule = LoadLibrary(candidate);

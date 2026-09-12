@@ -8,10 +8,8 @@ using SelectorWheel;
 using GTAVFunctions;
 using EventHelper;
 
-namespace CustomRadioStations
-{
-    public class MainScript : Script
-    {
+namespace CustomRadioStations {
+    public class MainScript : Script {
         bool lastPlayedOnFoot;
 
         int lastVanillaStationPlayed = 0;
@@ -22,33 +20,28 @@ namespace CustomRadioStations
 
         DateTime? loadDelayTimer = null;
 
-        ActionOptions ActionQueued;
+
 
         bool loaded;
 
         string initializationFailure;
 
-        enum ActionOptions
-        {
+        enum ActionOptions {
             DoNothing,
             PlayQueued,
             StopCurrent
         }
 
-        public MainScript()
-        {
+        public MainScript() {
             // Keep script construction resilient. Missing/broken audio dependencies or a
             // malformed settings file should produce a log instead of preventing SHVDN
             // from constructing the script at all.
-            try
-            {
+            try {
                 if (!Directory.Exists(AppPaths.RootDirectory)) Directory.CreateDirectory(AppPaths.RootDirectory);
                 Logger.Init();
                 Config.SetupSystemCulture();
                 Config.Load();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 initializationFailure = ex.ToString();
                 try { Logger.Log("FATAL: Startup dependency/configuration failure: " + ex); } catch { }
             }
@@ -61,8 +54,7 @@ namespace CustomRadioStations
             Interval = 10;
         }
 
-        private void OnAbort(object sender, EventArgs e)
-        {
+        private void OnAbort(object sender, EventArgs e) {
             // Cleanup is intentionally best-effort: an unavailable Enhanced native or an
             // already-disposed audio engine must not turn script shutdown into a crash.
             try { Game.TimeScale = 1f; } catch { }
@@ -71,31 +63,23 @@ namespace CustomRadioStations
             try { Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER); } catch { }
             try { Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", false); } catch { }
             try { Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", false); } catch { }
-            try
-            {
-                if (Function.Call<bool>(Hash.IS_AUDIO_SCENE_ACTIVE, "DEATH_SCENE"))
-                {
+            try {
+                if (Function.Call<bool>(Hash.IS_AUDIO_SCENE_ACTIVE, "DEATH_SCENE")) {
                     Function.Call(Hash.STOP_AUDIO_SCENE, "DEATH_SCENE");
                     Function.Call(Hash.STOP_AUDIO_SCENE, "FADE_OUT_WORLD_250MS_SCENE");
                 }
-            }
-            catch { }
-            try
-            {
+            } catch { }
+            try {
                 if (Function.Call<bool>(Hash.IS_AUDIO_SCENE_ACTIVE, "MP_JOB_CHANGE_RADIO_MUTE"))
                     Function.Call(Hash.STOP_AUDIO_SCENE, "MP_JOB_CHANGE_RADIO_MUTE");
-            }
-            catch { }
+            } catch { }
         }
 
-        public void SetupRadio()
-        {
+        public void SetupRadio() {
             RadioCatalogLoader.Reload();
 
-            foreach (Wheel radioWheel in WheelVars.RadioWheels)
-            {
-                radioWheel.OnCategoryChange += (sender, selectedCategory, selectedItem, wheelJustOpened) =>
-                {
+            foreach (Wheel radioWheel in WheelVars.RadioWheels) {
+                radioWheel.OnCategoryChange += (sender, selectedCategory, selectedItem, wheelJustOpened) => {
                     StationWheelPair pair = StationWheelPair.List.Find(candidate =>
                         candidate.Wheel == radioWheel && candidate.Category == selectedCategory);
                     if (pair == null) return;
@@ -108,41 +92,32 @@ namespace CustomRadioStations
 
                 // Register navigation once per wheel. The legacy loader registered this
                 // identical handler once per station, causing duplicate callbacks.
-                radioWheel.OnItemChange += (sender, selectedCategory, selectedItem, wheelJustOpened, goTo) =>
-                {
+                radioWheel.OnItemChange += (sender, selectedCategory, selectedItem, wheelJustOpened, goTo) => {
                     if (wheelJustOpened || !radioWheel.Visible ||
                         radioWheel != WheelVars.CurrentRadioWheel || WheelVars.NextQueuedWheel != null)
                         return;
 
-                    if (goTo == GoTo.Next)
-                    {
+                    if (goTo == GoTo.Next) {
                         radioWheel.Visible = false;
                         WheelVars.NextQueuedWheel = WheelVars.RadioWheels.GetNext(radioWheel);
-                    }
-                    else if (goTo == GoTo.Prev)
-                    {
+                    } else if (goTo == GoTo.Prev) {
                         radioWheel.Visible = false;
                         WheelVars.NextQueuedWheel = WheelVars.RadioWheels.GetPrevious(radioWheel);
                     }
                 };
             }
-            
-            if (WheelVars.RadioWheels.Count > 0)
-            {
+
+            if (WheelVars.RadioWheels.Count > 0) {
                 WheelVars.CurrentRadioWheel = WheelVars.RadioWheels[0];
-            }
-            else
-            {
+            } else {
                 if (Config.DisplayHelpText)
                     UIScreen.ShowSubtitle("No music found in Custom Radio Stations. Add music and reload the script.");
                 Logger.Log("ERROR: No playable music found in any station directory. Custom radio is disabled for this session.");
             }
         }
 
-        void SetupEvents()
-        {
-            GeneralEvents.OnPlayerEnteredVehicle += (veh) =>
-            {
+        void SetupEvents() {
+            GeneralEvents.OnPlayerEnteredVehicle += (veh) => {
                 if (veh == null || !veh.Exists() || StationWheelPair.List.Count == 0) return;
 
                 bool vehWasEngineRunning = veh.IsEngineRunning;
@@ -155,8 +130,7 @@ namespace CustomRadioStations
                 // Wait for the vehicle engine to start, but never block the script forever.
                 // The original condition used OR + ">", which becomes permanently true
                 // after the timeout and can hang the script.
-                while (!veh.IsEngineRunning && DateTime.Now < enteredTime.AddSeconds(10))
-                {
+                while (!veh.IsEngineRunning && DateTime.Now < enteredTime.AddSeconds(10)) {
                     vehWasEngineRunning = false;
                     Yield();
                 }
@@ -165,10 +139,8 @@ namespace CustomRadioStations
                 // We will not continue because the vehicle is dead.
                 if (!veh.IsEngineRunning) return;
 
-                if (UsedVehiclesManager.IsUsedVehicle(veh))
-                {
-                    if (UsedVehiclesManager.GetVehicleStationInfo(veh) == null)
-                    {
+                if (UsedVehiclesManager.IsUsedVehicle(veh)) {
+                    if (UsedVehiclesManager.GetVehicleStationInfo(veh) == null) {
                         // Make vanilla radio audible
                         RadioNativeFunctions.VanillaRadioFadedOut(false);
 
@@ -185,14 +157,11 @@ namespace CustomRadioStations
                     lastRadioWasCustom = true;
 
                     //UIScreen.ShowSubtitle("Started playback");
-                }
-                else
-                {
+                } else {
                     // If the engine was running, don't mess with it.
                     // Since I can't figure out how to see if a vehicle
                     // was emitting a station, I'll just not mess with it.
-                    if (vehWasEngineRunning)
-                    {
+                    if (vehWasEngineRunning) {
                         //UIScreen.ShowSubtitle("RADIO IS ENABLED: " + RadioNativeFunctions.GET_PLAYER_RADIO_STATION_INDEX().ToString());
 
                         // Make vanilla radio audible
@@ -205,13 +174,12 @@ namespace CustomRadioStations
                     int chooseRandom = RadioStation.random.Next(10);
                     //UIScreen.ShowSubtitle("RANDOM: " + chooseRandom.ToString());
                     // 70% chance to play a custom station.
-                    if (chooseRandom >= 3)
-                    {
+                    if (chooseRandom >= 3) {
                         ActionQueued = ActionOptions.PlayQueued;
 
                         // Set the queued radio station randomly, chosen from stationPairList.
                         chooseRandom = RadioStation.random.Next(StationWheelPair.List.Count);
-                        
+
                         UsedVehiclesManager.UpdateVehicleWithStationInfo(veh,
                             StationWheelPair.List[chooseRandom]);
 
@@ -220,9 +188,7 @@ namespace CustomRadioStations
                         SetActionDelay(Config.WheelActionDelay + 300);
 
                         lastRadioWasCustom = true;
-                    }
-                    else
-                    {
+                    } else {
                         UsedVehiclesManager.UpdateVehicleWithStationInfo(veh, null);
 
                         // Make vanilla radio audible
@@ -233,8 +199,7 @@ namespace CustomRadioStations
                 }
             };
 
-            GeneralEvents.OnPlayerExitedVehicle += (veh) =>
-            {
+            GeneralEvents.OnPlayerExitedVehicle += (veh) => {
                 if (veh == null) return;
 
                 /*if (!IsMobileRadioEnabled())
@@ -246,8 +211,7 @@ namespace CustomRadioStations
                 RadioNativeFunctions.VanillaRadioFadedOut(false);
 
                 StationWheelPair selectedPair = null;
-                if (lastRadioWasCustom && WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.SelectedCategory != null)
-                {
+                if (lastRadioWasCustom && WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.SelectedCategory != null) {
                     selectedPair = StationWheelPair.List.Find(x => x.Category == WheelVars.CurrentRadioWheel.SelectedCategory);
                 }
 
@@ -271,49 +235,40 @@ namespace CustomRadioStations
                 }
             };*/
         }
-        
-        void OnTick(object sender, EventArgs e)
-        {
-            if (initializationFailure != null)
-            {
-                if (!loaded && Game.Player != null && Game.Player.CanControlCharacter)
-                {
+
+        void OnTick(object sender, EventArgs e) {
+            if (initializationFailure != null) {
+                if (!loaded && Game.Player != null && Game.Player.CanControlCharacter) {
                     loaded = true;
                     try { UIScreen.ShowSubtitle("Custom Radio Stations could not start. Check CustomRadioStations.log."); } catch { }
                 }
                 return;
             }
 
-            if (!loaded)
-            {
+            if (!loaded) {
                 if (Game.Player == null || !Game.Player.CanControlCharacter) return;
 
                 if (loadDelayTimer == null) loadDelayTimer = DateTime.Now.AddMilliseconds(Config.LoadStartDelay);
 
-                if (loadDelayTimer < DateTime.Now || RuntimeState.HasLoadedOnce)
-                {
+                if (loadDelayTimer < DateTime.Now || RuntimeState.HasLoadedOnce) {
                     if (Config.DisplayHelpText)
                         UIScreen.ShowSubtitle("Loading Custom Radios...");
 
                     Logger.Log("Starting Custom Radio Stations Enhanced compatibility build");
                     Logger.Log("Reported game version: " + Game.FileVersion);
 
-                    try
-                    {
+                    try {
                         SetupRadio();
                         if (WheelVars.RadioWheels.Count > 0 && StationWheelPair.List.Count > 0)
                             SetupEvents();
-                    }
-                    catch (Exception ex)
-                    {
+                    } catch (Exception ex) {
                         Logger.Log("FATAL: Failed to initialize custom radio: " + ex);
                         if (Config.DisplayHelpText) UIScreen.ShowSubtitle("Custom Radio Stations failed to initialize. Check CustomRadioStations.log.");
                         loaded = true;
                         return;
                     }
 
-                    if (WheelVars.RadioWheels.Count == 0)
-                    {
+                    if (WheelVars.RadioWheels.Count == 0) {
                         loaded = true;
                         return;
                     }
@@ -330,8 +285,7 @@ namespace CustomRadioStations
                     if (Config.DisplayHelpText)
                         UIScreen.ShowSubtitle("Custom Radios Loaded");
 
-                    if (Config.CustomWheelAsDefault && WheelVars.RadioWheels.Count > 0)
-                    {
+                    if (Config.CustomWheelAsDefault && WheelVars.RadioWheels.Count > 0) {
                         lastRadioWasCustom = true;
                     }
                 }
@@ -339,8 +293,7 @@ namespace CustomRadioStations
                 return; // Return if loaded is still not true
             }
 
-            if (GTAFunction.HasCheatStringJustBeenEntered("radio_reload"))
-            {
+            if (GTAFunction.HasCheatStringJustBeenEntered("radio_reload")) {
                 Config.Load();
                 SetupRadio();
                 UIScreen.ShowSubtitle("Custom Radio configuration reloaded:\n- settings.json\n- wheel.json and native-wheels.json\n- station.json and legacy station.ini\n- tracklist JSON metadata");
@@ -349,15 +302,12 @@ namespace CustomRadioStations
 
             if (WheelVars.RadioWheels.Count == 0) return;
 
-            if (VanillaOrCustomRadioWheelIsVisible())
-            {
-                if (GTAFunction.UsingGamepad() && ControlInput.IsJustPressed(Config.GP_Toggle))
-                {
+            if (VanillaOrCustomRadioWheelIsVisible()) {
+                if (GTAFunction.UsingGamepad() && ControlInput.IsJustPressed(Config.GP_Toggle)) {
                     HandleRadioWheelToggle();
                 }
-                
-                if (lastRadioWasCustom && WheelVars.CurrentRadioWheel != null)
-                {
+
+                if (lastRadioWasCustom && WheelVars.CurrentRadioWheel != null) {
                     WheelVars.CurrentRadioWheel.Visible = true;
                 }
 
@@ -365,10 +315,8 @@ namespace CustomRadioStations
                 lastPlayedOnFoot = player == null || !player.Exists() || !player.IsInVehicle();
             }
 
-            if (ControlInput.IsJustReleased(GTA.Control.VehicleRadioWheel))
-            {
-                if (WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Visible)
-                {
+            if (ControlInput.IsJustReleased(GTA.Control.VehicleRadioWheel)) {
+                if (WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Visible) {
                     WheelVars.CurrentRadioWheel.Visible = false;
                 }
             }
@@ -385,11 +333,9 @@ namespace CustomRadioStations
             HandleGamePause();
             GeneralEvents.Update();
         }
-        
-        public void HandleRadioWheelQueue()
-        {
-            if (WheelVars.NextQueuedWheel != null)
-            {
+
+        public void HandleRadioWheelQueue() {
+            if (WheelVars.NextQueuedWheel != null) {
                 WheelVars.CurrentRadioWheel = WheelVars.NextQueuedWheel;
                 WheelVars.CurrentRadioWheel.Visible = true;
                 WheelVars.NextQueuedWheel = null;
@@ -408,20 +354,16 @@ namespace CustomRadioStations
         GTA.Control ControlVolumeDown;
         GTA.Control ControlNextWheel;
         GTA.Control ControlPrevWheel;
-        public void HandleRadioWheelExtraControls()
-        {
-            if (WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Visible)
-            {
-                if (RadioStation.CurrentPlaying != null)
-                {
+        public void HandleRadioWheelExtraControls() {
+            if (WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Visible) {
+                if (RadioStation.CurrentPlaying != null) {
                     ControlSkipTrack = GTAFunction.UsingGamepad() ? Config.GP_Skip_Track : Config.KB_Skip_Track;
                     ControlVolumeUp = GTAFunction.UsingGamepad() ? Config.GP_Volume_Up : Config.KB_Volume_Up;
                     ControlVolumeDown = GTAFunction.UsingGamepad() ? Config.GP_Volume_Down : Config.KB_Volume_Down;
                     ControlNextWheel = GTAFunction.UsingGamepad() ? GTA.Control.VehicleAccelerate : GTA.Control.WeaponWheelPrev;
                     ControlPrevWheel = GTAFunction.UsingGamepad() ? GTA.Control.VehicleBrake : GTA.Control.WeaponWheelNext;
-                    
-                    if (Config.DisplayHelpText)
-                    {
+
+                    if (Config.DisplayHelpText) {
                         GTAFunction.DisplayHelpTextThisFrame(
                             GTAFunction.InputString(ControlSkipTrack) +
                             " : Skip Track\n" +
@@ -433,25 +375,19 @@ namespace CustomRadioStations
                             GTAFunction.InputString(ControlPrevWheel) +
                             " : Next / Prev Wheel\n", false, false);
                     }
-                    
-                    if (ControlInput.IsJustPressed(ControlSkipTrack))
-                    {
+
+                    if (ControlInput.IsJustPressed(ControlSkipTrack)) {
                         RadioStation.CurrentPlaying.PlayNextSong();
-                    }
-                    else if (ControlInput.IsJustPressed(ControlVolumeUp))
-                    {
+                    } else if (ControlInput.IsJustPressed(ControlVolumeUp)) {
                         SoundFile.StepVolume(0.05f, 2);
                         Config.Save();
-                    }
-                    else if (ControlInput.IsJustPressed(ControlVolumeDown))
-                    {
+                    } else if (ControlInput.IsJustPressed(ControlVolumeDown)) {
                         SoundFile.StepVolume(-0.05f, 2);
                         Config.Save();
                     }
                 }
             }
-            if (RadioStation.CurrentPlaying != null)
-            {
+            if (RadioStation.CurrentPlaying != null) {
                 ControlInput.DisableThisFrame(GTA.Control.VehicleNextRadio);
                 ControlInput.DisableThisFrame(GTA.Control.VehicleNextRadioTrack);
                 ControlInput.DisableThisFrame(GTA.Control.VehiclePrevRadio);
@@ -460,18 +396,14 @@ namespace CustomRadioStations
                 RadioNativeFunctions.SetVanillaRadioOff();
             }
         }
-        
-        public void HandleEnterExitVehicles()
-        {
-            if (!lastPlayedOnFoot && !RadioNativeFunctions._IS_PLAYER_VEHICLE_RADIO_ENABLED())
-            {
-                if (RadioStation.CurrentPlaying != null)
-                {
+
+        public void HandleEnterExitVehicles() {
+            if (!lastPlayedOnFoot && !RadioNativeFunctions._IS_PLAYER_VEHICLE_RADIO_ENABLED()) {
+                if (RadioStation.CurrentPlaying != null) {
                     RadioStation.CurrentPlaying.Stop();
                     RadioStation.CurrentPlaying = null;
 
-                    if (WheelVars.CurrentRadioWheel != null)
-                    {
+                    if (WheelVars.CurrentRadioWheel != null) {
                         WheelVars.CurrentRadioWheel.Visible = false;
                     }
 
@@ -499,34 +431,26 @@ namespace CustomRadioStations
         }
 
         bool doUnpauseNextFrame;
-        public void HandleGamePause()
-        {
-            if (ControlInput.IsJustPressed(GTAFunction.UsingGamepad() ? GTA.Control.FrontendPause : GTA.Control.FrontendPauseAlternate))
-            {
-                if (RadioStation.CurrentPlaying != null)
-                {
+        public void HandleGamePause() {
+            if (ControlInput.IsJustPressed(GTAFunction.UsingGamepad() ? GTA.Control.FrontendPause : GTA.Control.FrontendPauseAlternate)) {
+                if (RadioStation.CurrentPlaying != null) {
                     RadioStation.CurrentPlaying.CurrentSoundIsPaused = true;
                     doUnpauseNextFrame = true;
                     Wait(500);
                 }
             }
 
-            if (doUnpauseNextFrame)
-            {
+            if (doUnpauseNextFrame) {
                 if (RadioStation.CurrentPlaying != null)
                     RadioStation.CurrentPlaying.CurrentSoundIsPaused = false;
                 doUnpauseNextFrame = false;
             }
         }
 
-        void HandleQueuedStationActions()
-        {
-            if (CanDoQueuedAction())
-            {
-                if (ActionQueued == ActionOptions.StopCurrent)
-                {
-                    if (RadioStation.CurrentPlaying != null)
-                    {
+        void HandleQueuedStationActions() {
+            if (CanDoQueuedAction()) {
+                if (ActionQueued == ActionOptions.StopCurrent) {
+                    if (RadioStation.CurrentPlaying != null) {
                         // Turn off custom radio
                         RadioStation.CurrentPlaying.Stop();
 
@@ -540,12 +464,9 @@ namespace CustomRadioStations
                         RadioStation.CurrentPlaying = null;
                         lastRadioWasCustom = false;
                     }
-                }
-                else if (ActionQueued == ActionOptions.PlayQueued)
-                {
+                } else if (ActionQueued == ActionOptions.PlayQueued) {
                     if (RadioStation.NextQueuedStation != null
-                        && RadioStation.NextQueuedStation != RadioStation.CurrentPlaying)
-                    {
+                        && RadioStation.NextQueuedStation != RadioStation.CurrentPlaying) {
                         // Enable custom radio
                         if (RadioStation.CurrentPlaying != null)
                             RadioStation.CurrentPlaying.Stop();
@@ -556,14 +477,11 @@ namespace CustomRadioStations
 
                         // Do not mute GTA's radio if MiniAudioEx failed to start the selected
                         // source. This keeps the game usable even when one station/file is bad.
-                        if (!RadioStation.CurrentPlaying.IsPlaying)
-                        {
+                        if (!RadioStation.CurrentPlaying.IsPlaying) {
                             Logger.Log("WARNING: Custom station failed to start; leaving vanilla radio unchanged.");
                             RadioStation.CurrentPlaying = null;
                             lastRadioWasCustom = false;
-                        }
-                        else
-                        {
+                        } else {
                             // Set vanilla radio to Off but save what station was playing beforehand
                             lastVanillaStationPlayed = RadioNativeFunctions.GET_PLAYER_RADIO_STATION_INDEX();
                             RadioNativeFunctions.SetVanillaRadioOff();
@@ -581,30 +499,25 @@ namespace CustomRadioStations
             }
         }
 
-        bool CanDoQueuedAction()
-        {
+        bool CanDoQueuedAction() {
             if (inputTimer == null) return false;
 
-            if (inputTimer < DateTime.Now)
-            {
+            if (inputTimer < DateTime.Now) {
                 inputTimer = null;
                 return true;
             }
             return false;
         }
 
-        void SetActionDelay(int ms = 500)
-        {
+        void SetActionDelay(int ms = 500) {
             inputTimer = DateTime.Now.AddMilliseconds(ms);
         }
 
-        void HandleRadioWheelToggle()
-        {
+        void HandleRadioWheelToggle() {
             if (!loaded || WheelVars.CurrentRadioWheel == null || WheelVars.RadioWheels.Count == 0)
                 return;
 
-            if (WheelVars.CurrentRadioWheel.Visible)
-            {
+            if (WheelVars.CurrentRadioWheel.Visible) {
                 ActionQueued = ActionOptions.StopCurrent;
 
                 RadioStation.NextQueuedStation = null;
@@ -614,41 +527,31 @@ namespace CustomRadioStations
                 // Switch to vanilla radio
                 WheelVars.CurrentRadioWheel.Visible = false;
                 lastRadioWasCustom = false;
-            }
-            else
-            {
+            } else {
                 // Switch to custom radio
                 WheelVars.CurrentRadioWheel.Visible = true;
                 lastRadioWasCustom = true;
             }
         }
 
-        void UpdateDashboardInfo()
-        {
-            if (RadioStation.CurrentPlaying != null)
-            {
+        void UpdateDashboardInfo() {
+            if (RadioStation.CurrentPlaying != null) {
                 RadioStation.CurrentPlaying.UpdateDashboardInfo();
             }
         }
 
-        bool VanillaOrCustomRadioWheelIsVisible()
-        {
+        bool VanillaOrCustomRadioWheelIsVisible() {
             //return /*_IS_PLAYER_VEHICLE_RADIO_ENABLED() &&*/ ControlInput.IsPressed(GTA.Control.VehicleRadioWheel) && Game.Player.CanControlCharacter;
             Ped player = Game.Player.Character;
             if (player == null || !player.Exists()) return false;
 
-            if (ControlInput.IsPressed(GTA.Control.VehicleRadioWheel) && Game.Player.CanControlCharacter)
-            {
-                if (player.IsInVehicle() && RadioNativeFunctions._IS_PLAYER_VEHICLE_RADIO_ENABLED())
-                {
+            if (ControlInput.IsPressed(GTA.Control.VehicleRadioWheel) && Game.Player.CanControlCharacter) {
+                if (player.IsInVehicle() && RadioNativeFunctions._IS_PLAYER_VEHICLE_RADIO_ENABLED()) {
                     return true;
-                }
-                else if (player.IsOnFoot)
-                {
+                } else if (player.IsOnFoot) {
                     if (RadioNativeFunctions.IsRadioHudComponentVisible() ||
                         (WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Visible) ||
-                        IsCurrentCustomStationPlaying())
-                    {
+                        IsCurrentCustomStationPlaying()) {
                         return true;
                     }
                 }
@@ -656,26 +559,21 @@ namespace CustomRadioStations
             return false;
         }
 
-        bool IsMobileRadioEnabled()
-        {
+        bool IsMobileRadioEnabled() {
             return RadioNativeFunctions.IS_MOBILE_PHONE_RADIO_ACTIVE() || IsCurrentCustomStationPlaying();
         }
 
-        bool IsCurrentCustomStationPlaying()
-        {
+        bool IsCurrentCustomStationPlaying() {
             return RadioStation.CurrentPlaying != null && RadioStation.CurrentPlaying.IsPlaying && !RadioStation.CurrentPlaying.CurrentSoundIsPaused;
         }
 
-        void OnKeyDown(object sender, KeyEventArgs e)
-        {
+        void OnKeyDown(object sender, KeyEventArgs e) {
         }
 
-        void OnKeyUp(object sender, KeyEventArgs e)
-        {
+        void OnKeyUp(object sender, KeyEventArgs e) {
             if (e.KeyCode != Config.KB_Toggle) return;
 
-            if (!loaded)
-            {
+            if (!loaded) {
                 if (Config.DisplayHelpText) UIScreen.ShowSubtitle("Custom Radio not loaded yet, please try again later!");
                 return;
             }
