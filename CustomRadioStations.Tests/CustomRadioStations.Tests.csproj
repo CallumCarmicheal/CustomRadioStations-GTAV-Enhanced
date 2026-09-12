@@ -33,6 +33,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
@@ -41,8 +42,12 @@
     <Compile Include="..\CustomRadioStations\Configuration\StationConfigLoader.cs" Link="StationConfigLoader.cs" />
     <Compile Include="..\CustomRadioStations\Configuration\Settings.cs" Link="Settings.cs" />
     <Compile Include="..\CustomRadioStations\Audio\Track.cs" Link="Track.cs" />
+    <Compile Include="..\CustomRadioStations\Audio\TrackMetadataReader.cs" Link="TrackMetadataReader.cs" />
     <Compile Include="..\CustomRadioStations\Radio\MediaSourceResolver.cs" Link="MediaSourceResolver.cs" />
     <Compile Include="..\CustomRadioStations\Radio\StationDefinition.cs" Link="StationDefinition.cs" />
+    <Compile Include="..\CustomRadioStations\Utilities\HoldRepeatState.cs" Link="HoldRepeatState.cs" />
+    <Compile Include="..\CustomRadioStations\Utilities\RadialSelectionHysteresis.cs" Link="RadialSelectionHysteresis.cs" />
+    <Compile Include="..\CustomRadioStations\UI\WheelDisplayMetrics.cs" Link="WheelDisplayMetrics.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

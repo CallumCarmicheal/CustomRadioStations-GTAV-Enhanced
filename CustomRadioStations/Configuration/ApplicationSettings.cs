@@ -17,6 +17,9 @@ namespace CustomRadioStations {
             GamepadControls = new GamepadControlSettings();
         }
 
+        [JsonProperty("version")]
+        public int Version { get; set; }
+
         [JsonProperty("general")]
         public GeneralSettings General { get; set; }
 
@@ -55,10 +58,10 @@ namespace CustomRadioStations {
 
     internal sealed class GraphicsSettings {
         [JsonProperty("iconWidth")]
-        public int IconWidth { get; set; } = 30;
+        public int IconWidth { get; set; } = 64;
 
         [JsonProperty("iconHeight")]
-        public int IconHeight { get; set; } = 30;
+        public int IconHeight { get; set; } = 64;
 
         [JsonProperty("wheelRadius")]
         public float WheelRadius { get; set; } = 300f;
@@ -95,6 +98,12 @@ namespace CustomRadioStations {
     }
 
     internal sealed class GamepadControlSettings {
+        [JsonProperty("radialDeadzone")]
+        public float RadialDeadzone { get; set; } = 0.20f;
+
+        [JsonProperty("radialHysteresisDegrees")]
+        public float RadialHysteresisDegrees { get; set; } = 4f;
+
         [JsonProperty("toggleModifier")]
         [JsonConverter(typeof(StringEnumConverter))]
         public Control ToggleModifier { get; set; } = Control.VehicleDuck;

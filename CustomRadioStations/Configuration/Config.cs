@@ -12,6 +12,10 @@ using Control = GTA.Control;
 
 namespace CustomRadioStations {
     public static class Config {
+        private const int CurrentSettingsVersion = 3;
+        private const int LegacyDefaultIconSize = 30;
+        private const int CurrentDefaultIconSize = 64;
+
         private static readonly JsonSerializerSettings JsonSettings = new JsonSerializerSettings {
             MissingMemberHandling = MissingMemberHandling.Ignore,
             ObjectCreationHandling = ObjectCreationHandling.Replace
@@ -43,6 +47,8 @@ namespace CustomRadioStations {
         public static Control GP_Skip_Track;
         public static Control GP_Volume_Up;
         public static Control GP_Volume_Down;
+        public static float GP_RadialDeadzone;
+        public static float GP_RadialHysteresisDegrees;
 
         public static void Load() {
             bool shouldCreate = !File.Exists(AppPaths.SettingsFile);
@@ -56,11 +62,27 @@ namespace CustomRadioStations {
                 }
             }
 
+            bool shouldSaveUpgrade = UpgradeSettings();
             NormalizeSettings();
             ApplySettings();
 
-            if (shouldCreate)
+            if (shouldCreate || shouldSaveUpgrade)
                 Save();
+        }
+
+        private static bool UpgradeSettings() {
+            if (settings.Version >= CurrentSettingsVersion) return false;
+
+            settings.Graphics = settings.Graphics ?? new GraphicsSettings();
+            if (settings.Graphics.IconWidth == LegacyDefaultIconSize &&
+                settings.Graphics.IconHeight == LegacyDefaultIconSize) {
+                settings.Graphics.IconWidth = CurrentDefaultIconSize;
+                settings.Graphics.IconHeight = CurrentDefaultIconSize;
+                Logger.Log("Upgraded the default station icon size from 30x30 to 64x64 virtual pixels.");
+            }
+
+            settings.Version = CurrentSettingsVersion;
+            return true;
         }
 
         public static void Save() {
@@ -90,6 +112,8 @@ namespace CustomRadioStations {
                 settings.GamepadControls.SkipTrack = GP_Skip_Track;
                 settings.GamepadControls.VolumeUp = GP_Volume_Up;
                 settings.GamepadControls.VolumeDown = GP_Volume_Down;
+                settings.GamepadControls.RadialDeadzone = GP_RadialDeadzone;
+                settings.GamepadControls.RadialHysteresisDegrees = GP_RadialHysteresisDegrees;
 
                 Directory.CreateDirectory(AppPaths.RootDirectory);
                 File.WriteAllText(AppPaths.SettingsFile, JsonConvert.SerializeObject(settings, Formatting.Indented));
@@ -162,6 +186,10 @@ namespace CustomRadioStations {
             settings.Graphics.WheelRadius = Math.Max(1f, settings.Graphics.WheelRadius);
             settings.Graphics.BackgroundIconSizeMultiplier = Math.Max(0.1, settings.Graphics.BackgroundIconSizeMultiplier);
             settings.Graphics.HighlightIconSizeMultiplier = Math.Max(0.1, settings.Graphics.HighlightIconSizeMultiplier);
+            settings.GamepadControls.RadialDeadzone = Clamp(settings.GamepadControls.RadialDeadzone, 0f, 0.95f,
+                "gamepadControls.radialDeadzone");
+            settings.GamepadControls.RadialHysteresisDegrees = Clamp(settings.GamepadControls.RadialHysteresisDegrees, 0f, 30f,
+                "gamepadControls.radialHysteresisDegrees");
         }
 
         private static void ApplySettings() {
@@ -189,6 +217,8 @@ namespace CustomRadioStations {
             GP_Skip_Track = settings.GamepadControls.SkipTrack;
             GP_Volume_Up = settings.GamepadControls.VolumeUp;
             GP_Volume_Down = settings.GamepadControls.VolumeDown;
+            GP_RadialDeadzone = settings.GamepadControls.RadialDeadzone;
+            GP_RadialHysteresisDegrees = settings.GamepadControls.RadialHysteresisDegrees;
         }
 
         private static Color ParseColor(string value, string fallback, string settingName) {

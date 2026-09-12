@@ -57,21 +57,26 @@
   <ItemGroup>
     <PackageReference Include="JAJ.Packages.MiniAudioEx" Version="3.3.6" GeneratePathProperty="true" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Audio\SoundFile.cs" />
+    <Compile Include="Audio\MiniAudioFrameworkCompatibility.cs" />
     <Compile Include="Audio\Track.cs" />
+    <Compile Include="Audio\TrackMetadataReader.cs" />
     <Compile Include="Configuration\Config.cs" />
     <Compile Include="Configuration\ApplicationSettings.cs" />
     <Compile Include="Configuration\StationConfig.cs" />
     <Compile Include="Configuration\StationConfigLoader.cs" />
     <Compile Include="Configuration\Settings.cs" />
     <Compile Include="Game\ControlInput.cs" />
+    <Compile Include="Game\CharacterRadioColor.cs" />
     <Compile Include="Game\GeneralEvents.cs" />
     <Compile Include="Game\GTAVFunctions.cs" />
     <Compile Include="Game\RadioNativeFunctions.cs" />
     <Compile Include="Game\UsedVehiclesManager.cs" />
     <Compile Include="Infrastructure\AppPaths.cs" />
+    <Compile Include="Infrastructure\GameFocusPauseMonitor.cs" />
     <Compile Include="Infrastructure\Logger.cs" />
     <Compile Include="Infrastructure\RuntimeState.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -83,9 +88,12 @@
     <Compile Include="Scripts\MainScript.cs" />
     <Compile Include="Scripts\NativeWheelOrganizerScript.cs" />
     <Compile Include="UI\SelectorWheel.cs" />
+    <Compile Include="UI\WheelDisplayMetrics.cs" />
     <Compile Include="UI\WheelVars.cs" />
     <Compile Include="Utilities\GeneralHelper.cs" />
+    <Compile Include="Utilities\HoldRepeatState.cs" />
     <Compile Include="Utilities\MathUtil.cs" />
+    <Compile Include="Utilities\RadialSelectionHysteresis.cs" />
   </ItemGroup>
   <ItemGroup>
     <COMReference Include="IWshRuntimeLibrary">
@@ -102,6 +110,9 @@
     <None Include="App.config">
       <SubType>Designer</SubType>
     </None>
+    <Content Include="Assets\no-radio.png" />
+    <Content Include="Assets\selection-ring.png" />
+    <Content Include="Assets\station-background.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="ValidateExternalDependencies" BeforeTargets="ResolveReferences">
@@ -116,11 +127,14 @@
     <Error Condition="!Exists('$(MiniAudioExManagedPath)')" Text="MiniAudioExNET.dll was not found in the restored JAJ.Packages.MiniAudioEx 3.3.6 package." />
     <Error Condition="!Exists('$(MiniAudioExNativePath)')" Text="Missing MiniAudioEx x64 native runtime: $(MiniAudioExNativePath)" />
     <MakeDir Directories="$(MSBuildProjectDirectory)\dist\scripts" />
+    <MakeDir Directories="$(MSBuildProjectDirectory)\dist\scripts\Custom Radio Stations" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(MSBuildProjectDirectory)\dist\scripts" />
     <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(MSBuildProjectDirectory)\dist\scripts" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
     <Copy SourceFiles="$(MiniAudioExManagedPath)" DestinationFolder="$(MSBuildProjectDirectory)\dist\scripts" />
     <Copy SourceFiles="$(MiniAudioExNativePath)" DestinationFolder="$(MSBuildProjectDirectory)\dist\scripts" />
     <Copy SourceFiles="$(TargetDir)Newtonsoft.Json.dll" DestinationFolder="$(MSBuildProjectDirectory)\dist\scripts" />
+    <Copy SourceFiles="$(TargetDir)TagLibSharp.dll" DestinationFolder="$(MSBuildProjectDirectory)\dist\scripts" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Assets\no-radio.png;$(MSBuildProjectDirectory)\Assets\selection-ring.png;$(MSBuildProjectDirectory)\Assets\station-background.png" DestinationFolder="$(MSBuildProjectDirectory)\dist\scripts\Custom Radio Stations" />
   </Target>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

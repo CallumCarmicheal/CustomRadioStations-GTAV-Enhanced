@@ -18,10 +18,19 @@ namespace CustomRadioStations {
         private static readonly HashSet<string> LoadedStationIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         internal static void Reload() {
+            RuntimeState.CatalogLoadCompleted = false;
             ResetCatalog();
             EnsureRootDirectory();
-            foreach (string wheelDirectory in GetDirectories(AppPaths.RootDirectory))
+
+            string[] rootDirectories = GetDirectories(AppPaths.RootDirectory);
+            string[] directStationDirectories = rootDirectories.Where(IsStationDirectory).ToArray();
+            if (directStationDirectories.Length > 0)
+                LoadWheel(AppPaths.RootDirectory, directStationDirectories, "default custom wheel");
+
+            foreach (string wheelDirectory in rootDirectories.Where(directory => !IsStationDirectory(directory)))
                 LoadWheel(wheelDirectory);
+
+            RuntimeState.CatalogLoadCompleted = true;
         }
 
         private static void ResetCatalog() {
@@ -46,26 +55,53 @@ namespace CustomRadioStations {
         }
 
         private static void LoadWheel(string wheelDirectory) {
-            Logger.Log("Loading wheel: " + wheelDirectory);
+            LoadWheel(wheelDirectory, GetDirectories(wheelDirectory), Path.GetFileName(wheelDirectory));
+        }
+
+        private static void LoadWheel(string wheelDirectory, string[] stationDirectories, string wheelName) {
+            Logger.Log("Loading wheel: " + wheelName + " (" + wheelDirectory + ")");
             var settings = Config.LoadWheelSettings(wheelDirectory);
             var wheel = new Wheel("Radio Wheel", wheelDirectory, 0, 0,
                 new Size(settings.iconX, settings.iconY), 200, settings.wheelRadius);
 
-            string[] stationDirectories = GetDirectories(wheelDirectory);
             Logger.Log("Station folders found: " + stationDirectories.Length);
             foreach (string stationDirectory in stationDirectories)
                 LoadStation(wheel, stationDirectory);
 
             if (wheel.Categories.Count == 0) {
-                Logger.Log("Skipping empty wheel: " + Path.GetFileName(wheelDirectory));
+                Logger.Log("Skipping empty wheel: " + wheelName);
                 return;
             }
 
+            AddNoRadioCategory(wheel);
+
             wheel.Origin = new Vector2(0.5f, 0.45f);
-            wheel.SetCategoryBackgroundIcons(AppPaths.BackgroundIconFile, Config.IconBG, Config.IconBgSizeMultiple,
-                AppPaths.HighlightIconFile, Config.IconHL, Config.IconHlSizeMultiple);
+            string highlightIcon = File.Exists(AppPaths.HighlightIconFile)
+                ? AppPaths.HighlightIconFile
+                : AppPaths.BundledHighlightIconFile;
+            string backgroundIcon = File.Exists(AppPaths.BackgroundIconFile)
+                ? AppPaths.BackgroundIconFile
+                : AppPaths.BundledBackgroundIconFile;
+            wheel.SetCategoryBackgroundIcons(backgroundIcon, Config.IconBG, Config.IconBgSizeMultiple,
+                highlightIcon, Config.IconHL, Config.IconHlSizeMultiple);
+            wheel.HighlightColorProvider = () => CharacterRadioColor.GetCurrent(Config.IconHL);
             wheel.CalculateCategoryPlacement();
             WheelVars.RadioWheels.Add(wheel);
+        }
+
+        private static void AddNoRadioCategory(Wheel wheel) {
+            var category = new WheelCategory("Radio Off", "Turn off the radio.") {
+                IsRadioOff = true
+            };
+            category.AddItem(new WheelCategoryItem(category.Name));
+            if (File.Exists(AppPaths.NoRadioIconFile))
+                category.CategoryTexture = new Texture(AppPaths.NoRadioIconFile, wheel.Categories.Count);
+            wheel.AddCategory(category);
+        }
+
+        private static bool IsStationDirectory(string directory) {
+            return File.Exists(Path.Combine(directory, AppPaths.StationJsonFileName)) ||
+                File.Exists(Path.Combine(directory, AppPaths.StationSettingsFileName));
         }
 
         private static void LoadStation(Wheel wheel, string stationDirectory) {
@@ -97,8 +133,16 @@ namespace CustomRadioStations {
             category.AddItem(new WheelCategoryItem(category.Name));
             wheel.AddCategory(category);
 
-            if (!string.IsNullOrEmpty(definition.IconPath))
-                category.CategoryTexture = new Texture(definition.IconPath, wheel.Categories.IndexOf(category));
+            if (!string.IsNullOrEmpty(definition.IconPath)) {
+                int requiredIconPixels = WheelDisplayMetrics.GetRequiredIconPixels(
+                    wheel.TextureSize.Width, wheel.TextureSize.Height, GTA.UI.Screen.Resolution.Height);
+                string selectedIconPath = StationIconVariantResolver.Resolve(definition.IconPath, requiredIconPixels);
+                if (!string.IsNullOrEmpty(selectedIconPath)) {
+                    category.CategoryTexture = new Texture(selectedIconPath, wheel.Categories.IndexOf(category));
+                    if (!string.Equals(selectedIconPath, definition.IconPath, StringComparison.OrdinalIgnoreCase))
+                        Logger.Log("Selected higher-resolution station icon for '" + definition.Name + "': " + selectedIconPath);
+                }
+            }
 
             var station = new RadioStation(category, definition);
             if (!station.HasPlayableSounds) {

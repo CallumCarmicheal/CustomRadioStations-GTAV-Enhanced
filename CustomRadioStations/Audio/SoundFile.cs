@@ -21,11 +21,22 @@ namespace CustomRadioStations {
             get {
                 if (HasTrackList) {
                     Track t = GetCurrentTrack();
-                    if (t == null) return "";
-                    return t.Artist + "\n" + t.Title;
+                    if (t == null) return PreviewDisplayName;
+                    return TrackMetadataReader.FormatDisplayName(t.Artist, t.Title, _displayName);
                 } else {
                     return _displayName;
                 }
+            }
+        }
+
+        public string PreviewDisplayName {
+            get {
+                Track firstTrack = HasTrackList && Tracklist != null
+                    ? Tracklist.FirstOrDefault()
+                    : null;
+                return firstTrack == null
+                    ? _displayName
+                    : TrackMetadataReader.FormatDisplayName(firstTrack.Artist, firstTrack.Title, _displayName);
             }
         }
 
@@ -44,13 +55,11 @@ namespace CustomRadioStations {
         //public float MaximumDistance = 20f;
         //public float MinimumDistance = 1f;
 
-        private static Random random = new Random();
-
         public SoundFile(string filepath) {
             FilePath = filepath;
             Clip = new AudioClip(filepath, true);
             FileName = Path.GetFileNameWithoutExtension(filepath);
-            _displayName = DisplayNameFromFilename();
+            _displayName = TrackMetadataReader.ReadDisplayName(filepath, DisplayNameFromFilename());
             HasTrackList = TracklistExists(filepath);
         }
 
@@ -58,7 +67,7 @@ namespace CustomRadioStations {
             FilePath = shortcutPath;
             Clip = new AudioClip(filepath, true);
             FileName = Path.GetFileNameWithoutExtension(filepath);
-            _displayName = DisplayNameFromFilename();
+            _displayName = TrackMetadataReader.ReadDisplayName(filepath, DisplayNameFromFilename());
             HasTrackList = TracklistExists(shortcutPath);
         }
 
@@ -143,21 +152,6 @@ namespace CustomRadioStations {
             if (t == null) return remaining;
 
             return t.StartTime > pPos ? t.StartTime - pPos + 1 : remaining;
-        }
-
-        public uint GetRandomPlayPosition(float percentMinBound = 0.2f, float percentMaxBound = 0.7f) {
-            if (Sound == null || Sound.PlayLength == 0) return 0;
-            uint min = (uint)(percentMinBound * Sound.PlayLength);
-            uint max = (uint)(percentMaxBound * Sound.PlayLength);
-            if (max <= min) return Math.Min(min, Sound.PlayLength - 1);
-
-            // Get random uint within bounds
-            var buffer = new byte[sizeof(uint)];
-            new Random().NextBytes(buffer);
-            uint result = BitConverter.ToUInt32(buffer, 0);
-
-            result = (result % (max - min)) + min;
-            return result;
         }
 
         public void PlaySound(bool resume, bool playLooped = false, bool playPaused = false, bool allowMultipleInstances = false, bool allowSoundEffects = false) {
@@ -395,7 +389,7 @@ namespace CustomRadioStations {
 
         internal MiniAudioEngine() {
             MiniAudioNativeLoader.LoadFromScriptDirectory();
-            AudioContext.Initialize(SampleRate, Channels);
+            MiniAudioFrameworkCompatibility.Initialize(SampleRate, Channels);
         }
 
         public float SoundVolume {

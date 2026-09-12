@@ -12,14 +12,16 @@ Place `ScriptHookVDotNet3.dll` from the exact installed ScriptHookVDotNet Enhanc
 .\build-enhanced.ps1 -Configuration Release
 ```
 
-NuGet restores `JAJ.Packages.MiniAudioEx` 3.3.6 and `Newtonsoft.Json` 13.0.4. Output is staged under `CustomRadioStations\dist\scripts` with the managed and Windows x64 native MiniAudioEx runtimes. MP3, FLAC, OGG and WAV are supported; irrKlang and its codec plugins are not required.
+NuGet restores `JAJ.Packages.MiniAudioEx` 3.3.6, `Newtonsoft.Json` 13.0.4, and `TagLibSharp` 2.3.0. Output is staged under `CustomRadioStations\dist\scripts` with the managed and Windows x64 native MiniAudioEx runtimes. MP3, FLAC, OGG and WAV are supported; irrKlang and its codec plugins are not required.
+
+The port includes a .NET Framework 4.8 compatibility shim for MiniAudioEx 3.3.6's context-configuration interop signature. Keep the staged managed and native MiniAudioEx DLLs together with `CustomRadioStations.dll`.
 
 ## Station layout
 
-Stations still live inside wheel folders. A JSON station uses this layout:
+Stations may live directly under `Custom Radio Stations`; these are grouped into one default custom wheel. Optional extra wheel folders may contain another level of station folders. A direct JSON station uses this layout:
 
 ```text
-scripts\Custom Radio Stations\<Wheel>\<StationName>\
+scripts\Custom Radio Stations\<StationName>\
 ├── station.json
 ├── icon.png
 ├── tracks\
@@ -28,6 +30,8 @@ scripts\Custom Radio Stations\<Wheel>\<StationName>\
 └── commercials\
     └── advert1.mp3
 ```
+
+For multiple custom wheels, use `scripts\Custom Radio Stations\<Wheel>\<StationName>\` instead. Direct stations and nested wheel folders can coexist.
 
 Commercials are kept separate internally and are never added to the normal track pool. If no commercials resolve, music playback continues normally.
 
@@ -92,9 +96,27 @@ Each `tracks` entry is relative to the station's `tracks` directory unless absol
 - Missing, malformed, and unsupported sources are logged and skipped without discarding other valid entries.
 - An omitted array uses `["*"]`; an explicit empty array means no media. A station with no playable normal tracks is not registered.
 
-`broadcast` is the default and retains virtual live-radio continuity. `playlist` retains a conventional paused position while away. `shuffle` controls initial track ordering, `volume` is a per-station multiplier clamped to 0–1, and `loop` controls whether the programme wraps.
+`broadcast` is the default and retains virtual live-radio continuity. Each broadcast station receives a random normal track and a random point within that track when the station catalog is initialized. Its cursor advances with elapsed time before the first tune-in, so selecting it sounds like joining an existing broadcast rather than starting a media player. `playlist` retains conventional start/resume semantics. `shuffle` controls initial track ordering, `volume` is a per-station multiplier clamped to 0–1, and `loop` controls whether the programme wraps.
 
 Commercial break ranges are normalized to non-negative values, with each maximum at least its minimum. Break scheduling does nothing when disabled, configured for zero commercials, or no commercial audio exists.
+
+## Track display metadata
+
+For ordinary audio files, the wheel and vehicle dashboard read the embedded Artist and Title tags and display them in GTA's three-line style:
+
+```text
+Radio Station
+ARTIST
+Title
+```
+
+Both tags must contain text. If either Artist or Title is absent, invalid, or unreadable, the mod falls back to its existing filename display convention (for example `Artist - Track` or `Track - Artist`, shown as separate lines). Timed `.tracklist.json` metadata continues to take precedence for long mixes and recordings.
+
+Track labels are cached when the station catalog loads and retain the latest known playing title. Moving quickly around the wheel therefore shows each station's station/artist/title text immediately; the configured audio-switch delay does not delay the label.
+
+Volume controls change the master volume by 5% immediately when pressed. Holding a volume control pauses briefly, then repeats in 5% steps until released. The final value is persisted after input settles rather than writing `settings.json` for every repeated step.
+
+Controller radial selection uses a `0.20` stick deadzone and 4 degrees of angular hysteresis by default, preventing selection flicker near the boundary between stations. These can be adjusted with `gamepadControls.radialDeadzone` and `gamepadControls.radialHysteresisDegrees` in `settings.json`.
 
 ## JSON settings
 
@@ -110,11 +132,26 @@ Example `wheel.json`:
 
 ```json
 {
-  "iconWidth": 30,
-  "iconHeight": 30,
+  "iconWidth": 64,
+  "iconHeight": 64,
   "radius": 300.0
 }
 ```
+
+Station artwork uses a 720-high virtual canvas and therefore scales with the game's output resolution. The default 64x64 size becomes 128x128 physical pixels at 1440p while remaining square on ultrawide displays. Existing generated settings that still contain the old 30x30 defaults are upgraded automatically; deliberately customized sizes are preserved. Station descriptions are centered near the bottom of the screen and use a capped text width so the wheel remains readable on ultrawide resolutions such as 5120x1440.
+
+Higher-resolution station artwork can be supplied beside the configured icon without changing `station.json`:
+
+```text
+icon.png       # base 128x128 asset
+icon.256.png   # 256x256
+icon.512.png   # 512x512
+icon.1024.png  # 1024x1024
+```
+
+CRS selects the smallest available variant large enough for the icon's physical display size, falling back to the largest available variant. Selection is based on vertical resolution, so equivalent-height 4:3, 16:9, 21:9, and 32:9 displays use the same asset quality and visual icon size. PNG headers are validated before DirectX sees them; a missing, malformed, oversized, or rejected texture is disabled and logged without stopping the remaining radio script.
+
+Every station has a translucent dark circular backing, with `iconbg.png` remaining available as a user override. Every custom wheel also includes a permanent **Radio Off** entry at the bottom. Selecting it stops custom playback and switches GTA's vehicle/mobile radio off. The selected entry uses GTA's current protagonist color: blue for Michael, green for Franklin, and orange for Trevor. Other player models retain `graphics.iconHighlightColor` as their fallback. A user-provided `iconhl.png` can still replace the bundled selection-ring artwork while retaining the dynamic character tint.
 
 Example `native-wheels.json`:
 

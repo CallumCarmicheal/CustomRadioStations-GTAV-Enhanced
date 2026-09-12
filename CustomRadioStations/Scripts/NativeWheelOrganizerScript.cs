@@ -165,6 +165,13 @@ namespace CustomRadioStations {
 
             if (!Config.DisplayHelpText) return;
 
+            if (StationWheelPair.List.Count == 0) {
+                GTAFunction.DisplayHelpTextThisFrame(
+                    RuntimeState.CatalogLoadCompleted ? "No custom radio tracks found" : "Custom radio loading...",
+                    false, false);
+                return;
+            }
+
             string nativeWheelText = WheelListIsPopulated() && currentWheel != null ?
                 "\n" +
                 GTAFunction.InputString(ControlNextWheel) + " " +

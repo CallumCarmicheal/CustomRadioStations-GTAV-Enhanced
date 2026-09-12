@@ -39,7 +39,6 @@ namespace SelectorWheel {
         Vector2 inputCoord = Vector2.Zero;
         public float Radius = 250;
         //float inputAngle =  265f;
-        const float controllerDeadzone = 0.005f;
         const float keyboardDeadzone = 0.03f;
 
         bool UseTextures;
@@ -56,11 +55,17 @@ namespace SelectorWheel {
         Color TextureCatBgHighlightColor;
         double TextureCatBgHighlightSizeMultiple;
 
+        public Func<Color> HighlightColorProvider { private get; set; }
+
         private Size _textureSize;
         public Size TextureSize {
             get { return _textureSize; }
             set {
-                _textureSize = new Size((int)(value.Width * (16f / 9f)), value.Height);
+                // CustomSprite sizes are expressed in screen pixels. The old DrawTexture
+                // renderer needed a fixed 16:9 width correction, but retaining it here
+                // turns square station artwork into a wide rectangle (and gets worse on
+                // ultrawide displays).
+                _textureSize = value;
             }
         }
 
@@ -281,11 +286,18 @@ namespace SelectorWheel {
                     }
             }*/
 
-            CalculateFromStartAngle(270f, Categories.Count);
+            int radioOffIndex = Categories.FindIndex(category => category.IsRadioOff);
+            if (radioOffIndex >= 0) {
+                float angleOffset = 360f / Categories.Count;
+                CalculateFromStartAngle(90f - (radioOffIndex * angleOffset), Categories.Count);
+            } else {
+                CalculateFromStartAngle(270f, Categories.Count);
+            }
 
             if (!HaveTexturesBeenCached) {
                 foreach (var cat in Categories) {
-                    bool hasTexture = false;
+                    bool hasTexture = cat.CategoryTexture != null ||
+                        cat.ItemList.Any(item => item.ItemTexture != null);
                     if (cat.CategoryTexture == null && File.Exists(Path.Combine(TexturePath, UIHelper.MakeValidFileName(cat.Name) + ".png"))) {
                         cat.CategoryTexture = new Texture(Path.Combine(TexturePath, UIHelper.MakeValidFileName(cat.Name) + ".png"), Categories.IndexOf(cat));
                         hasTexture = true;
@@ -297,13 +309,11 @@ namespace SelectorWheel {
                         }
                     }
 
-                    if (hasTexture) {
-                        if (!string.IsNullOrWhiteSpace(TextureCatBgPath)) {
-                            cat.BackgroundTexture = new Texture(TextureCatBgPath, Categories.IndexOf(cat) + Categories.Count);
-                        }
-                        if (!string.IsNullOrWhiteSpace(TextureCatHlPath)) {
-                            cat.HighlightTexture = new Texture(TextureCatHlPath, Categories.IndexOf(cat) + (Categories.Count * 2));
-                        }
+                    if (hasTexture && !string.IsNullOrWhiteSpace(TextureCatBgPath)) {
+                        cat.BackgroundTexture = new Texture(TextureCatBgPath, Categories.IndexOf(cat) + Categories.Count);
+                    }
+                    if (!string.IsNullOrWhiteSpace(TextureCatHlPath)) {
+                        cat.HighlightTexture = new Texture(TextureCatHlPath, Categories.IndexOf(cat) + (Categories.Count * 2));
                     }
 
                     /*Load textures into cache*/
@@ -479,6 +489,11 @@ namespace SelectorWheel {
         public Font FontCategoryItemCount = Font.ChaletComprimeCologne;
         public Font FontDescription = Font.ChaletLondon;
         void ControlCategorySelection() {
+            Color selectedHighlightColor = TextureCatBgHighlightColor;
+            if (HighlightColorProvider != null) {
+                try { selectedHighlightColor = HighlightColorProvider(); } catch { }
+            }
+
             foreach (var cat in Categories) {
                 bool isSelectedCategory = SelectedCategory == cat;
 
@@ -489,31 +504,34 @@ namespace SelectorWheel {
                 bool anyTextureExists = catTextureExists || itemTextureExists;
 
                 if (UseTextures && anyTextureExists) {
-                    Texture temp = catTextureExists ? cat.CategoryTexture : cat.SelectedItem.ItemTexture;
-                    temp.Draw(3, TextureRefreshRate,
-                        new Point((int)(cat.position2D.X * UIScreen.Width) + xTextureOffset, (int)(cat.position2D.Y * UIScreen.Height) + yTextureOffset),
-                        new PointF(0.5f, 0.5f),
-                        isSelectedCategory && !bgTextureExists ? SizeMultiply(TextureSize, 1.25) : TextureSize,
-                        0f, isSelectedCategory ? Color.FromArgb(255, 255, 255, 255) : Color.FromArgb(120, 255, 255, 255), UIHelper.AspectRatio);
-
+                    // CustomSprite is composited in call order, so the neutral disc must
+                    // be submitted before the artwork or it washes the icon grey.
                     if (bgTextureExists) {
                         cat.BackgroundTexture.Draw(2, TextureRefreshRate,
-                            new Point((int)(cat.position2D.X * UIScreen.Width) + xTextureOffset, (int)(cat.position2D.Y * UIScreen.Height) + yTextureOffset),
+                            new Point((int)(cat.position2D.X * UIHelper.ScaledWidth) + xTextureOffset, (int)(cat.position2D.Y * UIScreen.Height) + yTextureOffset),
                             new PointF(0.5f, 0.5f),
                             SizeMultiply(TextureSize, TextureCatBgSizeMultiple),
                             0f, isSelectedCategory ? TextureCatBgColor : Color.FromArgb(120, TextureCatBgColor.R, TextureCatBgColor.G, TextureCatBgColor.B), UIHelper.AspectRatio);
 
                     }
-                    if (isSelectedCategory && hlTextureExists) {
-                        cat.HighlightTexture.Draw(1, TextureRefreshRate,
-                            new Point((int)(cat.position2D.X * UIScreen.Width) + xTextureOffset, (int)(cat.position2D.Y * UIScreen.Height) + yTextureOffset),
-                            new PointF(0.5f, 0.5f),
-                            SizeMultiply(TextureSize, TextureCatBgHighlightSizeMultiple),
-                            0f, TextureCatBgHighlightColor, UIHelper.AspectRatio);
-                    }
+
+                    Texture temp = catTextureExists ? cat.CategoryTexture : cat.SelectedItem.ItemTexture;
+                    temp.Draw(3, TextureRefreshRate,
+                        new Point((int)(cat.position2D.X * UIHelper.ScaledWidth) + xTextureOffset, (int)(cat.position2D.Y * UIScreen.Height) + yTextureOffset),
+                        new PointF(0.5f, 0.5f),
+                        isSelectedCategory && !bgTextureExists ? SizeMultiply(TextureSize, 1.25) : TextureSize,
+                        0f, isSelectedCategory ? Color.FromArgb(255, 255, 255, 255) : Color.FromArgb(120, 255, 255, 255), UIHelper.AspectRatio);
                 } else {
                     Color col = isSelectedCategory ? Color.FromArgb(255, 255, 255, 255) : Color.FromArgb(120, 255, 255, 255);
                     UIHelper.DrawCustomText(cat.Name, 0.8f, FontCategory, col.R, col.G, col.B, col.A, cat.position2D.X, cat.position2D.Y, 50, 0, 0, 0, 255, UIHelper.TextJustification.Center);
+                }
+
+                if (isSelectedCategory && hlTextureExists) {
+                    cat.HighlightTexture.Draw(1, TextureRefreshRate,
+                        new Point((int)(cat.position2D.X * UIHelper.ScaledWidth) + xTextureOffset, (int)(cat.position2D.Y * UIScreen.Height) + yTextureOffset),
+                        new PointF(0.5f, 0.5f),
+                        SizeMultiply(TextureSize, TextureCatBgHighlightSizeMultiple),
+                        0f, selectedHighlightColor, UIHelper.AspectRatio);
                 }
 
             }
@@ -523,30 +541,72 @@ namespace SelectorWheel {
                 UIHelper.DrawCustomText((SelectedCategory.CurrentItemIndex + 1).ToString() + " / " + SelectedCategory.ItemCount().ToString(), 0.55f, FontCategoryItemCount, 255, 255, 255, 255, _origin.X, AddYPixelDistanceToPercent(_origin.Y, -50), 50, 0, 0, 0, 255, UIHelper.TextJustification.Center);
             }
 
-            if (SelectedCategory.SelectedItem.Description != null) {
-                float pixelX = 964f / (float)UIScreen.Width;
-                float pixelY = 100f / (float)UIScreen.Height;
-                UIHelper.DrawCustomText(SelectedCategory.SelectedItem.Description, 0.35f, FontDescription, 255, 255, 255, 255, pixelX, pixelY, 0, 0, 0, 0, 0, UIHelper.TextJustification.Left, true, pixelX, 1250f / (float)UIScreen.Width, true, 0, 0, 0, 180, 10f / (float)UIScreen.Width, 10f / (float)UIScreen.Height);
-            } else if (SelectedCategory.Description != null) {
-                float pixelX = 964f / (float)UIScreen.Width;
-                float pixelY = 100f / (float)UIScreen.Height;
-                UIHelper.DrawCustomText(SelectedCategory.Description, 0.35f, FontDescription, 255, 255, 255, 255, pixelX, pixelY, 0, 0, 0, 0, 0, UIHelper.TextJustification.Left, true, pixelX, 1250f / (float)UIScreen.Width, true, 0, 0, 0, 180, 10f / (float)UIScreen.Width, 10f / (float)UIScreen.Height);
-            }
+            string description = !string.IsNullOrWhiteSpace(SelectedCategory.SelectedItem.Description)
+                ? SelectedCategory.SelectedItem.Description
+                : SelectedCategory.Description;
+            DrawDescription(description);
 
             CategorySelectionControls();
         }
 
+        private void DrawDescription(string description) {
+            if (string.IsNullOrWhiteSpace(description)) return;
+
+            const float fontSize = 0.35f;
+            const float centerX = 0.5f;
+            const float bottomEdge = 0.94f;
+
+            // Cap the text block in virtual pixels as well as screen percentage. On a
+            // 32:9 display this keeps the copy near the visual centre instead of
+            // producing a several-thousand-pixel-wide line.
+            float descriptionWidth = Math.Min(0.60f, UIHelper.XPixelToPercentage(1100));
+            float startWrap = centerX - (descriptionWidth / 2f);
+            float endWrap = centerX + (descriptionWidth / 2f);
+            float fontHeight = UIHelper.MeasureFontHeightNoConvert(fontSize, FontDescription);
+            int lineCount = Math.Max(1, UIHelper.GetStringLineCount(
+                description, fontSize, FontDescription, startWrap, endWrap, centerX, bottomEdge));
+            float paddingY = UIHelper.YPixelToPercentage(10);
+            float topPadding = UIHelper.YPixelToPercentage(10);
+            float textY = Math.Max(0.72f, bottomEdge - (lineCount * fontHeight) - paddingY);
+
+            UIHelper.DrawCustomText(description, fontSize, FontDescription,
+                255, 255, 255, 255, centerX, textY,
+                0, 0, 0, 0, 0,
+                UIHelper.TextJustification.Center, true, startWrap, endWrap,
+                true, 0, 0, 0, 180,
+                UIHelper.XPixelToPercentage(10), paddingY + topPadding, 23.5f,
+                -(topPadding / 2f));
+        }
+
         DateTime inputTimer = DateTime.Now;
         private void CategorySelectionControls() {
-            if (new Vector2(WheelLeftRightValue(), WheelUpDownValue()).Length() > controllerDeadzone) {
-                //inputAngle = InputToAngle();
-                inputCoord = PointOnCircleInPercentage(Radius, InputToAngle(), OriginInPixels);
+            float horizontal = WheelLeftRightValue();
+            float vertical = WheelUpDownValue();
+            bool usingGamepad = Game.LastInputMethod == InputMethod.GamePad;
+            float deadzone = usingGamepad
+                ? CustomRadioStations.Config.GP_RadialDeadzone
+                : keyboardDeadzone;
+            float? activeInputAngle = null;
+
+            if (new Vector2(horizontal, vertical).Length() > deadzone) {
+                activeInputAngle = InputToAngle(horizontal, vertical);
+                inputCoord = PointOnCircleInPercentage(Radius, activeInputAngle.Value, OriginInPixels);
             }
 
             /*UIHelper.DrawRectangle(inputCoord.X, inputCoord.Y, 0.05f, 0.05f, 0, 235, 255, 255);
             UIScreen.ShowSubtitle(Math.Round(new Vector2(WheelLeftRightValue(), WheelUpDownValue()).Length(), 2).ToString());*/
 
-            int inputIndex = ClosestCategoryToInputCoord() != null ? Categories.IndexOf(ClosestCategoryToInputCoord()) : CurrentCatIndex;
+            WheelCategory closestCategory = ClosestCategoryToInputCoord();
+            int inputIndex = closestCategory != null ? Categories.IndexOf(closestCategory) : CurrentCatIndex;
+
+            if (usingGamepad && activeInputAngle.HasValue && inputIndex != CurrentCatIndex) {
+                float currentCenterAngle = CategoryAngle(CurrentCatIndex);
+                if (!CustomRadioStations.RadialSelectionHysteresis.ShouldSwitch(
+                    currentCenterAngle, activeInputAngle.Value, Categories.Count,
+                    CustomRadioStations.Config.GP_RadialHysteresisDegrees)) {
+                    inputIndex = CurrentCatIndex;
+                }
+            }
 
             //int nextClosest = NextClosestIndexWithWrap(Categories, CurrentCatIndex, inputIndex);
             if (inputIndex != CurrentCatIndex /*&& nextClosest != CurrentCatIndex*/) {
@@ -741,12 +801,22 @@ namespace SelectorWheel {
             return percentage >= startInclusive && percentage <= endInclusive ? true : false;
         }
 
-        float InputToAngle() {
-            var angle = Math.Atan2(ControlInput.GetValueNormalized(GTA.Control.WeaponWheelUpDown), ControlInput.GetValueNormalized(GTA.Control.WeaponWheelLeftRight));
+        float InputToAngle(float horizontal, float vertical) {
+            var angle = Math.Atan2(vertical, horizontal);
             if (angle < 0) {
                 angle += Math.PI * 2;
             }
             return (float)(angle * (180 / Math.PI));
+        }
+
+        float CategoryAngle(int index) {
+            if (index < 0 || index >= Categories.Count) return 0f;
+
+            Vector2 origin = OriginInPixels;
+            Vector2 category = Categories[index].position2D;
+            float horizontal = UIHelper.XPercentageToPixel(category.X) - origin.X;
+            float vertical = UIHelper.YPercentageToPixel(category.Y) - origin.Y;
+            return InputToAngle(horizontal, vertical);
         }
 
         static double GetDistance(Vector2 point1, Vector2 point2) {
@@ -903,6 +973,7 @@ namespace SelectorWheel {
         public Texture BackgroundTexture;
         public Texture HighlightTexture;
         public string Description { get; set; }
+        public bool IsRadioOff { get; set; }
 
         /// <summary>
         /// Instantiates a new category for use in a selection wheel.
@@ -991,7 +1062,7 @@ namespace SelectorWheel {
         /// Instantiate a new item to be later added to a WheelCategory.
         /// </summary>
         /// <param name="name">Name of the item. If a matching .png image is found, the image will be displayed assuming no image for this item's category has been found.</param>
-        /// <param name="description">A description that will be displayed on the right side of the screen.</param>
+        /// <param name="description">A description that will be displayed at the bottom-center of the screen.</param>
         public WheelCategoryItem(string name, string description) {
             Name = name;
             Description = description;
@@ -1004,9 +1075,17 @@ namespace SelectorWheel {
         public int DrawLevel { get; set; }
 
         private CustomSprite _sprite;
+        private bool _validationAttempted;
+        private bool _failed;
 
         public Texture(string path, int index) {
-            Path = path;
+            // SHVDN Enhanced's CustomSprite passes this string directly to the native
+            // DirectX texture loader. Relative PNG paths can be interpreted as texture
+            // directories there (and acquire a trailing slash), so resolve them while
+            // still in managed code. Station icons were already absolute; bundled wheel
+            // assets such as selection-ring.png exposed this difference.
+            try { Path = System.IO.Path.GetFullPath(path); }
+            catch { Path = path; }
             Index = index;
         }
 
@@ -1023,6 +1102,8 @@ namespace SelectorWheel {
         }
 
         public void Draw(int level, int time, Point pos, PointF center, Size size, float rotation, Color color, float aspectRatio) {
+            if (!CanUseTexture()) return;
+
             // SHVDN3 replaces GTA.UI.DrawTexture with GTA.UI.CustomSprite.
             // The live wheel rendering uses a 0.5/0.5 center, which maps directly to Centered=true.
             bool centered = Math.Abs(center.X - 0.5f) < 0.0001f && Math.Abs(center.Y - 0.5f) < 0.0001f;
@@ -1035,29 +1116,71 @@ namespace SelectorWheel {
                 position.Y -= size.Height * center.Y;
             }
 
-            if (_sprite == null) {
-                _sprite = new CustomSprite(Path, new SizeF(size.Width, size.Height), position, color, rotation, centered);
-            } else {
-                _sprite.Position = position;
-                _sprite.Size = new SizeF(size.Width, size.Height);
-                _sprite.Color = color;
-                _sprite.Rotation = rotation;
-                _sprite.Centered = centered;
-                _sprite.Enabled = true;
-            }
+            try {
+                if (_sprite == null) {
+                    _sprite = new CustomSprite(Path, new SizeF(size.Width, size.Height), position, color, rotation, centered);
+                } else {
+                    _sprite.Position = position;
+                    _sprite.Size = new SizeF(size.Width, size.Height);
+                    _sprite.Color = color;
+                    _sprite.Rotation = rotation;
+                    _sprite.Centered = centered;
+                    _sprite.Enabled = true;
+                }
 
-            _sprite.Draw();
+                // A 720-high virtual canvas scales with vertical resolution and keeps
+                // the same physical proportions at 4:3, 21:9, and 32:9.
+                _sprite.ScaledDraw();
+            } catch (Exception ex) {
+                FailTexture("draw", ex);
+            }
         }
 
         public void LoadTexture() {
-            if (_sprite != null) return;
+            if (_sprite != null || !CanUseTexture()) return;
 
-            _sprite = new CustomSprite(Path, SizeF.Empty, PointF.Empty, Color.White, 0f, false);
-            _sprite.Enabled = false;
+            try {
+                _sprite = new CustomSprite(Path, SizeF.Empty, PointF.Empty, Color.White, 0f, false);
+                _sprite.Enabled = false;
+            } catch (Exception ex) {
+                FailTexture("creation", ex);
+            }
         }
 
         public void StopDraw() {
-            if (_sprite != null) _sprite.Enabled = false;
+            if (_sprite == null) return;
+            try { _sprite.Enabled = false; }
+            catch (Exception ex) { FailTexture("disable", ex); }
+        }
+
+        private bool CanUseTexture() {
+            if (_failed) return false;
+            if (_validationAttempted) return true;
+            _validationAttempted = true;
+
+            try {
+                string validationError;
+                if (!CustomRadioStations.TextureFileValidator.TryValidatePng(Path, out validationError))
+                    throw new InvalidDataException(validationError);
+
+                return true;
+            } catch (Exception ex) {
+                FailTexture("validation", ex);
+                return false;
+            }
+        }
+
+        private void FailTexture(string operation, Exception exception) {
+            _failed = true;
+            try {
+                if (_sprite != null) _sprite.Enabled = false;
+            } catch { }
+            _sprite = null;
+
+            try {
+                CustomRadioStations.Logger.Log("WARNING: Disabled texture '" + Path +
+                    "' after DirectX " + operation + " failed: " + exception.Message);
+            } catch { }
         }
     }
 
@@ -1073,7 +1196,8 @@ namespace SelectorWheel {
             int dropShawdowPixelDistance, int dRed, int dGreen, int dBlue, int dAlpha,
             TextJustification justifyType = TextJustification.Left, bool ForceTextWrap = false, float startWrap = 0f, float endWrap = 1f,
             bool withRectangle = false, int R = 0, int G = 0, int B = 0, int A = 255,
-            float rectWidthOffset = 0f, float rectHeightOffset = 0f, float rectYPosDivisor = 23.5f) {
+            float rectWidthOffset = 0f, float rectHeightOffset = 0f, float rectYPosDivisor = 23.5f,
+            float rectYOffset = 0f) {
             Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "jamyfafi"); //Required, don't change this! AKA BEGIN_TEXT_COMMAND_DISPLAY_TEXT
             Function.Call(Hash.SET_TEXT_SCALE, FontSize, FontSize); //1st param: 1.0f
             Function.Call(Hash.SET_TEXT_FONT, (int)FontType);
@@ -1117,7 +1241,7 @@ namespace SelectorWheel {
                         : (justifyType == TextJustification.Right ? endWrap - ((endWrap - startWrap) / 2)
                         : XPos);
 
-                    DrawRectangle(adjustedXPos, adjustedYPos + (i * fontHeight), rectangleWidth, adjustedRectangleHeight, R, G, B, A);
+                    DrawRectangle(adjustedXPos, adjustedYPos + (i * fontHeight) + rectYOffset, rectangleWidth, adjustedRectangleHeight, R, G, B, A);
                 }
             }
         }
@@ -1206,6 +1330,13 @@ namespace SelectorWheel {
         }
 
         public static float AspectRatio { get; private set; } = UIScreen.PhysicalAspectRatio;
+
+        public static float ScaledWidth {
+            get {
+                Size resolution = UIScreen.Resolution;
+                return CustomRadioStations.WheelDisplayMetrics.GetVirtualWidth(resolution.Width, resolution.Height);
+            }
+        }
 
         public static float UpdateAspectRatio() {
             AspectRatio = UIScreen.PhysicalAspectRatio;

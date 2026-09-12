@@ -26,10 +26,13 @@ namespace CustomRadioStations {
 
         string initializationFailure;
 
+        GameFocusPauseMonitor focusPauseMonitor;
+
         enum ActionOptions {
             DoNothing,
             PlayQueued,
-            StopCurrent
+            StopCurrent,
+            StopAllRadio
         }
 
         public MainScript() {
@@ -48,6 +51,9 @@ namespace CustomRadioStations {
                 try { Logger.Log("FATAL: Startup dependency/configuration failure: " + ex); } catch { }
             }
 
+            if (initializationFailure == null)
+                focusPauseMonitor = new GameFocusPauseMonitor();
+
             Tick += OnTick;
             KeyDown += OnKeyDown;
             KeyUp += OnKeyUp;
@@ -59,6 +65,8 @@ namespace CustomRadioStations {
         private void OnAbort(object sender, EventArgs e) {
             // Cleanup is intentionally best-effort: an unavailable Enhanced native or an
             // already-disposed audio engine must not turn script shutdown into a crash.
+            try { focusPauseMonitor?.Dispose(); } catch { }
+            try { AudioPauseCoordinator.Reset(); } catch { }
             try { Game.TimeScale = 1f; } catch { }
             try { SoundFile.DisposeSoundEngine(); } catch { }
             try { RadioNativeFunctions.DisposeDashboardScaleform(); } catch { }
@@ -82,6 +90,13 @@ namespace CustomRadioStations {
 
             foreach (Wheel radioWheel in WheelVars.RadioWheels) {
                 radioWheel.OnCategoryChange += (sender, selectedCategory, selectedItem, wheelJustOpened) => {
+                    if (selectedCategory.IsRadioOff) {
+                        ActionQueued = ActionOptions.StopAllRadio;
+                        RadioStation.NextQueuedStation = null;
+                        SetActionDelay(Config.WheelActionDelay);
+                        return;
+                    }
+
                     StationWheelPair pair = StationWheelPair.List.Find(candidate =>
                         candidate.Wheel == radioWheel && candidate.Category == selectedCategory);
                     if (pair == null) return;
@@ -247,6 +262,10 @@ namespace CustomRadioStations {
                 return;
             }
 
+            // Run before loading gates and other radio work. GTA can suspend script
+            // ticks immediately after opening the pause menu.
+            HandleGamePause();
+
             if (!loaded) {
                 if (Game.Player == null || !Game.Player.CanControlCharacter) return;
 
@@ -305,8 +324,12 @@ namespace CustomRadioStations {
             if (WheelVars.RadioWheels.Count == 0) return;
 
             if (VanillaOrCustomRadioWheelIsVisible()) {
-                if (GTAFunction.UsingGamepad() && ControlInput.IsJustPressed(Config.GP_Toggle)) {
-                    HandleRadioWheelToggle();
+                if (GTAFunction.UsingGamepad()) {
+                    // Read disabled input above, then suppress GTA's own A-button radio
+                    // selection so the same press only changes between radio menus.
+                    ControlInput.DisableThisFrame(Config.GP_Toggle);
+                    if (ControlInput.IsJustPressed(Config.GP_Toggle))
+                        HandleRadioWheelToggle();
                 }
 
                 if (lastRadioWasCustom && WheelVars.CurrentRadioWheel != null) {
@@ -332,7 +355,6 @@ namespace CustomRadioStations {
             HandleQueuedStationActions();
             HandleEnterExitVehicles();
             UpdateDashboardInfo();
-            HandleGamePause();
             GeneralEvents.Update();
         }
 
@@ -356,9 +378,18 @@ namespace CustomRadioStations {
         GTA.Control ControlVolumeDown;
         GTA.Control ControlNextWheel;
         GTA.Control ControlPrevWheel;
+        readonly HoldRepeatState volumeUpRepeat = new HoldRepeatState(
+            TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(100));
+        readonly HoldRepeatState volumeDownRepeat = new HoldRepeatState(
+            TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(100));
+        bool volumeSavePending;
+        DateTime volumeSaveAt;
+
         public void HandleRadioWheelExtraControls() {
+            bool volumeControlsActive = false;
             if (WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Visible) {
                 if (RadioStation.CurrentPlaying != null) {
+                    volumeControlsActive = true;
                     ControlSkipTrack = GTAFunction.UsingGamepad() ? Config.GP_Skip_Track : Config.KB_Skip_Track;
                     ControlVolumeUp = GTAFunction.UsingGamepad() ? Config.GP_Volume_Up : Config.KB_Volume_Up;
                     ControlVolumeDown = GTAFunction.UsingGamepad() ? Config.GP_Volume_Down : Config.KB_Volume_Down;
@@ -380,15 +411,32 @@ namespace CustomRadioStations {
 
                     if (ControlInput.IsJustPressed(ControlSkipTrack)) {
                         RadioStation.CurrentPlaying.PlayNextSong();
-                    } else if (ControlInput.IsJustPressed(ControlVolumeUp)) {
-                        SoundFile.StepVolume(0.05f, 2);
-                        Config.Save();
-                    } else if (ControlInput.IsJustPressed(ControlVolumeDown)) {
-                        SoundFile.StepVolume(-0.05f, 2);
-                        Config.Save();
+                    } else {
+                        DateTime now = DateTime.UtcNow;
+                        bool increase = volumeUpRepeat.ShouldFire(
+                            ControlInput.IsJustPressed(ControlVolumeUp),
+                            ControlInput.IsPressed(ControlVolumeUp), now);
+                        bool decrease = volumeDownRepeat.ShouldFire(
+                            ControlInput.IsJustPressed(ControlVolumeDown),
+                            ControlInput.IsPressed(ControlVolumeDown), now);
+
+                        // Opposing controls cancel each other when pressed together.
+                        if (increase != decrease)
+                            ChangeVolume(increase ? 0.05f : -0.05f, now);
                     }
                 }
             }
+
+            if (!volumeControlsActive) {
+                volumeUpRepeat.Reset();
+                volumeDownRepeat.Reset();
+            }
+
+            if (volumeSavePending && DateTime.UtcNow >= volumeSaveAt) {
+                Config.Save();
+                volumeSavePending = false;
+            }
+
             if (RadioStation.CurrentPlaying != null) {
                 ControlInput.DisableThisFrame(GTA.Control.VehicleNextRadio);
                 ControlInput.DisableThisFrame(GTA.Control.VehicleNextRadioTrack);
@@ -397,6 +445,12 @@ namespace CustomRadioStations {
 
                 RadioNativeFunctions.SetVanillaRadioOff();
             }
+        }
+
+        private void ChangeVolume(float step, DateTime now) {
+            SoundFile.StepVolume(step, 2);
+            volumeSavePending = true;
+            volumeSaveAt = now.AddMilliseconds(300);
         }
 
         public void HandleEnterExitVehicles() {
@@ -432,26 +486,36 @@ namespace CustomRadioStations {
             }*/
         }
 
-        bool doUnpauseNextFrame;
         public void HandleGamePause() {
-            if (ControlInput.IsJustPressed(GTAFunction.UsingGamepad() ? GTA.Control.FrontendPause : GTA.Control.FrontendPauseAlternate)) {
-                if (RadioStation.CurrentPlaying != null) {
-                    RadioStation.CurrentPlaying.CurrentSoundIsPaused = true;
-                    doUnpauseNextFrame = true;
-                    Wait(500);
-                }
-            }
+            bool pauseRequested = IsPauseControlJustPressed(GTA.Control.FrontendPause) ||
+                IsPauseControlJustPressed(GTA.Control.FrontendPauseAlternate);
+            bool pauseMenuActive = false;
+            try { pauseMenuActive = Game.IsPaused; } catch { }
+            AudioPauseCoordinator.SetGamePaused(pauseRequested || pauseMenuActive);
+        }
 
-            if (doUnpauseNextFrame) {
-                if (RadioStation.CurrentPlaying != null)
-                    RadioStation.CurrentPlaying.CurrentSoundIsPaused = false;
-                doUnpauseNextFrame = false;
+        private static bool IsPauseControlJustPressed(GTA.Control control) {
+            try {
+                return Function.Call<bool>(Hash.IS_CONTROL_JUST_PRESSED, 0, (int)control) ||
+                    Function.Call<bool>(Hash.IS_CONTROL_JUST_PRESSED, ControlInput.WheelInputGroup, (int)control) ||
+                    Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, ControlInput.WheelInputGroup, (int)control);
+            } catch {
+                return false;
             }
         }
 
         void HandleQueuedStationActions() {
             if (CanDoQueuedAction()) {
-                if (ActionQueued == ActionOptions.StopCurrent) {
+                if (ActionQueued == ActionOptions.StopAllRadio) {
+                    if (RadioStation.CurrentPlaying != null)
+                        RadioStation.CurrentPlaying.Stop();
+
+                    RadioStation.CurrentPlaying = null;
+                    RadioStation.NextQueuedStation = null;
+                    RadioNativeFunctions.SetVanillaRadioOff();
+                    RadioNativeFunctions.VanillaRadioFadedOut(false);
+                    lastRadioWasCustom = false;
+                } else if (ActionQueued == ActionOptions.StopCurrent) {
                     if (RadioStation.CurrentPlaying != null) {
                         // Turn off custom radio
                         RadioStation.CurrentPlaying.Stop();

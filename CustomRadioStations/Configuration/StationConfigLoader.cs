@@ -141,7 +141,7 @@ namespace CustomRadioStations {
                 string path = Path.GetFullPath(Path.IsPathRooted(normalized)
                     ? normalized
                     : Path.Combine(stationDirectory, normalized));
-                if (File.Exists(path)) return path;
+                if (StationIconVariantResolver.HasAnyVariant(path)) return path;
                 Logger.Log("WARNING: Icon for station '" + stationName + "' was not found: " + path);
             } catch (Exception ex) {
                 Logger.Log("WARNING: Invalid icon path for station '" + stationName + "': " + ex.Message);
