@@ -14,8 +14,7 @@ namespace CustomRadioStations {
         [JsonProperty("title")]
         public string Title { get; set; }
 
-        public Track() {
-        }
+        public Track() { }
 
         public Track(uint startTime, string artist, string title) {
             StartTime = startTime;
@@ -24,8 +23,8 @@ namespace CustomRadioStations {
         }
 
         public override string ToString() {
-            return "Artist: " + Artist + "\n" 
-                + "Title: " + Title + "\n" 
+            return "Artist: " + Artist + "\n"
+                + "Title: " + Title + "\n"
                 + "Ms: " + StartTime;
         }
     }

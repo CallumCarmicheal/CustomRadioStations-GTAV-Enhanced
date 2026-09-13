@@ -143,11 +143,4 @@
     <Copy SourceFiles="$(TargetDir)TagLibSharp.dll" DestinationFolder="$(MSBuildProjectDirectory)\dist\scripts" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\Assets\no-radio.png;$(MSBuildProjectDirectory)\Assets\selection-ring.png;$(MSBuildProjectDirectory)\Assets\station-background.png" DestinationFolder="$(MSBuildProjectDirectory)\dist\scripts\Custom Radio Stations" />
   </Target>
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
 </Project>

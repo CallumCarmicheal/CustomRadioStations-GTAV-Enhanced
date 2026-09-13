@@ -1,15 +1,15 @@
 ﻿// Copyright (c) 2010-2014 SharpDX - Alexandre Mutel
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -23,17 +23,17 @@
 // -----------------------------------------------------------------------------
 /*
 * Copyright (c) 2007-2011 SlimDX Group
-* 
+*
 * Permission is hereby granted, free of charge, to any person obtaining a copy
 * of this software and associated documentation files (the "Software"), to deal
 * in the Software without restriction, including without limitation the rights
 * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 * copies of the Software, and to permit persons to whom the Software is
 * furnished to do so, subject to the following conditions:
-* 
+*
 * The above copyright notice and this permission notice shall be included in
 * all copies or substantial portions of the Software.
-* 
+*
 * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -41,12 +41,12 @@
 * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 * THE SOFTWARE.
-* 
+*
 * https://tohjo.eu/dapkcuf/citizenmp/blob/c8710f0a3cf076c7f2a8fcbb22ed2902116f4f4c/client/clrcore/Math/MathUtil.cs
 */
-using GTA; // This is a reference that is needed! do not edit this
+using GTA;
 using GTA.Math;
-using GTA.Native; // This is a reference that is needed! do not edit this
+using GTA.Native;
 
 using System;
 
@@ -85,8 +85,8 @@ namespace GTAMath {
         /// <param name="b">The right value to compare.</param>
         /// <returns><c>true</c> if a almost equal to b, <c>false</c> otherwise</returns>
         /// <remarks>
-        /// The code is using the technique described by Bruce Dawson in 
-        /// <a href="http://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/">Comparing Floating point numbers 2012 edition</a>. 
+        /// The code is using the technique described by Bruce Dawson in
+        /// <a href="http://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/">Comparing Floating point numbers 2012 edition</a>.
         /// </remarks>
         [System.Security.SecuritySafeCritical]
         public static bool NearEqual(float a, float b) {
@@ -458,34 +458,6 @@ namespace GTAMath {
 
         public static Vector3 DirToRotTest(Vector3 Dir) {
             try {
-                /*
-				This is rotation to direction:
-				rotx = 0.2
-				retx = 0.2 *  0.0174532924 = 0.00349065848 //radians to degrees
-				Cos(0.2 *  0.0174532924) = 0.9999939076578741
-				absx = Abs(Cos(0.2 *  0.0174532924)) = 0.9999939076578741
-
-				rotz = 0.3
-				retz = 0.3 * 0.0174532924 = 0.00523598772 //radians to degrees
-
-				dirx = -Sin(retz) * absx =  -0.005235963795437085 * 0.9999939076578741 = -0.0052359318961542843713968514009985 //-0.0052359318961542846 if rounded
-				diry = Cos(retz) * absx = 0.9999862922476151 * 0.9999939076578741 = 0.999980199989
-				dirz = Sin(retx) = 0.0052359637954370846088922220789420743196847079456760
-
-				now this is direction to rotation:
-				dirz = Sin(retx) =  0.0052359637954370846088922220789420743196847079456760
-				num1 = retx = Asin(dirz)
-				rotx = num1 / 0.0174532924
-
-				num2 = absx = Abs(Cos(num1)
-				num3 = diry / num2 = Cos(retz)
-				num4 = retz = Acos(num3)
-				rotz = num4 / 0.0174532924
-
-				roty?
-
-
-				*/
 
                 float trueRotZ;
 
@@ -593,30 +565,6 @@ namespace GTAMath {
             yawpitch.Normalize();
 
             return yawpitch;
-            /* vect = new Vector3()
-             {
-                 X = vect.X.Denormalize() * -1f,
-                 Y = vect.Y.Denormalize() - 180f,
-                 Z = vect.Z.Denormalize() - 180f,
-             };
-
-             vect = vect.TransformVector(Deg2Rad);
-
-             float rollOver2 = vect.Z * 0.5f;
-             float sinRollOver2 = (float)Math.Sin((double)rollOver2);
-             float cosRollOver2 = (float)Math.Cos((double)rollOver2);
-             float pitchOver2 = vect.Y * 0.5f;
-             float sinPitchOver2 = (float)Math.Sin((double)pitchOver2);
-             float cosPitchOver2 = (float)Math.Cos((double)pitchOver2);
-             float yawOver2 = vect.X * 0.5f; // pitch
-             float sinYawOver2 = (float)Math.Sin((double)yawOver2);
-             float cosYawOver2 = (float)Math.Cos((double)yawOver2);
-             GTA.Math.Quaternion result = new GTA.Math.Quaternion();
-             result.X = cosYawOver2 * cosPitchOver2 * cosRollOver2 + sinYawOver2 * sinPitchOver2 * sinRollOver2;
-             result.Y = cosYawOver2 * cosPitchOver2 * sinRollOver2 - sinYawOver2 * sinPitchOver2 * cosRollOver2;
-             result.Z = cosYawOver2 * sinPitchOver2 * cosRollOver2 + sinYawOver2 * cosPitchOver2 * sinRollOver2;
-             result.W = sinYawOver2 * cosPitchOver2 * cosRollOver2 - cosYawOver2 * sinPitchOver2 * sinRollOver2;
-             return result;*/
         }
 
         public static Vector3 ToEuler(this GTA.Math.Quaternion q) {
@@ -627,8 +575,8 @@ namespace GTAMath {
             double sqy = q.Y * q.Y;
             double sqz = q.Z * q.Z;
 
-            pitchYawRoll.Y = (float)Math.Atan2(2f * q.X * q.W + 2f * q.Y * q.Z, 1 - 2f * (sqz + sqw));     // Yaw 
-            pitchYawRoll.X = (float)Math.Asin(2f * (q.X * q.Z - q.W * q.Y));                             // Pitch 
+            pitchYawRoll.Y = (float)Math.Atan2(2f * q.X * q.W + 2f * q.Y * q.Z, 1 - 2f * (sqz + sqw));     // Yaw
+            pitchYawRoll.X = (float)Math.Asin(2f * (q.X * q.Z - q.W * q.Y));                             // Pitch
             pitchYawRoll.Z = (float)Math.Atan2(2f * q.X * q.Y + 2f * q.Z * q.W, 1 - 2f * (sqy + sqz));
 
             pitchYawRoll = pitchYawRoll.TransformVector(RadianToDegree);
@@ -697,7 +645,7 @@ namespace GTAMath {
         }
 
         /// <summary>
-        /// Get's the rotation needed to face the specified direction. 
+        /// Get's the rotation needed to face the specified direction.
         /// Default plane normal is our up vector.
         /// </summary>
         /// <param name="direction">The direction to face.</param>
@@ -741,7 +689,7 @@ namespace GTAMath {
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="input"></param>
         /// <param name="increment"></param>
@@ -756,7 +704,7 @@ namespace GTAMath {
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="input"></param>
         /// <param name="decrement"></param>
@@ -800,7 +748,7 @@ namespace GTAMath {
         /// <param name="origin"></param>
         /// <returns></returns>
         public static Vector2 PointOnCircle(float radius, float angleInDegrees, Vector2 origin) {
-            // Convert from degrees to radians via multiplication by PI/180   
+            // Convert from degrees to radians via multiplication by PI/180
             double radians = angleInDegrees * Math.PI / 180F;
             float x = (float)(radius * Math.Cos(radians)) + origin.X;
             float y = (float)(radius * Math.Sin(radians)) + origin.Y;
@@ -857,8 +805,6 @@ namespace GTAMath {
         public float Z;
         public float W;
 
-        public Vector4() {
-
-        }
+        public Vector4() { }
     }
 }

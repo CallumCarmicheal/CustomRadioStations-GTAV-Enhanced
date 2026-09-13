@@ -9,26 +9,23 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Windows.Forms;
 
 namespace CustomRadioStations {
     public class NativeWheelOrganizerScript : Script {
-        NativeWheel currentWheel;
+        private NativeWheel currentWheel;
 
-        List<string> validStationNames;
+        private List<string> validStationNames;
 
-        int maxStationCount;
+        private int maxStationCount;
 
-        bool Event_JUST_OPENED_OnNextOpen = true;
+        private bool Event_JUST_OPENED_OnNextOpen = true;
 
-        bool loaded;
+        private bool loaded;
 
-        bool nativeWheelWasApplied;
+        private bool nativeWheelWasApplied;
 
         public NativeWheelOrganizerScript() {
             Tick += OnTick;
-            KeyDown += OnKeyDown;
-            KeyUp += OnKeyUp;
             Aborted += OnAbort;
 
             Interval = 10;
@@ -39,7 +36,7 @@ namespace CustomRadioStations {
                 UnhideAllStations();
         }
 
-        void UnhideAllStations() {
+        private void UnhideAllStations() {
             if (maxStationCount <= 0)
                 return;
             for (int i = 0; i < maxStationCount; i++) {
@@ -49,7 +46,7 @@ namespace CustomRadioStations {
             }
         }
 
-        void LogAllStations() {
+        private void LogAllStations() {
             Logger.Init(AppPaths.NativeStationsLogFile);
 
             Logger.Log("Game version: " + Game.FileVersion, AppPaths.NativeStationsLogFile);
@@ -75,7 +72,7 @@ namespace CustomRadioStations {
             Logger.Log("Use each station's 'Name' value in native-wheels.json. 'Proper name' is only for display purposes.", AppPaths.NativeStationsLogFile);
         }
 
-        void GetOrganizationLists() {
+        private void GetOrganizationLists() {
             if (!File.Exists(AppPaths.NativeWheelsFile) || validStationNames == null || validStationNames.Count == 0)
                 return;
 
@@ -115,11 +112,11 @@ namespace CustomRadioStations {
             }
         }
 
-        bool WheelListIsPopulated() {
+        private bool WheelListIsPopulated() {
             return NativeWheel.WheelList != null && NativeWheel.WheelList.Count > 0;
         }
 
-        void OnTick(object sender, EventArgs e) {
+        private void OnTick(object sender, EventArgs e) {
             if (GTAFunction.HasCheatStringJustBeenEntered("radio_reload")) {
                 if (nativeWheelWasApplied)
                     UnhideAllStations();
@@ -163,15 +160,14 @@ namespace CustomRadioStations {
                     return;
 
                 if (!Event_JUST_OPENED_OnNextOpen) {
-                    OnJustClosed();
                     Event_JUST_OPENED_OnNextOpen = true;
                 }
             }
         }
 
-        GTA.Control ControlNextWheel;
-        GTA.Control ControlPrevWheel;
-        void ShowHelpTexts() {
+        private GTA.Control ControlNextWheel;
+        private GTA.Control ControlPrevWheel;
+        private void ShowHelpTexts() {
             ControlNextWheel = GTAFunction.UsingGamepad() ? GTA.Control.VehicleAccelerate : GTA.Control.WeaponWheelPrev;
             ControlPrevWheel = GTAFunction.UsingGamepad() ? GTA.Control.VehicleBrake : GTA.Control.WeaponWheelNext;
 
@@ -201,12 +197,12 @@ namespace CustomRadioStations {
                 );
         }
 
-        void DisableNativeScrollRadioControls() {
+        private void DisableNativeScrollRadioControls() {
             ControlInput.DisableThisFrame(GTA.Control.VehicleNextRadio);
             ControlInput.DisableThisFrame(GTA.Control.VehiclePrevRadio);
         }
 
-        void ControlWheelChange() {
+        private void ControlWheelChange() {
             if (!WheelListIsPopulated() || currentWheel == null)
                 return;
 
@@ -219,7 +215,7 @@ namespace CustomRadioStations {
             }
         }
 
-        void UpdateWheelThisFrame() {
+        private void UpdateWheelThisFrame() {
             if (!WheelListIsPopulated() || currentWheel == null || validStationNames == null)
                 return;
 
@@ -245,23 +241,12 @@ namespace CustomRadioStations {
             }
         }
 
-        void OnJustOpened() {
-            // Legacy debug subtitle("Just Opened");
+        private void OnJustOpened() {
             UpdateWheelThisFrame();
-        }
-
-        void OnJustClosed() {
-            // Legacy debug subtitle("Just Closed");
-        }
-
-        void OnKeyDown(object sender, KeyEventArgs e) {
-        }
-
-        void OnKeyUp(object sender, KeyEventArgs e) {
         }
     }
 
-    class NativeWheel {
+    internal class NativeWheel {
         public string Name;
         public List<string> stationList = new List<string>();
 

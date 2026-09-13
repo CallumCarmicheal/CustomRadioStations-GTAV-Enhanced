@@ -1,14 +1,10 @@
-﻿using GTA; // This is a reference that is needed! do not edit this
+﻿using GTA;
 using GTA.Math;
-using GTA.Native; // This is a reference that is needed! do not edit this
+using GTA.Native;
 
 using GTAMath;
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace GTAVFunctions {
     public static class GTAFunction {
@@ -118,11 +114,6 @@ namespace GTAVFunctions {
 
         public static void TeleportToGround(Entity entity, Vector3 position, Action methodToRunWhileTeleporting) {
             bool groundFound = false;
-            //float[] groundCheckHeight = 
-            //    {
-            //        100.0f, 150.0f, 50.0f, 0.0f, 200.0f, 250.0f, 300.0f, 350.0f, 400.0f,
-            //        450.0f, 500.0f, 550.0f, 600.0f, 650.0f, 700.0f, 750.0f, 800.0f
-            //    };
             float[] groundCheckHeight =
                 {
                     800.0f, 750.0f, 700.0f, 650.0f, 600.0f, 550.0f, 500.0f,
@@ -142,26 +133,17 @@ namespace GTAVFunctions {
                 position.Z = 1000.0f;
             }
             entity.PositionNoOffset = position;
-            /*Teleport(entity, position, false);
-            Script.Wait(100);
-            RaycastResult ray = World.Raycast(position + Vector3.WorldUp * 200f, position + Vector3.WorldUp * -2f, IntersectFlags.Map);
-            if (ray.DidHit)
-            {
-                //entity.Position = ray.HitPosition;
-                Teleport(entity, ray.HitPosition, false);
-            }*/
         }
 
-        public static float GetGroundZ(Vector3 pos, out bool groundFound) //thanks Jitnaught!
-        {
+        // Based on Jitnaught's ground-Z helper.
+        public static float GetGroundZ(Vector3 pos, out bool groundFound) {
             OutputArgument outArg = new OutputArgument();
             groundFound = Function.Call<bool>(Hash.GET_GROUND_Z_FOR_3D_COORD, pos.X, pos.Y, pos.Z, outArg, false);
 
             return outArg.GetResult<float>();
         }
 
-        public static Vector3 GetGroundPosition(Vector3 pos) //thanks Jitnaught!
-        {
+        public static Vector3 GetGroundPosition(Vector3 pos) {
             bool temp;
             return new Vector3(pos.X, pos.Y, GetGroundZ(pos, out temp));
         }
@@ -169,8 +151,7 @@ namespace GTAVFunctions {
         public static bool PositionIsAboveGroundZHeight(Vector3 pos, float height) {
             bool groundIsFound;
             float gz = GetGroundZ(pos, out groundIsFound);
-            // Legacy debug subtitle(groundIsFound && pos.Z > gz + height ? "~r~" + (pos.Z - (gz + height)) : "false");
-            return groundIsFound && pos.Z > gz + height ? true : false;
+            return groundIsFound && pos.Z > gz + height;
         }
 
         public static bool IsWithinThisHeightAboveGround(this Vector3 position, float height) {
@@ -284,7 +265,6 @@ namespace GTAVFunctions {
         /// <param name="shape"></param>
         public static void DisplayHelpTextThisFrame(string text, bool foreverUntilNextHelpText = false, bool beep = true, int shape = -1) {
             Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_HELP, "CELL_EMAIL_BCON"); //BEGIN_TEXT_COMMAND_DISPLAY_HELP jamyfafi
-            //Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, text);
             AddLongString(text);
             Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_HELP, 0, foreverUntilNextHelpText, beep, shape); //END_TEXT_COMMAND_DISPLAY_HELP
         }

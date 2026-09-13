@@ -129,7 +129,7 @@ namespace CustomRadioStations {
         }
 
         /// <summary>
-        /// Get the number of stations enabled in the radio wheel. 
+        /// Get the number of stations enabled in the radio wheel.
         /// Call BEFORE using _LOCK_RADIO_STATION if you want to get the default number of stations in the wheel.
         /// </summary>
         /// <returns></returns>
@@ -190,7 +190,7 @@ namespace CustomRadioStations {
             try { Function.Call(Hash.SET_MOBILE_PHONE_RADIO_STATE, on); } catch { }
         }
 
-        static string _GET_LABEL_TEXT(string text) {
+        private static string _GET_LABEL_TEXT(string text) {
             if (string.IsNullOrEmpty(text))
                 return string.Empty;
             try {

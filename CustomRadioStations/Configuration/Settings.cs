@@ -20,12 +20,10 @@ using System.IO;
 
 namespace Settings {
     public sealed class ScriptSettings {
-        #region Fields
-        private string _fileName;
-        private Dictionary<string, ValueAndComment> _values = new Dictionary<string, ValueAndComment>();
-        #endregion
+        private readonly string _fileName;
+        private readonly Dictionary<string, ValueAndComment> _values = new Dictionary<string, ValueAndComment>();
 
-        struct ValueAndComment {
+        private struct ValueAndComment {
             public string SettingValue;
             public string Comment;
 
@@ -44,14 +42,14 @@ namespace Settings {
         /// </summary>
         /// <param name="filename">The filename to load the settings from.</param>
         public static ScriptSettings Load(string filename) {
-            var result = new ScriptSettings(filename);
+            ScriptSettings result = new ScriptSettings(filename);
 
             if (!File.Exists(filename)) {
                 return result;
             }
 
             string line = null;
-            string section = String.Empty;
+            string section = string.Empty;
             StreamReader reader = null;
 
             try {
@@ -76,22 +74,17 @@ namespace Settings {
                         string key = line.Substring(0, index).Trim();
                         string value = line.Substring(index + 1).Trim();
 
-                        if (value.Contains("//")) {
-                            value = value.Substring(0, value.IndexOf("//") - 1).TrimEnd();
-                        }
+                        int commentIndex = value.IndexOf("//", StringComparison.Ordinal);
+                        if (commentIndex >= 0)
+                            value = value.Substring(0, commentIndex).TrimEnd();
                         if (value.StartsWith("\"") && value.EndsWith("\"")) {
                             value = value.Substring(1, value.Length - 2);
                         }
 
-                        //string lookup = $"[{section}]{key}//0".ToUpper();
-                        string lookup = $"[{section}]{key}".ToUpper();
-
-                        if (result._values.ContainsKey(lookup)) {
-                            //for (int i = 1; result._values.ContainsKey(lookup = $"[{section}]{key}//{i}".ToUpper()); ++i)
-                            for (int i = 1; result._values.ContainsKey(lookup = $"[{section}]{key}".ToUpper()); ++i) {
-                                continue;
-                            }
-                        }
+                        string baseLookup = BuildLookup(section, key);
+                        string lookup = baseLookup;
+                        for (int duplicateIndex = 1; result._values.ContainsKey(lookup); duplicateIndex++)
+                            lookup = BuildLookup(section, key, duplicateIndex);
 
                         result._values.Add(lookup, new ValueAndComment(value, string.Empty));
                     }
@@ -108,14 +101,14 @@ namespace Settings {
         /// </summary>
         /// <returns><c>true</c> if the file saved successfully; otherwise, <c>false</c></returns>
         public bool Save() {
-            var result = new Dictionary<string, List<Tuple<string, ValueAndComment>>>();
+            Dictionary<string, List<Tuple<string, ValueAndComment>>> result = new Dictionary<string, List<Tuple<string, ValueAndComment>>>();
 
-            foreach (var data in _values) {
-                string key = data.Key.Substring(data.Key.IndexOf("]") + 1);
+            foreach (KeyValuePair<string, ValueAndComment> data in _values) {
+                string key = StripDuplicateSuffix(data.Key.Substring(data.Key.IndexOf("]") + 1));
                 string section = data.Key.Remove(data.Key.IndexOf("]")).Substring(1);
 
                 if (!result.ContainsKey(section)) {
-                    var values = new List<Tuple<string, ValueAndComment>>();
+                    List<Tuple<string, ValueAndComment>> values = new List<Tuple<string, ValueAndComment>>();
                     values.Add(new Tuple<string, ValueAndComment>(key, new ValueAndComment(data.Value.SettingValue, data.Value.Comment)));
 
                     result.Add(section, values);
@@ -133,10 +126,10 @@ namespace Settings {
             }
 
             try {
-                foreach (var section in result) {
+                foreach (KeyValuePair<string, List<Tuple<string, ValueAndComment>>> section in result) {
                     writer.WriteLine("[" + section.Key + "]");
 
-                    foreach (var value in section.Value) {
+                    foreach (Tuple<string, ValueAndComment> value in section.Value) {
                         if (!string.IsNullOrWhiteSpace(value.Item2.Comment))
                             writer.WriteLine(value.Item2.Comment);
 
@@ -162,8 +155,7 @@ namespace Settings {
         /// <param name="defaultvalue">The fall-back value if the key doesn't exist or casting to type <typeparamref name="T"/> fails.</param>
         /// <returns>The value at <see paramref="name"/> in <see paramref="section"/>.</returns>
         public T GetValue<T>(string section, string name, T defaultvalue) {
-            //string lookup = $"[{section}]{name}//0".ToUpper();
-            string lookup = $"[{section}]{name}".ToUpper();
+            string lookup = BuildLookup(section, name);
             ValueAndComment internalValueAndComment;
 
             if (!_values.TryGetValue(lookup, out internalValueAndComment)) {
@@ -171,7 +163,7 @@ namespace Settings {
             }
 
             try {
-                var type = typeof(T);
+                Type type = typeof(T);
 
                 if (type.IsEnum) {
                     return (T)(Enum.Parse(type, internalValueAndComment.SettingValue, true));
@@ -190,8 +182,7 @@ namespace Settings {
         /// <param name="value">The value to set the key to.</param>
         /// <param name="comment">A comment. Must start with ; or //</param>
         public void SetValue<T>(string section, string name, T value, string comment = "") {
-            //string lookup = $"[{section}]{name}//0".ToUpper();
-            string lookup = $"[{section}]{name}".ToUpper();
+            string lookup = BuildLookup(section, name);
             ValueAndComment internalValueAndComment = new ValueAndComment(value.ToString(), comment);
 
             if (!_values.ContainsKey(lookup)) {
@@ -207,23 +198,37 @@ namespace Settings {
         /// <param name="section">The section where the value is.</param>
         /// <param name="name">The name of the key the values are saved at.</param>
         public T[] GetAllValues<T>(string section, string name) {
-            var values = new List<T>();
-            ValueAndComment internalValueAndComment;
+            List<T> values = new List<T>();
+            for (int index = 0; ; index++) {
+                ValueAndComment internalValueAndComment;
+                if (!_values.TryGetValue(BuildLookup(section, name, index), out internalValueAndComment))
+                    break;
 
-            //for (int i = 0; _values.TryGetValue($"[{section}]{name}//{i}".ToUpper(), out internalValueAndComment); ++i)
-            for (int i = 0; _values.TryGetValue($"[{section}]{name}".ToUpper(), out internalValueAndComment); ++i) {
                 try {
-                    if (typeof(T).IsEnum) {
-                        values.Add((T)(Enum.Parse(typeof(T), internalValueAndComment.SettingValue, true)));
-                    } else {
-                        values.Add((T)(Convert.ChangeType(internalValueAndComment.SettingValue, typeof(T))));
-                    }
-                } catch {
-                    continue;
-                }
+                    if (typeof(T).IsEnum)
+                        values.Add((T)Enum.Parse(typeof(T), internalValueAndComment.SettingValue, true));
+                    else
+                        values.Add((T)Convert.ChangeType(internalValueAndComment.SettingValue, typeof(T)));
+                } catch { }
             }
 
             return values.ToArray();
+        }
+
+        private static string BuildLookup(string section, string name, int duplicateIndex = 0) {
+            string lookup = $"[{section}]{name}".ToUpperInvariant();
+            return duplicateIndex == 0 ? lookup : lookup + "//" + duplicateIndex;
+        }
+
+        private static string StripDuplicateSuffix(string key) {
+            int separatorIndex = key.LastIndexOf("//", StringComparison.Ordinal);
+            if (separatorIndex < 0)
+                return key;
+
+            int duplicateIndex;
+            return int.TryParse(key.Substring(separatorIndex + 2), out duplicateIndex)
+                ? key.Substring(0, separatorIndex)
+                : key;
         }
     }
 }

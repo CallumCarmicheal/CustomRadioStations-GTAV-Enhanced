@@ -1,43 +1,37 @@
 ﻿using GTA;
-using GTA.Native;
-
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CustomRadioStations {
-    static class UsedVehiclesManager {
-        public static List<UsedVehicle> Vehicles = new List<UsedVehicle>();
+    internal static class UsedVehiclesManager {
+        private static readonly List<UsedVehicle> vehicles = new List<UsedVehicle>();
 
         public static bool IsUsedVehicle(Vehicle vehicle) {
-            return vehicle != null && vehicle.Exists() && Vehicles.Exists(x => x.Handle == vehicle.Handle);
+            return vehicle != null && vehicle.Exists() && vehicles.Exists(x => x.Handle == vehicle.Handle);
         }
 
         private static UsedVehicle GetFromList(Vehicle vehicle) {
-            return Vehicles.FirstOrDefault(x => x.Handle == vehicle.Handle);
+            return vehicles.FirstOrDefault(x => x.Handle == vehicle.Handle);
         }
 
         private static void AddVehicle(Vehicle vehicle, StationWheelPair pair) {
             if (vehicle == null || !vehicle.Exists())
                 return;
 
-            if (Vehicles.Count >= 20)
-                Vehicles.RemoveAt(0);
+            if (vehicles.Count >= 20)
+                vehicles.RemoveAt(0);
 
-            Vehicles.Add(new UsedVehicle(vehicle, pair));
+            vehicles.Add(new UsedVehicle(vehicle, pair));
         }
 
         public static void UpdateVehicleWithStationInfo(Vehicle vehicle, StationWheelPair pair) {
             if (IsUsedVehicle(vehicle)) {
-                var item = GetFromList(vehicle);
+                UsedVehicle item = GetFromList(vehicle);
 
                 if (pair == null) {
-                    //Vehicles.Remove(item);
-                    item.radioInfo = null;
+                    item.RadioInfo = null;
                 } else {
-                    item.radioInfo = pair;
+                    item.RadioInfo = pair;
                 }
             } else {
                 AddVehicle(vehicle, pair);
@@ -46,13 +40,12 @@ namespace CustomRadioStations {
 
         public static void SetLastStationNow(Vehicle vehicle) {
             if (IsUsedVehicle(vehicle)) {
-                var item = GetFromList(vehicle);
+                UsedVehicle item = GetFromList(vehicle);
 
-                if (item.radioInfo == null)
+                if (item.RadioInfo == null)
                     return;
 
-                //StationWheelPair pair = StationWheelPair.List.Find(x => x.Station == item.radioInfo.Station);
-                StationWheelPair pair = StationWheelPair.List.Find(x => x.Equals(item.radioInfo));
+                StationWheelPair pair = StationWheelPair.List.Find(x => x.Equals(item.RadioInfo));
                 if (pair == null)
                     return;
 
@@ -63,21 +56,17 @@ namespace CustomRadioStations {
         }
 
         public static StationWheelPair GetVehicleStationInfo(Vehicle vehicle) {
-            if (IsUsedVehicle(vehicle)) {
-                return GetFromList(vehicle).radioInfo;
-            } else {
-                return null;
-            }
+            return IsUsedVehicle(vehicle) ? GetFromList(vehicle).RadioInfo : null;
         }
     }
 
-    class UsedVehicle {
-        public int Handle = 0;
-        public StationWheelPair radioInfo = null;
+    internal sealed class UsedVehicle {
+        internal int Handle { get; }
+        internal StationWheelPair RadioInfo { get; set; }
 
         public UsedVehicle(Vehicle vehicle, StationWheelPair pair) {
             Handle = vehicle.Handle;
-            radioInfo = pair;
+            RadioInfo = pair;
         }
     }
 }

@@ -6,8 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace CustomRadioStations {
     public sealed class ResolvedMediaSource {
-        public ResolvedMediaSource(string filePath) : this(filePath, null, null, null, null, null, null, false) {
-        }
+        public ResolvedMediaSource(string filePath) : this(filePath, null, null, null, null, null, null, false) { }
 
         public ResolvedMediaSource(string filePath, uint? startMs, uint? endMs, string artist, string title,
             IEnumerable<Track> subTracks = null, string cuePath = null, bool allowAnalysisTrimWithinBounds = false) {

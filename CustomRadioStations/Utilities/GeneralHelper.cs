@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 
 namespace CustomRadioStations {
-    static class GeneralHelper {
+    internal static class GeneralHelper {
         public static string GetShortcutTargetFile(string shortcutFilePath) {
             IWshRuntimeLibrary.IWshShell wsh = new IWshRuntimeLibrary.WshShell();
             object shortcut = wsh.CreateShortcut(shortcutFilePath);

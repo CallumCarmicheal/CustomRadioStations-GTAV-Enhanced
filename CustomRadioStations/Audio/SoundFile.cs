@@ -11,7 +11,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace CustomRadioStations {
-    class SoundFile {
+    internal class SoundFile {
         public MiniAudioSound Sound;
         private AudioClip Clip;
         private readonly ResolvedMediaSource mediaSource;
@@ -57,8 +57,7 @@ namespace CustomRadioStations {
         public bool HasTrackList;
         public List<Track> Tracklist { get; private set; }
 
-        public SoundFile(string filepath) : this(new ResolvedMediaSource(filepath)) {
-        }
+        public SoundFile(string filepath) : this(new ResolvedMediaSource(filepath)) { }
 
         public SoundFile(ResolvedMediaSource source) {
             if (source == null)
@@ -67,8 +66,7 @@ namespace CustomRadioStations {
             Initialize(source.FilePath, source.FilePath);
         }
 
-        public SoundFile(string filepath, string shortcutPath) : this(filepath, shortcutPath, new ResolvedMediaSource(shortcutPath)) {
-        }
+        public SoundFile(string filepath, string shortcutPath) : this(filepath, shortcutPath, new ResolvedMediaSource(shortcutPath)) { }
 
         public SoundFile(string filepath, string shortcutPath, ResolvedMediaSource source) {
             if (source == null)
@@ -305,7 +303,7 @@ namespace CustomRadioStations {
     /// Small compatibility handle that keeps the old SoundFile/RadioStation timing API
     /// expressed in milliseconds while MiniAudioEx exposes its cursor in PCM frames.
     /// </summary>
-    sealed class MiniAudioSound : IDisposable {
+    internal sealed class MiniAudioSound : IDisposable {
         private readonly MiniAudioEngine engine;
         private readonly AudioClip clip;
         private readonly AudioSource source;
@@ -450,7 +448,7 @@ namespace CustomRadioStations {
     /// Process-local MiniAudioEx owner. The public surface intentionally mirrors the
     /// tiny engine surface that the rest of CRS historically used.
     /// </summary>
-    sealed class MiniAudioEngine : IDisposable {
+    internal sealed class MiniAudioEngine : IDisposable {
         private const uint SampleRate = 48000;
         private const uint Channels = 2;
         private readonly List<MiniAudioSound> sounds = new List<MiniAudioSound>();
@@ -503,7 +501,7 @@ namespace CustomRadioStations {
         }
     }
 
-    static class MiniAudioNativeLoader {
+    internal static class MiniAudioNativeLoader {
         private const string NativeLibraryName = "miniaudioex.dll";
         private static IntPtr nativeModule;
 

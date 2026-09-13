@@ -9,10 +9,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 
 using Control = GTA.Control;
 using CustomSprite = GTA.UI.CustomSprite;
@@ -38,25 +34,24 @@ namespace SelectorWheel {
         public int CurrentCatIndex = 0;
         public List<WheelCategory> Categories = new List<WheelCategory>();
 
-        Vector2 _origin = new Vector2(0.5f, 0.4f);
-        Vector2 inputCoord = Vector2.Zero;
+        private Vector2 _origin = new Vector2(0.5f, 0.4f);
+        private Vector2 inputCoord = Vector2.Zero;
         public float Radius = 250;
-        //float inputAngle =  265f;
-        const float keyboardDeadzone = 0.03f;
+        private const float keyboardDeadzone = 0.03f;
 
-        bool UseTextures;
-        bool HaveTexturesBeenCached;
-        string TexturePath;
-        int TextureRefreshRate;
-        int xTextureOffset = 0;
-        int yTextureOffset = 0;
+        private bool UseTextures;
+        private bool HaveTexturesBeenCached;
+        private string TexturePath;
+        private int TextureRefreshRate;
+        private int xTextureOffset = 0;
+        private int yTextureOffset = 0;
 
-        string TextureCatBgPath = ""; // Background path
-        Color TextureCatBgColor;
-        double TextureCatBgSizeMultiple;
-        string TextureCatHlPath = ""; // Highlight path
-        Color TextureCatBgHighlightColor;
-        double TextureCatBgHighlightSizeMultiple;
+        private string TextureCatBgPath = ""; // Background path
+        private Color TextureCatBgColor;
+        private double TextureCatBgSizeMultiple;
+        private string TextureCatHlPath = ""; // Highlight path
+        private Color TextureCatBgHighlightColor;
+        private double TextureCatBgHighlightSizeMultiple;
 
         public Func<Color> HighlightColorProvider { private get; set; }
 
@@ -74,23 +69,23 @@ namespace SelectorWheel {
             }
         }
 
-        static bool transitionIn;
-        static bool transitionOut;
+        private static bool transitionIn;
+        private static bool transitionOut;
 
-        static float timeScale = 1f;
+        private static float timeScale = 1f;
 
         /// <summary>
         /// https://pastebin.com/kVPwMemE
         /// </summary>
         public static string TimecycleModifier = "hud_def_desat_Neutral";
         public static float TimecycleModifierStrength = 1.0f;
-        static float timecycleCurrentStrength = 0f;
+        private static float timecycleCurrentStrength = 0f;
 
-        const string AUDIO_SOUNDSET = "HUD_FRONTEND_DEFAULT_SOUNDSET";
-        const string AUDIO_SELECTSOUND = "HIGHLIGHT_NAV_UP_DOWN";
+        private const string AUDIO_SOUNDSET = "HUD_FRONTEND_DEFAULT_SOUNDSET";
+        private const string AUDIO_SELECTSOUND = "HIGHLIGHT_NAV_UP_DOWN";
 
-        const string QuickMutedAudioScene = "FADE_OUT_WORLD_250MS_SCENE";
-        const string MutedMuffledAudioScene = "DEATH_SCENE";
+        private const string QuickMutedAudioScene = "FADE_OUT_WORLD_250MS_SCENE";
+        private const string MutedMuffledAudioScene = "DEATH_SCENE";
 
         /// <summary>
         /// Called when user hovers over a new category.
@@ -202,8 +197,6 @@ namespace SelectorWheel {
         /// Must be placed in your Tick method.
         /// </summary>
         public void ProcessSelectorWheel() {
-            // Now needs to be called alongside ProcessSelectorWheel().
-            //ControlTransitions();
             if (!Visible)
                 return;
 
@@ -264,35 +257,10 @@ namespace SelectorWheel {
         }
 
         /// <summary>
-        /// Call this after you have already added some categories (max is 18 categories. Edit: Limit removed temporarily).
-        /// This function will check the amount of categories and situate them around the origin of the screen.
-        /// 
-        /// 
+        /// Call this after adding categories to position them around the wheel origin.
         /// </summary>
         public void CalculateCategoryPlacement() {
-            /* 0f is on the middle-right, and it moves clockwise.
-             * i.e. 270f is directly up.
-             * */
-
-            /*switch (Categories.Count)
-            {
-                case 1:
-                    {
-                        //Categories[0].position2D = PointOnCircleInPercentage(Radius, 270f, OriginInPixels);
-                        CalculateFromStartAngle(270f, 1);
-                        break;
-                    }
-                case 4:
-                    {
-                        CalculateFromStartAngle(225f, 4);
-                        break;
-                    }
-                default:
-                    {
-                        CalculateFromStartAngle(270f, Categories.Count);
-                        break;
-                    }
-            }*/
+            // 0 degrees is middle-right and angles increase clockwise; 270 degrees points up.
 
             int radioOffIndex = Categories.FindIndex(category => category.IsRadioOff);
             if (radioOffIndex >= 0) {
@@ -312,7 +280,7 @@ namespace SelectorWheel {
                     }
                     foreach (var item in cat.ItemList) {
                         if (File.Exists(Path.Combine(TexturePath, UIHelper.MakeValidFileName(item.Name) + ".png"))) {
-                            item.ItemTexture = new Texture(Path.Combine(TexturePath, UIHelper.MakeValidFileName(item.Name) + ".png"), Categories.IndexOf(cat) /*cat.ItemList.IndexOf(item)*/);
+                            item.ItemTexture = new Texture(Path.Combine(TexturePath, UIHelper.MakeValidFileName(item.Name) + ".png"), Categories.IndexOf(cat));
                             hasTexture = true;
                         }
                     }
@@ -324,7 +292,7 @@ namespace SelectorWheel {
                         cat.HighlightTexture = new Texture(TextureCatHlPath, Categories.IndexOf(cat) + (Categories.Count * 2));
                     }
 
-                    /*Load textures into cache*/
+                    // Load textures into cache.
                     if (cat.CategoryTexture != null) {
                         cat.CategoryTexture.LoadTexture();
                     }
@@ -345,7 +313,7 @@ namespace SelectorWheel {
             }
         }
 
-        void CalculateFromStartAngle(float startAngle, int numCategories) {
+        private void CalculateFromStartAngle(float startAngle, int numCategories) {
             if (numCategories < 1)
                 return;
             float angleOffset = 360 / numCategories;
@@ -376,12 +344,6 @@ namespace SelectorWheel {
             }
         }
 
-        private float AddXPixelDistanceToPercent(float percent, int pixelDist) {
-            return UIHelper.XPixelToPercentage
-                (
-                    (int)UIHelper.XPercentageToPixel(percent) + pixelDist
-                );
-        }
 
         private float AddYPixelDistanceToPercent(float percent, int pixelDist) {
             return UIHelper.YPixelToPercentage
@@ -398,7 +360,7 @@ namespace SelectorWheel {
         /// <param name="origin"></param>
         /// <returns></returns>
         private static Vector2 PointOnCircleInPercentage(float radius, float angleInDegrees, Vector2 origin) {
-            // Convert from degrees to radians via multiplication by PI/180   
+            // Convert from degrees to radians via multiplication by PI/180
             double radians = angleInDegrees * Math.PI / 180F;
             float x = (float)(radius * Math.Cos(radians)) + origin.X;
             float y = (float)(radius * Math.Sin(radians)) + origin.Y;
@@ -410,23 +372,6 @@ namespace SelectorWheel {
             return new Size((int)(size.Width * factor), (int)(size.Height * factor));
         }
 
-        private float CalculateRelativeValue(float input, float inputMin, float inputMax, float outputMin, float outputMax) {
-            //http://stackoverflow.com/questions/22083199/method-for-calculating-a-value-relative-to-min-max-values
-            //Making sure bounderies arent broken...
-            if (input > inputMax) {
-                input = inputMax;
-            }
-            if (input < inputMin) {
-                input = inputMin;
-            }
-            //Return value in relation to min og max
-
-            double position = (double)(input - inputMin) / (inputMax - inputMin);
-
-            float relativeValue = (float)(position * (outputMax - outputMin)) + outputMin;
-
-            return relativeValue;
-        }
 
         private static float IncreaseNum(float num, float increment, float max) {
             return num + increment > max ? max : num + increment;
@@ -437,8 +382,8 @@ namespace SelectorWheel {
         }
 
         /// <summary>
-        /// Default is an empty string. 
-        /// Setting a proper path will show the targetted .png image behind each category icon. 
+        /// Default is an empty string.
+        /// Setting a proper path will show the targetted .png image behind each category icon.
         /// Call before <see cref="CalculateCategoryPlacement"/>
         /// </summary>
         /// <param name="pathBg"></param>
@@ -460,8 +405,6 @@ namespace SelectorWheel {
         /// </summary>
         /// <param name="category"></param>
         public void AddCategory(WheelCategory category) {
-            //if (Categories.Count == 18) return; //Don't allow more than 18 categories.
-
             Categories.Add(category);
         }
 
@@ -485,12 +428,6 @@ namespace SelectorWheel {
                 return Categories[CurrentCatIndex];
             }
             set {
-                /*if (Categories.Exists(x => x.Name.Equals(value.Name)
-                    && x.Description.Equals(value.Description)))
-                {
-                    CurrentCatIndex = Categories.FindIndex(x => x.Name.Equals(value.Name)
-                        && x.Description.Equals(value.Description));
-                }*/
 
                 if (Categories.Exists(x => x.Equals(value))) {
                     CurrentCatIndex = Categories.FindIndex(x => x.Equals(value));
@@ -503,7 +440,7 @@ namespace SelectorWheel {
         public Font FontSelectedItem = Font.ChaletComprimeCologne;
         public Font FontCategoryItemCount = Font.ChaletComprimeCologne;
         public Font FontDescription = Font.ChaletLondon;
-        void ControlCategorySelection() {
+        private void ControlCategorySelection() {
             Color selectedHighlightColor = TextureCatBgHighlightColor;
             if (HighlightColorProvider != null) {
                 try { selectedHighlightColor = HighlightColorProvider(); } catch { }
@@ -594,7 +531,6 @@ namespace SelectorWheel {
                 -(topPadding / 2f));
         }
 
-        DateTime inputTimer = DateTime.Now;
         private void CategorySelectionControls() {
             float horizontal = WheelLeftRightValue();
             float vertical = WheelUpDownValue();
@@ -609,9 +545,6 @@ namespace SelectorWheel {
                 inputCoord = PointOnCircleInPercentage(Radius, activeInputAngle.Value, OriginInPixels);
             }
 
-            /*UIHelper.DrawRectangle(inputCoord.X, inputCoord.Y, 0.05f, 0.05f, 0, 235, 255, 255);
-            UIScreen.ShowSubtitle(Math.Round(new Vector2(WheelLeftRightValue(), WheelUpDownValue()).Length(), 2).ToString());*/
-
             WheelCategory closestCategory = ClosestCategoryToInputCoord();
             int inputIndex = closestCategory != null ? Categories.IndexOf(closestCategory) : CurrentCatIndex;
 
@@ -624,214 +557,29 @@ namespace SelectorWheel {
                 }
             }
 
-            //int nextClosest = NextClosestIndexWithWrap(Categories, CurrentCatIndex, inputIndex);
-            if (inputIndex != CurrentCatIndex /*&& nextClosest != CurrentCatIndex*/) {
-                //if (Game.LastInputMethod == InputMethod.GamePad)
-                //{
-                //// Stop cat bg and highligh draw
+            if (inputIndex != CurrentCatIndex) {
+                // Stop the current category highlight texture before switching.
                 if (!string.IsNullOrWhiteSpace(TextureCatHlPath)) {
-                    //Categories[CurrentCatIndex].BackgroundTexture.StopDraw();
-                    var temp = Categories[CurrentCatIndex];
+                    WheelCategory temp = Categories[CurrentCatIndex];
                     if (temp.HighlightTexture != null)
                         temp.HighlightTexture.StopDraw();
                 }
                 CurrentCatIndex = inputIndex;
-                //}
-                //else
-                //{
-                //    CurrentCatIndex = nextClosest;
-                //}
-
                 CategoryChange(SelectedCategory, SelectedCategory.SelectedItem, false);
                 ItemChange(SelectedCategory, SelectedCategory.SelectedItem, false, GoTo.Same);
                 Audio.PlaySoundFrontendAndForget(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
             }
-
-            /*if (Game.LastInputMethod == InputMethod.GamePad)
-            {
-                if (inputIndex != CurrentCatIndex)
-                {
-                    CurrentCatIndex = inputIndex;
-
-                    CategoryChange(SelectedCategory, SelectedCategory.SelectedItem, false);
-                    ItemChange(SelectedCategory, SelectedCategory.SelectedItem, false);
-                    Audio.PlaySoundFrontendAndForget(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
-                }
-            }
-            else
-            {
-                UIScreen.ShowSubtitle("UpDown: " + WheelUpDownValue() + "\nLeftRight: " + WheelLeftRightValue());
-                if (inputTimer < DateTime.Now)
-                {
-                    WheelDirection dir = GetMouseDirection();
-
-                    if (dir == WheelDirection.NotMoving) return;
-
-                    if (CurrentCatIndex == inputIndex) return;
-
-                    bool onLeft = IndexIsWithinCategoryPercentRange(CurrentCatIndex, 0.5f, 1f);
-                    bool onRight = IndexIsWithinCategoryPercentRange(CurrentCatIndex, 0f, 0.5f);
-                    bool onTop = IndexIsWithinCategoryPercentRange(CurrentCatIndex, 0f, 0.25f) || IndexIsWithinCategoryPercentRange(CurrentCatIndex, 0.75f, 1f);
-                    bool onBottom = IndexIsWithinCategoryPercentRange(CurrentCatIndex, 0.25f, 0.75f);
-                    int tempIndex = 0;
-                    bool changeCatIndex = false;
-                    if (dir == WheelDirection.MovingDown)
-                    {
-                        if (onLeft)
-                        {
-                            tempIndex = GetDecreasedIndex();
-                            if (IndexIsWithinCategoryPercentRange(tempIndex, 0.5f, 1f))
-                                changeCatIndex = true;
-                        }
-                        else if (onRight)
-                        {
-                            tempIndex = GetIncreasedIndex();
-                            if (IndexIsWithinCategoryPercentRange(tempIndex, 0f, 0.5f))
-                                changeCatIndex = true;
-                        }
-                    }
-                    else if (dir == WheelDirection.MovingUp)
-                    {
-                        if (onLeft)
-                        {
-                            tempIndex = GetIncreasedIndex();
-                            if (IndexIsWithinCategoryPercentRange(tempIndex, 0.5f, 1f))
-                                changeCatIndex = true;
-                        }
-                        else if (onRight)
-                        {
-                            tempIndex = GetDecreasedIndex();
-                            if (IndexIsWithinCategoryPercentRange(tempIndex, 0f, 0.5f))
-                                changeCatIndex = true;
-                        }
-                    }
-                    else if (dir == WheelDirection.MovingRight)
-                    {
-                        if (onTop)
-                        {
-                            tempIndex = GetIncreasedIndex();
-                            if (IndexIsWithinCategoryPercentRange(tempIndex, 0f, 0.25f) || IndexIsWithinCategoryPercentRange(tempIndex, 0.75f, 1f))
-                                changeCatIndex = true;
-                        }
-                        else if (onBottom)
-                        {
-                            tempIndex = GetDecreasedIndex();
-                            if (IndexIsWithinCategoryPercentRange(tempIndex, 0.25f, 0.75f))
-                                changeCatIndex = true;
-                        }
-                    }
-                    else if (dir == WheelDirection.MovingLeft)
-                    {
-                        if (onTop)
-                        {
-                            tempIndex = GetDecreasedIndex();
-                            if (IndexIsWithinCategoryPercentRange(tempIndex, 0f, 0.25f) || IndexIsWithinCategoryPercentRange(tempIndex, 0.75f, 1f))
-                                changeCatIndex = true;
-                        }
-                        else if (onBottom)
-                        {
-                            tempIndex = GetIncreasedIndex();
-                            if (IndexIsWithinCategoryPercentRange(tempIndex, 0.25f, 0.75f))
-                                changeCatIndex = true;
-                        }
-                    }
-
-                    //inputTimer = DateTime.Now.AddMilliseconds(
-                    //Math.Min(400, (int)(20 / Math.Abs(WheelUpDownValue())))
-                    //);
-                    inputTimer = DateTime.Now.AddMilliseconds(50);
-
-                    if (!changeCatIndex) return;
-                    CurrentCatIndex = tempIndex;
-                    CategoryChange(SelectedCategory, SelectedCategory.SelectedItem, false);
-                    ItemChange(SelectedCategory, SelectedCategory.SelectedItem, false);
-                    Audio.PlaySoundFrontendAndForget(AUDIO_SELECTSOUND, AUDIO_SOUNDSET);
-                }
-            }*/
         }
 
-        public static int NextClosestIndexWithWrap<T>(List<T> list, int currIndex, int toIndex) {
-            if (currIndex == toIndex)
-                return currIndex;
-            if (currIndex >= list.Count || toIndex >= list.Count)
-                return 0;
-            int dist = toIndex > currIndex ? toIndex - currIndex : currIndex - toIndex;
-            int distThroughZero = toIndex < currIndex ? list.Count - currIndex + toIndex : list.Count - toIndex + currIndex;
-            if (distThroughZero < dist) {
-                if (toIndex < currIndex) {
-                    return currIndex == list.Count - 1 ? 0 : Math.Min(currIndex + 1, list.Count);
-                } else {
-                    return currIndex == 0 ? list.Count - 1 : Math.Max(0, currIndex - 1);
-                }
-            } else {
-                if (toIndex < currIndex) {
-                    return currIndex - 1;
-                } else {
-                    return currIndex + 1;
-                }
-            }
-        }
-
-        enum WheelDirection {
-            MovingUp,
-            MovingDown,
-            MovingLeft,
-            MovingRight,
-            NotMoving
-        }
-
-        private WheelDirection GetMouseDirection() {
-            var ud = WheelUpDownValue();
-            var lr = WheelLeftRightValue();
-
-            if (Math.Abs(ud) < keyboardDeadzone && Math.Abs(lr) < keyboardDeadzone)
-                return WheelDirection.NotMoving;
-
-            if (Math.Abs(ud) > Math.Abs(lr)) {
-                return ud > 0f ? WheelDirection.MovingDown : WheelDirection.MovingUp;
-            } else {
-                return lr > 0f ? WheelDirection.MovingRight : WheelDirection.MovingLeft;
-            }
-        }
-
-        private int GetIncreasedIndex(bool wrap = true) {
-            int temp = CurrentCatIndex;
-            if (temp < Categories.Count - 1) {
-                temp++;
-            } else {
-                if (wrap)
-                    temp = 0;
-            }
-            return temp;
-        }
-
-        private int GetDecreasedIndex(bool wrap = true) {
-            int temp = CurrentCatIndex;
-            if (temp > 0) {
-                temp--;
-            } else {
-                if (wrap)
-                    temp = Categories.Count - 1;
-            }
-            return temp;
-        }
-
-        private bool IndexIsWithinCategoryPercentRange(int index, float startInclusive, float endInclusive) {
-            float percentage = index / (float)Categories.Count;
-            if (endInclusive == 1f && index == 0)
-                return true;
-            return percentage >= startInclusive && percentage <= endInclusive ? true : false;
-        }
-
-        float InputToAngle(float horizontal, float vertical) {
-            var angle = Math.Atan2(vertical, horizontal);
+        private float InputToAngle(float horizontal, float vertical) {
+            double angle = Math.Atan2(vertical, horizontal);
             if (angle < 0) {
                 angle += Math.PI * 2;
             }
             return (float)(angle * (180 / Math.PI));
         }
 
-        float CategoryAngle(int index) {
+        private float CategoryAngle(int index) {
             if (index < 0 || index >= Categories.Count)
                 return 0f;
 
@@ -842,16 +590,15 @@ namespace SelectorWheel {
             return InputToAngle(horizontal, vertical);
         }
 
-        static double GetDistance(Vector2 point1, Vector2 point2) {
-            //pythagorean theorem c^2 = a^2 + b^2
-            //thus c = square root(a^2 + b^2)
+        private static double GetDistance(Vector2 point1, Vector2 point2) {
+            // Pythagorean theorem: c = sqrt(a² + b²).
             double a = (double)(point2.X - point1.X);
             double b = (double)(point2.Y - point1.Y);
 
             return Math.Sqrt(a * a + b * b);
         }
 
-        WheelCategory ClosestCategoryToInputCoord() {
+        private WheelCategory ClosestCategoryToInputCoord() {
             return Categories.OrderBy(c => GetDistance(c.position2D, inputCoord)).First();
         }
 
@@ -862,7 +609,7 @@ namespace SelectorWheel {
             ItemTrigger(SelectedCategory, SelectedCategory.SelectedItem);
         }
 
-        void ControlItemSelection() {
+        private void ControlItemSelection() {
             if (Control_GoToNextItemInCategory_Pressed()) {
                 if (SelectedCategory.SelectedItem.ItemTexture != null && SelectedCategory.ItemCount() > 1) {
                     SelectedCategory.SelectedItem.ItemTexture.StopDraw();
@@ -880,58 +627,30 @@ namespace SelectorWheel {
             }
         }
 
-        List<Control> ControlsToEnable = new List<Control>
-            {
-                /*Control.FrontendAccept,
-                Control.FrontendAxisX,
-                Control.FrontendAxisY,
-                Control.FrontendDown,
-                Control.FrontendUp,
-                Control.FrontendLeft,
-                Control.FrontendRight,
-                Control.FrontendCancel,
-                Control.FrontendSelect,
-                Control.CharacterWheel,
-                Control.CursorScrollDown,
-                Control.CursorScrollUp,
-                Control.CursorX,
-                Control.CursorY,*/
-                Control.MoveUpDown,
-                Control.MoveLeftRight,
-                Control.Sprint,
-                Control.Jump,
-                Control.Enter,
-                Control.VehicleExit,
-                Control.VehicleAccelerate,
-                Control.VehicleBrake,
-                Control.VehicleMoveLeftRight,
-                Control.VehicleFlyYawLeft,
-                Control.FlyLeftRight,
-                Control.FlyUpDown,
-                Control.VehicleFlyYawRight,
-                Control.VehicleHandbrake,
-                Control.WeaponWheelLeftRight,
-                Control.WeaponWheelUpDown,
-                //Control.VehicleCinematicLeftRight,
-                //Control.VehicleCinematicUpDown
-                /*Control.VehicleRadioWheel,
-                Control.VehicleRoof,
-                Control.VehicleHeadlight,
-                Control.VehicleCinCam,
-                Control.Phone,
-                Control.MeleeAttack1,
-                Control.MeleeAttack2,
-                Control.Attack,
-                Control.Attack2
-                Control.LookUpDown,
-                Control.LookLeftRight*/
-            };
+        private readonly List<Control> ControlsToEnable = new List<Control> {
+            Control.MoveUpDown,
+            Control.MoveLeftRight,
+            Control.Sprint,
+            Control.Jump,
+            Control.Enter,
+            Control.VehicleExit,
+            Control.VehicleAccelerate,
+            Control.VehicleBrake,
+            Control.VehicleMoveLeftRight,
+            Control.VehicleFlyYawLeft,
+            Control.FlyLeftRight,
+            Control.FlyUpDown,
+            Control.VehicleFlyYawRight,
+            Control.VehicleHandbrake,
+            Control.WeaponWheelLeftRight,
+            Control.WeaponWheelUpDown
+        };
 
         protected void DisableControls() {
             ControlInput.DisableAllThisFrame();
 
-            foreach (var con in ControlsToEnable) {
-                ControlInput.EnableThisFrame(con);
+            foreach (Control control in ControlsToEnable) {
+                ControlInput.EnableThisFrame(control);
             }
         }
 
@@ -940,7 +659,7 @@ namespace SelectorWheel {
         /// Left: negative 1
         /// </summary>
         /// <returns>normalized value of left/right mouse/stick movement.</returns>
-        float WheelLeftRightValue() {
+        private float WheelLeftRightValue() {
             return ControlInput.GetValueNormalized(Control.WeaponWheelLeftRight);
         }
 
@@ -949,16 +668,16 @@ namespace SelectorWheel {
         /// Up: negative 1
         /// </summary>
         /// <returns>normalized value of up/down mouse/stick movement.</returns>
-        float WheelUpDownValue() {
+        private float WheelUpDownValue() {
             return ControlInput.GetValueNormalized(Control.WeaponWheelUpDown);
         }
 
-        bool Control_GoToNextItemInCategory_Pressed() {
+        private bool Control_GoToNextItemInCategory_Pressed() {
             return ControlInput.IsJustPressed(Game.LastInputMethod == InputMethod.MouseAndKeyboard ?
                 Control.WeaponWheelPrev : Control.VehicleAccelerate);
         }
 
-        bool Control_GoToPreviousItemInCategory_Pressed() {
+        private bool Control_GoToPreviousItemInCategory_Pressed() {
             return ControlInput.IsJustPressed(Game.LastInputMethod == InputMethod.MouseAndKeyboard ?
                 Control.WeaponWheelNext : Control.VehicleBrake);
         }
@@ -1248,7 +967,6 @@ namespace SelectorWheel {
                 Function.Call(Hash.SET_TEXT_WRAP, startWrap, endWrap);
             }
 
-            //Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, Message);
             AddLongString(Message);
 
             Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, XPos, YPos); //AKA END_TEXT_COMMAND_DISPLAY_TEXT
@@ -1276,7 +994,6 @@ namespace SelectorWheel {
                 float fontHeight = MeasureFontHeightNoConvert(FontSize, FontType);
                 float rectangleWidth = (endWrap - startWrap) + rectWidthOffset;
                 float baseYPos = YPos + (FontSize / rectYPosDivisor);
-                //int numLines = (int)Math.Ceiling(adjWidth / ((endWrap - startWrap) * 0.98f));
                 int numLines = GetStringLineCount(Message, FontSize, FontType, startWrap, endWrap, XPos, YPos);
                 for (int i = 0; i < numLines; i++) {
                     float adjustedYPos = i == 0 ? baseYPos - rectHeightOffset / 2
@@ -1308,8 +1025,6 @@ namespace SelectorWheel {
         }
 
         public static float MeasureStringWidth(string str, Font font, float fontsize) {
-            //int screenw = 2560;// UIScreen.Resolution.Width;
-            //int screenh = 1440;// UIScreen.Resolution.Height;
             const float height = 1080f;
             float ratio = (float)UIScreen.Resolution.Width / UIScreen.Resolution.Height;
             float width = height * ratio;
@@ -1321,7 +1036,7 @@ namespace SelectorWheel {
             AddLongString(str);
             Function.Call(Hash.SET_TEXT_FONT, (int)font);
             Function.Call(Hash.SET_TEXT_SCALE, fontsize, fontsize);
-            return Function.Call<float>((Hash)0x85F061DA64ED2F67, true); //_END_TEXT_COMMAND_GET_WIDTH //Function.Call<float>((Hash)0x85F061DA64ED2F67, (int)font) * fontsize; //_END_TEXT_COMMAND_GET_WIDTH
+            return Function.Call<float>((Hash)0x85F061DA64ED2F67, true); //_END_TEXT_COMMAND_GET_WIDTH
         }
 
         public static float MeasureFontHeight(float fontSize, Font font) {

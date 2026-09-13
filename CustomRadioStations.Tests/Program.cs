@@ -76,7 +76,7 @@ namespace CustomRadioStations {
             IReadOnlyList<string> relativeGlob = resolver.Resolve(new[] { "Albums/*.mp3" }, tracks, "track");
             if (relativeGlob.Count != 1)
                 Console.WriteLine("Glob diagnostic: " + MediaSourceResolver.GlobToRegex(Path.Combine(tracks, "Albums", "*.mp3")) + " | " + string.Join(" | ", warnings));
-            
+
             Assert(relativeGlob.Count == 1, "relative explicit glob");
             Assert(resolver.Resolve(new[] { tracks }, tracks, "track").Count == 4, "absolute directory");
             Assert(resolver.Resolve(new[] { Path.Combine(tracks, "song.mp3") }, tracks, "track").Count == 1,
@@ -263,17 +263,29 @@ namespace CustomRadioStations {
 
         private static void TestLegacyIniParser() {
             string path = Path.Combine(root, "station.ini");
-            File.WriteAllText(path, "[GENERAL]" + Environment.NewLine + "DESCRIPTION = Existing station");
+            File.WriteAllText(path,
+                "[GENERAL]" + Environment.NewLine +
+                "DESCRIPTION = Existing station" + Environment.NewLine +
+                "TRACK = First.mp3" + Environment.NewLine +
+                "TRACK = Second.mp3");
             Settings.ScriptSettings legacy = Settings.ScriptSettings.Load(path);
-            
+
             Assert(legacy.GetValue("GENERAL", "DESCRIPTION", string.Empty) == "Existing station",
                 "legacy station INI remains readable");
+            string[] tracks = legacy.GetAllValues<string>("GENERAL", "TRACK");
+            Assert(tracks.Length == 2 && tracks[0] == "First.mp3" && tracks[1] == "Second.mp3",
+                "legacy duplicate INI keys remain ordered and finite");
+            Assert(legacy.Save(), "legacy INI with duplicate keys saves successfully");
+            legacy = Settings.ScriptSettings.Load(path);
+            tracks = legacy.GetAllValues<string>("GENERAL", "TRACK");
+            Assert(tracks.Length == 2 && tracks[1] == "Second.mp3",
+                "legacy duplicate INI keys survive save/reload");
         }
 
         private static void TestJsonTracklistModel() {
             TracklistConfig config = JsonConvert.DeserializeObject<TracklistConfig>(
                 "{\"tracks\":[{\"startTimeMs\":185000,\"artist\":\"Artist\",\"title\":\"Song\"}]}");
-            
+
             Assert(config.Tracks.Count == 1 && config.Tracks[0].StartTime == 185000 &&
                 config.Tracks[0].Artist == "Artist" && config.Tracks[0].Title == "Song",
                 "JSON tracklist metadata is strongly typed");

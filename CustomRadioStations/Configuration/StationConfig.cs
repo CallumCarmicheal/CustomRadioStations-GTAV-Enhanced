@@ -41,8 +41,7 @@ namespace CustomRadioStations {
 
     [JsonConverter(typeof(MediaSourceConfigConverter))]
     public sealed class MediaSourceConfig {
-        public MediaSourceConfig() {
-        }
+        public MediaSourceConfig() { }
 
         public MediaSourceConfig(string file) {
             File = file;
