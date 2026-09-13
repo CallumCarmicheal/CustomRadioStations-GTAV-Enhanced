@@ -204,6 +204,28 @@ namespace CustomRadioStations {
                 "fresh station analysis attaches to resolved media");
             Assert(definition.Tracks[0].Analysis.AudioStartMs == 500u && definition.Tracks[0].Analysis.AudioEndMs == 9500u,
                 "analysis audio bounds are retained");
+            Assert(!definition.Tracks[0].Analysis.SourceStartMs.HasValue && !definition.Tracks[0].Analysis.SourceEndMs.HasValue,
+                "whole-file analysis does not emit logical segment bounds");
+
+            var segmented = new TrackAnalysis {
+                FileSize = info.Length,
+                LastWriteUtc = info.LastWriteTimeUtc,
+                DurationMs = 10000u,
+                SourceStartMs = 1000u,
+                SourceEndMs = 8000u,
+                AudioStartMs = 1100u,
+                AudioEndMs = 7900u,
+                IntegratedLufs = -17d,
+                TruePeakDb = -2d,
+                GainDb = 1d,
+                AnalyzedUtc = DateTime.UtcNow
+            };
+            string segmentedJson = JsonConvert.SerializeObject(segmented);
+            Assert(segmentedJson.Contains("\"sourceStartMs\":1000") && segmentedJson.Contains("\"sourceEndMs\":8000"),
+                "segmented analysis serializes the absolute source region separately from audible bounds");
+            string wholeJson = JsonConvert.SerializeObject(new TrackAnalysis { AudioStartMs = 0u, AudioEndMs = 10000u });
+            Assert(!wholeJson.Contains("sourceStartMs") && !wholeJson.Contains("sourceEndMs"),
+                "whole-file analysis omits optional source segment fields");
 
             using (FileStream stream = new FileStream(file, FileMode.Append, FileAccess.Write))
                 stream.WriteByte(2);

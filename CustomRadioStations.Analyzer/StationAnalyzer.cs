@@ -78,6 +78,7 @@ namespace CustomRadioStations.Analyzer {
                 TrackAnalysis existing;
                 bool fresh = sidecar.Tracks.TryGetValue(source.AnalysisKey, out existing) && existing != null && existing.IsCurrentFor(path);
                 if (fresh && !options.Force && !settingsRequireRescan) {
+                    SetSourceBounds(existing, source, segmentStart, segmentEnd);
                     existing.GainDb = LoudnessNormalization.CalculateGainDb(existing.IntegratedLufs, existing.TruePeakDb, options.Settings);
                     if (!options.Settings.TrimSilence) {
                         existing.AudioStartMs = segmentStart;
@@ -151,6 +152,8 @@ namespace CustomRadioStations.Analyzer {
                         FileSize = info.Length,
                         LastWriteUtc = info.LastWriteTimeUtc,
                         DurationMs = job.PhysicalDurationMs,
+                        SourceStartMs = job.Source.IsSegment ? (uint?)job.SegmentStartMs : null,
+                        SourceEndMs = job.Source.IsSegment ? (uint?)job.SegmentEndMs : null,
                         AudioStartMs = detectedStart,
                         AudioEndMs = detectedEnd,
                         IntegratedLufs = result.IntegratedLufs,
@@ -232,6 +235,13 @@ namespace CustomRadioStations.Analyzer {
                 start = 0u;
                 end = physicalDuration;
             }
+        }
+
+        private static void SetSourceBounds(TrackAnalysis analysis, ResolvedMediaSource source, uint segmentStartMs, uint segmentEndMs) {
+            if (analysis == null)
+                return;
+            analysis.SourceStartMs = source != null && source.IsSegment ? (uint?)segmentStartMs : null;
+            analysis.SourceEndMs = source != null && source.IsSegment ? (uint?)segmentEndMs : null;
         }
 
         private static uint SafeAdd(uint left, uint right) {

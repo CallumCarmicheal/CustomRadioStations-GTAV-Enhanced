@@ -64,6 +64,12 @@ namespace CustomRadioStations {
         [JsonProperty("durationMs")]
         public uint DurationMs { get; set; }
 
+        [JsonProperty("sourceStartMs", NullValueHandling = NullValueHandling.Ignore)]
+        public uint? SourceStartMs { get; set; }
+
+        [JsonProperty("sourceEndMs", NullValueHandling = NullValueHandling.Ignore)]
+        public uint? SourceEndMs { get; set; }
+
         [JsonProperty("audioStartMs")]
         public uint AudioStartMs { get; set; }
 
