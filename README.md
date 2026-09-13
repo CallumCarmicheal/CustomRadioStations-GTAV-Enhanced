@@ -204,3 +204,67 @@ The two files are never merged, and malformed `station.json` does not silently f
 - `Utilities` — shared helpers
 
 The port retains the process-lifetime reload marker, native-wheel fail-open behavior, station continuity fixes, and startup/shutdown hardening from v0.5.
+
+## Audio analysis sidecar
+
+`station.json` accepts both the existing string form and an object form for tracks/commercials. Existing stations remain valid.
+
+```json
+"tracks": [
+  "C:\\Music\\normal.mp3",
+  {
+    "file": "C:\\Music\\long-mix.mp3",
+    "start": "20:00",
+    "end": "42:15.500",
+    "artist": "Custom Artist",
+    "title": "Custom Title"
+  }
+]
+```
+
+`start` and `end` accept `MM:SS[.fff]` or `HH:MM:SS[.fff]`. Manual bounds override analyzer-detected silence bounds. Manual `artist`/`title` values override the corresponding ID3 fields; the existing filename display remains the final fallback.
+
+### CUE sheets
+
+CUE sheets can be expanded into independent radio songs or kept as one continuous recording with timed sub-tracks. CUE `INDEX 01` values use the standard `MM:SS:FF` format where `FF` is 1/75th of a second.
+
+Split mode treats every CUE `TRACK` as a separate programme item:
+
+```json
+"tracks": [
+  {
+    "cue": "C:\\Music\\Los Santos Rock Radio.cue",
+    "cueMode": "split"
+  }
+]
+```
+
+Each logical track references the same physical audio file but gets its own CUE start/end boundaries, performer/title metadata, broadcast position and audio-analysis identity. Loudness normalization is measured separately for each CUE section, so a loud song elsewhere in a long recording does not change the gain selected for the current song.
+
+Continuous mode keeps the physical recording as one programme item and uses the CUE entries as sub-track metadata:
+
+```json
+"tracks": [
+  {
+    "cue": "C:\\Music\\Los Santos Rock Radio.cue",
+    "cueMode": "continuous"
+  }
+]
+```
+
+In continuous mode the analyzer measures/normalizes the whole physical recording once, preserving the relative loudness between its sub-tracks. The wheel/dashboard title changes as playback crosses each CUE index, and next-track input seeks to the next CUE sub-track. The physical audio path always comes from the CUE `FILE` directive; a CUE source cannot also specify `file`. A plain `"mix.cue"` entry defaults to `split`. `cueMode` also accepts `individual`/`tracks` as aliases for split and `single`/`subtracks` as aliases for continuous.
+
+The optional `station.analysis.json` is generated data. Normal files remain keyed by canonical full path. Logical segments from `file/start/end` or split CUE entries use the same full path plus stable segment bounds, allowing several independently normalized songs to share one physical file. Each result records file identity, physical `durationMs`, `audioStartMs`, `audioEndMs`, integrated LUFS, true peak and the precomputed playback `gainDb`. Deleting this file is safe: the station falls back to its normal unprocessed behaviour.
+
+### Audio analyzer
+
+Builds are staged under `CustomRadioStations\dist\tools\CustomRadioStations.Analyzer`. The analyzer uses FFmpeg outside GTA; FFmpeg is never loaded by the game mod.
+
+```powershell
+CustomRadioStations.Analyzer.exe "C:\path\to\station"
+CustomRadioStations.Analyzer.exe "C:\path\to\Custom Radio Stations" --jobs 4
+```
+
+Useful options include `--target-lufs -16`, `--silence-threshold -50`, `--minimum-silence 400`, `--padding 75`, `--no-trim`, `--no-normalize`, `--force`, and `--ffmpeg <path>`.
+
+Analysis is parallel and resumable. Every completed analysis item (whole file or logical segment) is written atomically to `station.analysis.json`; Ctrl+C cancels active FFmpeg jobs while preserving all completed results. A later run automatically skips unchanged files by full path, file size and UTC modification time.

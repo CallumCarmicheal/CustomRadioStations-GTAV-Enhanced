@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomRadioStations", "Cust
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomRadioStations.Tests", "CustomRadioStations.Tests\CustomRadioStations.Tests.csproj", "{92DC264E-3107-447E-B632-FAE2028DB00A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomRadioStations.Analyzer", "CustomRadioStations.Analyzer\CustomRadioStations.Analyzer.csproj", "{E1B9EAEB-3EA5-4C7A-AF34-8852832DB7A3}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
@@ -26,6 +28,10 @@ Global
 		{92DC264E-3107-447E-B632-FAE2028DB00A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{92DC264E-3107-447E-B632-FAE2028DB00A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{92DC264E-3107-447E-B632-FAE2028DB00A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E1B9EAEB-3EA5-4C7A-AF34-8852832DB7A3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1B9EAEB-3EA5-4C7A-AF34-8852832DB7A3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1B9EAEB-3EA5-4C7A-AF34-8852832DB7A3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1B9EAEB-3EA5-4C7A-AF34-8852832DB7A3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,10 +1,10 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 
 using System;
 using System.Collections.Generic;
 
 namespace CustomRadioStations {
-    class Track {
+    public sealed class Track {
         [JsonProperty("startTimeMs")]
         public uint StartTime { get; set; }
 

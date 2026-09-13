@@ -1,4 +1,4 @@
-﻿using MiniAudioEx.Core.StandardAPI;
+using MiniAudioEx.Core.StandardAPI;
 
 using Newtonsoft.Json;
 
@@ -14,6 +14,10 @@ namespace CustomRadioStations {
     class SoundFile {
         public MiniAudioSound Sound;
         private AudioClip Clip;
+        private readonly ResolvedMediaSource mediaSource;
+        private uint physicalLength;
+        private uint playbackStartMs;
+        private uint playbackEndMs;
 
         public string FileName;
         public string FilePath;
@@ -26,9 +30,8 @@ namespace CustomRadioStations {
                     if (t == null)
                         return PreviewDisplayName;
                     return TrackMetadataReader.FormatDisplayName(t.Artist, t.Title, _displayName);
-                } else {
-                    return _displayName;
                 }
+                return _displayName;
             }
         }
 
@@ -43,47 +46,69 @@ namespace CustomRadioStations {
             }
         }
 
-        /// <summary>
-        /// Returns sound length in milliseconds
-        /// </summary>
-        public uint Length { get; private set; } = 0;
-        /// <summary>
-        /// If Length has been added to this sound's corresponding station
-        /// </summary>
+        /// <summary>Logical playable length in milliseconds after configured/detected trimming.</summary>
+        public uint Length { get; private set; }
+        public uint PhysicalLength { get { return physicalLength; } }
+        public uint PlaybackStartMs { get { return playbackStartMs; } }
+        public uint PlaybackEndMs { get { return playbackEndMs; } }
+        public float NormalizationGain { get; private set; } = 1f;
         public bool LengthAdded { get; set; }
 
         public bool HasTrackList;
         public List<Track> Tracklist { get; private set; }
 
-        //public float MaximumDistance = 20f;
-        //public float MinimumDistance = 1f;
-
-        public SoundFile(string filepath) {
-            FilePath = filepath;
-            Clip = new AudioClip(filepath, true);
-            FileName = Path.GetFileNameWithoutExtension(filepath);
-            _displayName = TrackMetadataReader.ReadDisplayName(filepath, DisplayNameFromFilename());
-            HasTrackList = TracklistExists(filepath);
+        public SoundFile(string filepath) : this(new ResolvedMediaSource(filepath)) {
         }
 
-        public SoundFile(string filepath, string shortcutPath) {
-            FilePath = shortcutPath;
-            Clip = new AudioClip(filepath, true);
-            FileName = Path.GetFileNameWithoutExtension(filepath);
-            _displayName = TrackMetadataReader.ReadDisplayName(filepath, DisplayNameFromFilename());
-            HasTrackList = TracklistExists(shortcutPath);
+        public SoundFile(ResolvedMediaSource source) {
+            if (source == null)
+                throw new ArgumentNullException(nameof(source));
+            mediaSource = source;
+            Initialize(source.FilePath, source.FilePath);
+        }
+
+        public SoundFile(string filepath, string shortcutPath) : this(filepath, shortcutPath, new ResolvedMediaSource(shortcutPath)) {
+        }
+
+        public SoundFile(string filepath, string shortcutPath, ResolvedMediaSource source) {
+            if (source == null)
+                throw new ArgumentNullException(nameof(source));
+            mediaSource = source;
+            Initialize(filepath, shortcutPath);
+        }
+
+        private void Initialize(string audioPath, string publicPath) {
+            FilePath = publicPath;
+            Clip = new AudioClip(audioPath, true);
+            FileName = Path.GetFileNameWithoutExtension(audioPath);
+            _displayName = TrackMetadataReader.ReadDisplayName(audioPath, DisplayNameFromFilename(), mediaSource.Artist, mediaSource.Title);
+            HasTrackList = TracklistExists(publicPath);
+
+            if (mediaSource.Analysis != null) {
+                physicalLength = mediaSource.Analysis.DurationMs;
+                NormalizationGain = LoudnessNormalization.DbToLinear(mediaSource.Analysis.GainDb);
+            }
+            RecalculatePlaybackBounds();
         }
 
         private string DisplayNameFromFilename() {
             string[] sections = FileName.Split(new string[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
             string str = "";
-            foreach (var s in sections) {
-                str += s.Trim() + "\n";
-            }
+            foreach (string section in sections)
+                str += section.Trim() + "\n";
             return str;
         }
 
         internal bool TracklistExists(string filepath) {
+            if (mediaSource.SubTracks != null && mediaSource.SubTracks.Count > 0) {
+                Tracklist = mediaSource.SubTracks
+                    .Where(track => track != null)
+                    .OrderBy(track => track.StartTime)
+                    .Select(track => new Track(track.StartTime, track.Artist, track.Title))
+                    .ToList();
+                return Tracklist.Count > 0;
+            }
+
             string tracklistPath = Path.ChangeExtension(filepath, ".tracklist.json");
             if (!File.Exists(tracklistPath)) {
                 Tracklist = null;
@@ -111,58 +136,48 @@ namespace CustomRadioStations {
         public Track GetCurrentTrack() {
             if (!HasTrackList || Tracklist == null || Tracklist.Count == 0)
                 return null;
-
-            //Track trk = Tracklist.FirstOrDefault(t => t.StartTime <= PlayPosition());
-            Track trk = Tracklist.LastOrDefault(t => PlayPosition() >= t.StartTime);
-
-            if (trk == default(Track)) {
-                return null;
-            } else {
-                return trk;
-            }
+            uint rawPosition = RawPlayPosition();
+            Track track = Tracklist.LastOrDefault(candidate => rawPosition >= candidate.StartTime);
+            return track == default(Track) ? null : track;
         }
 
         public int GetCurrentTrackIndex() {
             if (!HasTrackList || Tracklist == null || Tracklist.Count == 0)
                 return -1;
-
             return Tracklist.IndexOf(GetCurrentTrack());
         }
 
         public Track GetNextTrack() {
             if (!HasTrackList || Tracklist == null || Tracklist.Count == 0)
                 return null;
-
-            Track t = GetCurrentTrack();
-            if (t == null)
+            Track track = GetCurrentTrack();
+            if (track == null)
                 return Tracklist[0];
-
-            int index = Tracklist.IndexOf(t);
+            int index = Tracklist.IndexOf(track);
             return index < 0 || index >= Tracklist.Count - 1 ? Tracklist[0] : Tracklist[index + 1];
         }
 
         public void SkipToNextTrack() {
             if (!HasTrackList || Sound == null)
                 return;
-
             Track next = GetNextTrack();
-            if (next != null)
-                Sound.PlayPosition = next.StartTime;
+            if (next == null)
+                return;
+            uint upper = playbackEndMs > 0 ? playbackEndMs - 1 : 0u;
+            Sound.PlayPosition = Math.Max(playbackStartMs, Math.Min(upper, next.StartTime));
         }
 
         public uint TimeUntilNextTrack() {
             if (Sound == null)
                 return 0;
-            uint pPos = PlayPosition();
-            uint remaining = Length > pPos ? Length - pPos : 0u;
+            uint rawPosition = RawPlayPosition();
+            uint remaining = playbackEndMs > rawPosition ? playbackEndMs - rawPosition : 0u;
             if (!HasTrackList)
                 return remaining;
-
-            Track t = GetNextTrack();
-            if (t == null)
+            Track next = GetNextTrack();
+            if (next == null || next.StartTime <= rawPosition || next.StartTime >= playbackEndMs)
                 return remaining;
-
-            return t.StartTime > pPos ? t.StartTime - pPos + 1 : remaining;
+            return next.StartTime - rawPosition + 1;
         }
 
         public void PlaySound(bool resume, bool playLooped = false, bool playPaused = false, bool allowMultipleInstances = false, bool allowSoundEffects = false) {
@@ -186,9 +201,9 @@ namespace CustomRadioStations {
                 Sound = SoundEngine.Play2D(Clip, playLooped, playPaused);
                 if (Sound == null)
                     return;
-
-                if (Length == 0)
-                    Length = Sound.PlayLength;
+                physicalLength = Sound.PlayLength;
+                RecalculatePlaybackBounds();
+                Seek(0u);
             } catch (Exception ex) {
                 Logger.Log("ERROR: MiniAudioEx failed to start '" + FileName + "': " + ex.Message);
                 if (Sound != null) {
@@ -198,6 +213,23 @@ namespace CustomRadioStations {
             }
         }
 
+        private void RecalculatePlaybackBounds() {
+            MediaPlaybackBounds bounds = MediaPlaybackBounds.Calculate(physicalLength, mediaSource.StartMs, mediaSource.EndMs,
+                mediaSource.Analysis, mediaSource.AllowAnalysisTrimWithinBounds);
+            playbackStartMs = bounds.StartMs;
+            playbackEndMs = bounds.EndMs;
+            Length = bounds.LengthMs;
+        }
+
+        public void Seek(uint logicalPositionMs) {
+            if (Sound == null)
+                return;
+            uint position = Length > 0u ? Math.Min(logicalPositionMs, Length - 1u) : 0u;
+            ulong raw = (ulong)playbackStartMs + position;
+            uint upper = playbackEndMs > 0u ? playbackEndMs - 1u : 0u;
+            Sound.PlayPosition = (uint)Math.Min((ulong)upper, raw);
+        }
+
         public void StopSound() {
             if (Sound == null || Sound.Finished)
                 return;
@@ -205,11 +237,7 @@ namespace CustomRadioStations {
         }
 
         public bool IsPaused {
-            get {
-                if (Sound == null)
-                    return false;
-                return Sound.Paused;
-            }
+            get { return Sound != null && Sound.Paused; }
             set {
                 if (Sound == null || Sound.Finished)
                     return;
@@ -218,17 +246,27 @@ namespace CustomRadioStations {
         }
 
         public bool IsPlaying() {
-            return Sound != null && !Sound.Finished;
+            return Sound != null && !IsFinishedPlaying();
         }
 
         public bool IsFinishedPlaying() {
-            return Sound == null || Sound.Finished;
+            if (Sound == null)
+                return true;
+            if (playbackEndMs > playbackStartMs && RawPlayPosition() >= playbackEndMs)
+                return true;
+            return Sound.Finished;
         }
 
-        /// <summary>
-        /// Returns the current playback position in milliseconds.
-        /// </summary>
+        /// <summary>Returns the current logical playback position in milliseconds.</summary>
         public uint PlayPosition() {
+            uint raw = RawPlayPosition();
+            if (raw <= playbackStartMs)
+                return 0u;
+            uint logical = raw - playbackStartMs;
+            return Length > 0u ? Math.Min(logical, Length) : logical;
+        }
+
+        private uint RawPlayPosition() {
             return Sound == null ? 0u : Sound.PlayPosition;
         }
 
@@ -237,7 +275,6 @@ namespace CustomRadioStations {
                 Sound.Dispose();
                 Sound = null;
             }
-
             if (Clip != null) {
                 Clip.Dispose();
                 Clip = null;
@@ -247,9 +284,8 @@ namespace CustomRadioStations {
         public static MiniAudioEngine SoundEngine = new MiniAudioEngine();
 
         public static void ManageSoundEngine() {
-            if (SoundEngine == null)
-                return;
-            SoundEngine.Update();
+            if (SoundEngine != null)
+                SoundEngine.Update();
         }
 
         public static void StepVolume(float step, int decimals) {
@@ -260,9 +296,8 @@ namespace CustomRadioStations {
         }
 
         public static void DisposeSoundEngine() {
-            if (SoundEngine == null)
-                return;
-            SoundEngine.Dispose();
+            if (SoundEngine != null)
+                SoundEngine.Dispose();
         }
     }
 
@@ -367,7 +402,7 @@ namespace CustomRadioStations {
                 return source.Volume;
             }
             set {
-                source.Volume = value.LimitToRange(0f, 1f);
+                source.Volume = Math.Max(0f, value);
             }
         }
 

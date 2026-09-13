@@ -13,8 +13,8 @@ namespace CustomRadioStations {
         internal static readonly Random random = new Random();
 
         private readonly WheelCategory wheelCategory;
-        private readonly List<string> trackSources;
-        private readonly List<string> commercialSources;
+        private readonly List<ResolvedMediaSource> trackSources;
+        private readonly List<ResolvedMediaSource> commercialSources;
         private readonly List<StationMediaItem> programme = new List<StationMediaItem>();
         private readonly PlaybackConfig playback;
         private readonly CommercialBreakConfig commercialBreaks;
@@ -38,8 +38,8 @@ namespace CustomRadioStations {
             Description = definition.Description ?? string.Empty;
             playback = definition.Playback ?? new PlaybackConfig();
             commercialBreaks = definition.CommercialBreaks ?? new CommercialBreakConfig();
-            trackSources = new List<string>(definition.Tracks ?? new string[0]);
-            commercialSources = new List<string>(definition.Commercials ?? new string[0]);
+            trackSources = new List<ResolvedMediaSource>(definition.Tracks ?? new ResolvedMediaSource[0]);
+            commercialSources = new List<ResolvedMediaSource>(definition.Commercials ?? new ResolvedMediaSource[0]);
 
             BuildProgramme();
             initialProgrammeIndex = SelectInitialProgrammeIndex();
@@ -63,7 +63,7 @@ namespace CustomRadioStations {
 
         private void BuildProgramme() {
             var tracks = new List<StationMediaItem>();
-            foreach (string source in trackSources) {
+            foreach (ResolvedMediaSource source in trackSources) {
                 SoundFile sound = TryCreateSound(source, "track");
                 if (sound != null)
                     tracks.Add(new StationMediaItem(sound, false));
@@ -85,7 +85,7 @@ namespace CustomRadioStations {
 
                 int commercialCount = NextInclusive(commercialBreaks.MinCommercials, commercialBreaks.MaxCommercials);
                 for (int i = 0; i < commercialCount; i++) {
-                    string source = GetNextCommercialSource();
+                    ResolvedMediaSource source = GetNextCommercialSource();
                     SoundFile commercial = TryCreateSound(source, "commercial");
                     if (commercial != null)
                         programme.Add(new StationMediaItem(commercial, true));
@@ -96,7 +96,7 @@ namespace CustomRadioStations {
             }
         }
 
-        private string GetNextCommercialSource() {
+        private ResolvedMediaSource GetNextCommercialSource() {
             if (commercialSources.Count == 1) {
                 lastCommercialIndex = 0;
                 return commercialSources[0];
@@ -111,17 +111,18 @@ namespace CustomRadioStations {
             return commercialSources[next];
         }
 
-        private SoundFile TryCreateSound(string path, string kind) {
+        private SoundFile TryCreateSound(ResolvedMediaSource source, string kind) {
             try {
+                string path = source.FilePath;
                 if (string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase)) {
                     string target = GeneralHelper.GetShortcutTargetFile(path);
                     if (string.IsNullOrEmpty(target))
                         throw new FileNotFoundException("Shortcut target does not exist.", path);
-                    return new SoundFile(target, path);
+                    return new SoundFile(target, path, source);
                 }
-                return new SoundFile(path);
+                return new SoundFile(source);
             } catch (Exception ex) {
-                Logger.Log("WARNING: Could not load " + kind + " '" + path + "' for station '" + Name + "': " + ex.Message);
+                Logger.Log("WARNING: Could not load " + kind + " '" + source.FilePath + "' for station '" + Name + "': " + ex.Message);
                 return null;
             }
         }
@@ -184,7 +185,7 @@ namespace CustomRadioStations {
                 if (!TryStartProgrammeItem(lastPlayedSoundIndex, false, IsBroadcastMode && playback.Loop, out startedIndex))
                     return;
                 lastPlayedSoundIndex = startedIndex;
-                currentSound.Sound.PlayPosition = IsBroadcastMode ? GetInitialBroadcastPosition() : 0u;
+                currentSound.Seek(IsBroadcastMode ? GetInitialBroadcastPosition() : 0u);
                 currentSound.Sound.Paused = false;
                 UpdateProgrammeLength();
                 hasPlayedOnce = true;
@@ -210,7 +211,7 @@ namespace CustomRadioStations {
                 currentSound = null;
                 return false;
             }
-            currentSound.Sound.Volume = playback.Volume;
+            currentSound.Sound.Volume = playback.Volume * currentSound.NormalizationGain;
             return true;
         }
 
@@ -221,7 +222,7 @@ namespace CustomRadioStations {
                 return;
             lastPlayedSoundIndex = startedIndex;
             uint maximum = currentSound.Length > 0 ? currentSound.Length - 1 : 0;
-            currentSound.Sound.PlayPosition = startedIndex == index ? Math.Min(maximum, stoppedPositionSound) : 0u;
+            currentSound.Seek(startedIndex == index ? Math.Min(maximum, stoppedPositionSound) : 0u);
             CurrentSoundIsPaused = false;
             UpdateProgrammeLength();
             UpdateWheelInfo();
@@ -247,9 +248,9 @@ namespace CustomRadioStations {
                     return;
                 }
                 lastPlayedSoundIndex = startedIndex;
-                currentSound.Sound.PlayPosition = startedIndex == target.Index
+                currentSound.Seek(startedIndex == target.Index
                     ? Math.Min(currentSound.Length > 0 ? currentSound.Length - 1 : 0, target.Position)
-                    : 0u;
+                    : 0u);
                 UpdateProgrammeLength();
             } else if (!ResumeBroadcastWithUnknownLengths(safeLastIndex, stoppedPositionSound, elapsed)) {
                 FinishPlayback();
@@ -285,7 +286,7 @@ namespace CustomRadioStations {
                 ulong remaining = length > position ? (ulong)(length - position) : 0UL;
                 if (length > 0 && elapsed < remaining) {
                     lastPlayedSoundIndex = index;
-                    currentSound.Sound.PlayPosition = position + (uint)elapsed;
+                    currentSound.Seek(position + (uint)elapsed);
                     return true;
                 }
 

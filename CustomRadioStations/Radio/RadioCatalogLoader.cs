@@ -193,8 +193,8 @@ namespace CustomRadioStations {
                 Description = string.Empty,
                 ConfigPath = iniPath,
                 IsLegacyIni = true,
-                Tracks = tracks,
-                Commercials = commercials,
+                Tracks = tracks.Select(path => new ResolvedMediaSource(path)).ToArray(),
+                Commercials = commercials.Select(path => new ResolvedMediaSource(path)).ToArray(),
                 Playback = new PlaybackConfig(),
                 CommercialBreaks = new CommercialBreakConfig {
                     Enabled = true,

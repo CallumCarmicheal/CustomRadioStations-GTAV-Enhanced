@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace CustomRadioStations {
     internal static class Program {
@@ -17,6 +18,11 @@ namespace CustomRadioStations {
                 CreateFixture();
                 TestDefaultsAndEmptyArrays();
                 TestResolverSources();
+                TestMediaSourceObjects();
+                TestCueSupport();
+                TestAnalysisSidecar();
+                TestLoudnessNormalization();
+                TestMediaPlaybackBounds();
                 TestInvalidConfigurations();
                 TestLegacyIniParser();
                 TestJsonTracklistModel();
@@ -57,8 +63,8 @@ namespace CustomRadioStations {
             Assert(!StationConfigLoader.TryLoad(root, out definition), "explicit empty tracks disables station");
 
             StationConfig config = JsonConvert.DeserializeObject<StationConfig>("{\"name\":\"Defaults\"}");
-            Assert(config.Tracks.Count == 1 && config.Tracks[0] == "*", "typed model supplies missing tracks default");
-            Assert(config.Commercials.Count == 1 && config.Commercials[0] == "*", "typed model supplies missing commercials default");
+            Assert(config.Tracks.Count == 1 && config.Tracks[0].File == "*", "typed model supplies missing tracks default");
+            Assert(config.Commercials.Count == 1 && config.Commercials[0].File == "*", "typed model supplies missing commercials default");
         }
 
         private static void TestResolverSources() {
@@ -86,6 +92,152 @@ namespace CustomRadioStations {
                 "absent commercials directory is harmless");
             Assert(resolver.Resolve(new string[0], Path.Combine(root, "commercials"), "commercial").Count == 0,
                 "empty commercials list remains empty");
+        }
+
+
+        private static void TestMediaSourceObjects() {
+            uint value;
+            Assert(MediaTimeParser.TryParse("20:00", out value) && value == 1200000u, "human media time parses 20 minutes");
+            Assert(MediaTimeParser.TryParse("1:02:03.500", out value) && value == 3723500u, "human media time parses hours and milliseconds");
+
+            WriteStationJson("{\"name\":\"Objects\",\"tracks\":[\"song.mp3\",{\"file\":\"song.mp3\",\"start\":\"0:00.250\",\"end\":\"0:10\",\"artist\":\"Override Artist\",\"title\":\"Override Title\"}]}");
+            StationDefinition definition;
+            Assert(StationConfigLoader.TryLoad(root, out definition), "mixed string/object track entries load");
+            Assert(definition.Tracks.Count == 1, "later object override replaces duplicate glob/path result");
+            ResolvedMediaSource source = definition.Tracks[0];
+            Assert(source.StartMs == 250u && source.EndMs == 10000u, "manual start/end survive resolution");
+            Assert(source.Artist == "Override Artist" && source.Title == "Override Title", "manual artist/title survive resolution");
+
+            WriteStationJson("{\"name\":\"Segments\",\"tracks\":[{\"file\":\"song.mp3\",\"start\":\"0:00\",\"end\":\"0:10\",\"title\":\"Part A\"},{\"file\":\"song.mp3\",\"start\":\"0:10\",\"end\":\"0:20\",\"title\":\"Part B\"}]}");
+            Assert(StationConfigLoader.TryLoad(root, out definition) && definition.Tracks.Count == 2,
+                "multiple manual segments of one physical file remain distinct logical tracks");
+            Assert(definition.Tracks[0].AnalysisKey != definition.Tracks[1].AnalysisKey,
+                "manual segments receive distinct analysis identities");
+
+            WriteStationJson("{\"name\":\"Bad Time\",\"tracks\":[{\"file\":\"song.mp3\",\"start\":\"1:00\",\"end\":\"0:30\"}]}");
+            Assert(!StationConfigLoader.TryLoad(root, out definition), "end before start rejects station config");
+        }
+
+        private static void TestCueSupport() {
+            string mix = Path.Combine(tracks, "GTA Radio Mix.mp3");
+            string cue = Path.Combine(tracks, "GTA Radio Mix.cue");
+            File.WriteAllBytes(mix, new byte[] { 1 });
+            File.WriteAllText(cue,
+                "PERFORMER \"Various Artists\"\n" +
+                "TITLE \"Example Radio\"\n" +
+                "FILE \"GTA Radio Mix.mp3\" MP3\n" +
+                "  TRACK 01 AUDIO\n" +
+                "    TITLE \"First Song\"\n" +
+                "    PERFORMER \"Artist One\"\n" +
+                "    INDEX 01 00:00:00\n" +
+                "  TRACK 02 AUDIO\n" +
+                "    TITLE \"Second Song\"\n" +
+                "    PERFORMER \"Artist Two\"\n" +
+                "    INDEX 01 03:30:00\n" +
+                "  TRACK 03 AUDIO\n" +
+                "    TITLE \"Third Song\"\n" +
+                "    INDEX 01 07:15:37\n");
+
+            uint cueTime;
+            Assert(CueSheetParser.TryParseCueTime("07:15:37", out cueTime) && cueTime == 435493u,
+                "CUE MM:SS:FF timestamps convert from 75 fps frames");
+
+            WriteStationJson("{\"name\":\"Cue Split\",\"tracks\":[{\"cue\":\"GTA Radio Mix.cue\",\"cueMode\":\"split\"}],\"commercials\":[]}");
+            StationDefinition definition;
+            Assert(StationConfigLoader.TryLoad(root, out definition), "split CUE station loads");
+            Assert(definition.Tracks.Count == 3, "split CUE expands each TRACK into an independent radio item");
+            Assert(definition.Tracks[0].StartMs == 0u && definition.Tracks[0].EndMs == 210000u,
+                "split CUE first track uses next INDEX 01 as its end");
+            Assert(definition.Tracks[1].StartMs == 210000u && definition.Tracks[1].EndMs == 435493u,
+                "split CUE preserves exact section boundaries");
+            Assert(definition.Tracks[2].StartMs == 435493u && !definition.Tracks[2].EndMs.HasValue,
+                "split CUE final track runs to the physical file end");
+            Assert(definition.Tracks[0].Artist == "Artist One" && definition.Tracks[0].Title == "First Song",
+                "split CUE exposes per-track performer/title metadata");
+            Assert(definition.Tracks[2].Artist == "Various Artists" && definition.Tracks[2].Title == "Third Song",
+                "split CUE falls back to sheet performer when track performer is omitted");
+            Assert(definition.Tracks[0].AnalysisKey != definition.Tracks[1].AnalysisKey,
+                "split CUE sections sharing one physical file have distinct analysis identities");
+
+            WriteStationJson("{\"name\":\"Cue Continuous\",\"tracks\":[{\"cue\":\"GTA Radio Mix.cue\",\"cueMode\":\"continuous\"}],\"commercials\":[]}");
+            Assert(StationConfigLoader.TryLoad(root, out definition), "continuous CUE station loads");
+            Assert(definition.Tracks.Count == 1, "continuous CUE keeps the physical recording as one radio item");
+            Assert(definition.Tracks[0].SubTracks.Count == 3, "continuous CUE exposes CUE TRACKs as sub-tracks");
+            Assert(definition.Tracks[0].SubTracks[1].StartTime == 210000u && definition.Tracks[0].SubTracks[1].Title == "Second Song",
+                "continuous CUE sub-track timestamps and metadata are retained");
+
+            WriteStationJson("{\"name\":\"Invalid Cue Override\",\"tracks\":[{\"file\":\"GTA Radio Mix.mp3\",\"cue\":\"GTA Radio Mix.cue\",\"cueMode\":\"continuous\"}],\"commercials\":[]}");
+            Assert(!StationConfigLoader.TryLoad(root, out definition),
+                "CUE source rejects a simultaneous file override because the CUE FILE directive owns the audio path");
+
+            WriteStationJson("{\"name\":\"Cue Alias\",\"tracks\":[\"GTA Radio Mix.cue\"],\"commercials\":[]}");
+            Assert(StationConfigLoader.TryLoad(root, out definition) && definition.Tracks.Count == 3,
+                "plain .cue string defaults to split mode");
+
+            WriteStationJson("{\"name\":\"Cue Override\",\"tracks\":[\"*\",{\"cue\":\"GTA Radio Mix.cue\",\"cueMode\":\"split\"}],\"commercials\":[]}");
+            Assert(StationConfigLoader.TryLoad(root, out definition) &&
+                definition.Tracks.Count(source => string.Equals(source.FilePath, Path.GetFullPath(mix), StringComparison.OrdinalIgnoreCase)) == 3 &&
+                definition.Tracks.Where(source => string.Equals(source.FilePath, Path.GetFullPath(mix), StringComparison.OrdinalIgnoreCase)).All(source => source.IsSegment),
+                "split CUE replaces a whole-file match from an earlier wildcard instead of duplicating it");
+        }
+
+        private static void TestAnalysisSidecar() {
+            WriteStationJson("{\"name\":\"Analyzed\",\"tracks\":[\"song.mp3\"]}");
+            string file = Path.Combine(tracks, "song.mp3");
+            var info = new FileInfo(file);
+            var analysis = new StationAnalysis();
+            analysis.Tracks[Path.GetFullPath(file)] = new TrackAnalysis {
+                FileSize = info.Length,
+                LastWriteUtc = info.LastWriteTimeUtc,
+                DurationMs = 10000u,
+                AudioStartMs = 500u,
+                AudioEndMs = 9500u,
+                IntegratedLufs = -18d,
+                TruePeakDb = -3d,
+                GainDb = 2d,
+                AnalyzedUtc = DateTime.UtcNow
+            };
+            StationAnalysisLoader.SaveAtomic(root, analysis);
+
+            StationDefinition definition;
+            Assert(StationConfigLoader.TryLoad(root, out definition) && definition.Tracks[0].Analysis != null,
+                "fresh station analysis attaches to resolved media");
+            Assert(definition.Tracks[0].Analysis.AudioStartMs == 500u && definition.Tracks[0].Analysis.AudioEndMs == 9500u,
+                "analysis audio bounds are retained");
+
+            using (FileStream stream = new FileStream(file, FileMode.Append, FileAccess.Write))
+                stream.WriteByte(2);
+            Assert(StationConfigLoader.TryLoad(root, out definition) && definition.Tracks[0].Analysis == null,
+                "stale station analysis is ignored after source file changes");
+        }
+
+        private static void TestMediaPlaybackBounds() {
+            var analysis = new TrackAnalysis { AudioStartMs = 500u, AudioEndMs = 9500u };
+            MediaPlaybackBounds bounds = MediaPlaybackBounds.Calculate(10000u, null, null, analysis);
+            Assert(bounds.StartMs == 500u && bounds.EndMs == 9500u && bounds.LengthMs == 9000u,
+                "analysis bounds define logical playback length");
+
+            bounds = MediaPlaybackBounds.Calculate(10000u, 1000u, 8000u, analysis);
+            Assert(bounds.StartMs == 1000u && bounds.EndMs == 8000u,
+                "manual start/end override analysis bounds");
+
+            bounds = MediaPlaybackBounds.Calculate(10000u, 1000u, null, analysis);
+            Assert(bounds.StartMs == 1000u && bounds.EndMs == 9500u,
+                "manual start combines with analyzed end");
+
+            bounds = MediaPlaybackBounds.Calculate(10000u, 250u, 9750u,
+                new TrackAnalysis { AudioStartMs = 500u, AudioEndMs = 9500u }, true);
+            Assert(bounds.StartMs == 500u && bounds.EndMs == 9500u,
+                "CUE structural bounds allow analysis to trim silence inside the segment");
+        }
+
+        private static void TestLoudnessNormalization() {
+            var settings = new StationAnalysisSettings { TargetLufs = -16d, MaxGainDb = 12d, PeakHeadroomDb = 0.5d };
+            double gain = LoudnessNormalization.CalculateGainDb(-20d, -6d, settings);
+            Assert(Math.Abs(gain - 4d) < 0.001d, "loudness normalization calculates target gain");
+            gain = LoudnessNormalization.CalculateGainDb(-24d, -1d, settings);
+            Assert(Math.Abs(gain - 0.5d) < 0.001d, "true-peak headroom limits positive gain");
+            Assert(Math.Abs(LoudnessNormalization.DbToLinear(6.020599913d) - 2f) < 0.01f, "dB gain converts to linear amplitude");
         }
 
         private static void TestInvalidConfigurations() {

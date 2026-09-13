@@ -43,7 +43,12 @@
     <Compile Include="..\CustomRadioStations\Configuration\Settings.cs" Link="Settings.cs" />
     <Compile Include="..\CustomRadioStations\Audio\Track.cs" Link="Track.cs" />
     <Compile Include="..\CustomRadioStations\Audio\TrackMetadataReader.cs" Link="TrackMetadataReader.cs" />
+    <Compile Include="..\CustomRadioStations\Analysis\LoudnessNormalization.cs" Link="LoudnessNormalization.cs" />
+    <Compile Include="..\CustomRadioStations\Analysis\MediaPlaybackBounds.cs" Link="MediaPlaybackBounds.cs" />
+    <Compile Include="..\CustomRadioStations\Analysis\StationAnalysis.cs" Link="StationAnalysis.cs" />
+    <Compile Include="..\CustomRadioStations\Analysis\StationAnalysisLoader.cs" Link="StationAnalysisLoader.cs" />
     <Compile Include="..\CustomRadioStations\Radio\BroadcastTimeline.cs" Link="BroadcastTimeline.cs" />
+    <Compile Include="..\CustomRadioStations\Radio\CueSheet.cs" Link="CueSheet.cs" />
     <Compile Include="..\CustomRadioStations\Radio\MediaSourceResolver.cs" Link="MediaSourceResolver.cs" />
     <Compile Include="..\CustomRadioStations\Radio\StationDefinition.cs" Link="StationDefinition.cs" />
     <Compile Include="..\CustomRadioStations\Utilities\HoldRepeatState.cs" Link="HoldRepeatState.cs" />

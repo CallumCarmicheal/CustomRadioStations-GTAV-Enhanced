@@ -1,16 +1,17 @@
 using System.Collections.Generic;
 
 namespace CustomRadioStations {
-    internal sealed class StationDefinition {
-        internal string Id { get; set; }
-        internal string Name { get; set; }
-        internal string Description { get; set; }
-        internal string IconPath { get; set; }
-        internal string ConfigPath { get; set; }
-        internal bool IsLegacyIni { get; set; }
-        internal IReadOnlyList<string> Tracks { get; set; }
-        internal IReadOnlyList<string> Commercials { get; set; }
-        internal PlaybackConfig Playback { get; set; }
-        internal CommercialBreakConfig CommercialBreaks { get; set; }
+    public sealed class StationDefinition {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public string IconPath { get; set; }
+        public string ConfigPath { get; set; }
+        public bool IsLegacyIni { get; set; }
+        public IReadOnlyList<ResolvedMediaSource> Tracks { get; set; }
+        public IReadOnlyList<ResolvedMediaSource> Commercials { get; set; }
+        public PlaybackConfig Playback { get; set; }
+        public CommercialBreakConfig CommercialBreaks { get; set; }
+        public StationAnalysis Analysis { get; set; }
     }
 }
