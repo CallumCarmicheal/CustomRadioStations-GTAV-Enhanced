@@ -165,21 +165,6 @@ namespace CustomRadioStations {
             Function.Call(Hash.SET_VEH_RADIO_STATION, vehicle, "OFF");
         }
 
-        public static void VanillaRadioFadedOut(bool fadeOut) {
-            string scene = "MP_JOB_CHANGE_RADIO_MUTE";
-            try {
-                if (!fadeOut) {
-                    Function.Call(Hash.SET_AUDIO_SCENE_VARIABLE, scene, "apply", 0f);
-                    return;
-                }
-
-                Function.Call(Hash.START_AUDIO_SCENE, scene);
-                Function.Call(Hash.SET_AUDIO_SCENE_VARIABLE, scene, "apply", 1f);
-            } catch (Exception ex) {
-                Logger.Log("WARNING: Could not control vanilla radio mute scene: " + ex.Message);
-            }
-        }
-
         public static bool IS_MOBILE_PHONE_RADIO_ACTIVE() {
             try {
                 return Function.Call<bool>(Hash.IS_MOBILE_PHONE_RADIO_ACTIVE);

@@ -1,4 +1,4 @@
-using CustomRadioStations;
+﻿using CustomRadioStations;
 
 using Spectre.Console;
 
@@ -72,7 +72,7 @@ namespace CustomRadioStations.Analyzer {
                             .AutoClear(false)
                             .HideCompleted(false)
                             .Columns(new ProgressColumn[] {
-                                new TaskDescriptionColumn(),
+                                new TaskDescriptionColumn { Alignment = Justify.Left },
                                 new ProgressBarColumn(),
                                 new PercentageColumn(),
                                 new RemainingTimeColumn(),
@@ -82,7 +82,7 @@ namespace CustomRadioStations.Analyzer {
                                 ProgressTask overall = context.AddTask("[green]Overall[/]", maxValue: 100d);
                                 var workerTasks = new Dictionary<int, ProgressTask>();
                                 for (int i = 0; i < options.Jobs; i++)
-                                    workerTasks[i] = context.AddTask("[grey]Worker " + (i + 1) + " idle[/]", maxValue: 100d);
+                                    workerTasks[i] = context.AddTask("[grey][[" + (i + 1) + "]][/] idle", maxValue: 100d);
 
                                 result = await analyzer.AnalyzeAsync(station, update => {
                                     overall.Value = update.OverallProgress * 100d;
@@ -91,7 +91,7 @@ namespace CustomRadioStations.Analyzer {
                                     if (update.Worker != null && workerTasks.ContainsKey(update.Worker.WorkerIndex)) {
                                         ProgressTask worker = workerTasks[update.Worker.WorkerIndex];
                                         worker.Value = Math.Max(0d, Math.Min(100d, update.Worker.Progress * 100d));
-                                        worker.Description = "Worker " + (update.Worker.WorkerIndex + 1) + "  " + Markup.Escape(TrimName(update.Worker.FileName, 58));
+                                        worker.Description = "[grey][[" + (update.Worker.WorkerIndex + 1) + "]][/] " + Markup.Escape(TrimName(update.Worker.FileName, 58));
                                     }
                                 }, cancellation.Token).ConfigureAwait(false);
                                 if (result != null && !result.Cancelled)
@@ -180,7 +180,7 @@ namespace CustomRadioStations.Analyzer {
         }
 
         private static void PrintHelp() {
-            AnsiConsole.MarkupLine("[bold]CustomRadioStations.Analyzer[/] <station folder | station.json | root folder> [options]");
+            AnsiConsole.MarkupLine("[bold]CustomRadioStations.Analyzer[/] <station folder | station.json | root folder> [[options]]");
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("  --jobs <n>                 Parallel FFmpeg workers (default: up to 4)");
             AnsiConsole.MarkupLine("  --ffmpeg <path>            Explicit FFmpeg executable");

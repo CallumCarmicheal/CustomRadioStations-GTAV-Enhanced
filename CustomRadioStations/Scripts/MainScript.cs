@@ -2,6 +2,7 @@
 
 using GTA;
 using GTA.Native;
+using GTA.UI;
 
 using GTAVFunctions;
 
@@ -9,9 +10,13 @@ using SelectorWheel;
 
 using System;
 using System.IO;
+using System.Reflection;
+using System.Security.Cryptography;
+using System.Security.Policy;
 using System.Windows.Forms;
 
 using UIScreen = GTA.UI.Screen;
+using Hash = GTA.Native.Hash;
 
 namespace CustomRadioStations {
     public class MainScript : Script {
@@ -76,6 +81,7 @@ namespace CustomRadioStations {
             try { SoundFile.DisposeSoundEngine(); } catch { }
             try { RadioNativeFunctions.DisposeDashboardScaleform(); } catch { }
             try { Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER); } catch { }
+            try { Function.Call(Hash.SET_AUDIO_FLAG, "LoadMPData", false); } catch { }
             try { Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", false); } catch { }
             try { Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", false); } catch { }
             try {
@@ -83,10 +89,6 @@ namespace CustomRadioStations {
                     Function.Call(Hash.STOP_AUDIO_SCENE, "DEATH_SCENE");
                     Function.Call(Hash.STOP_AUDIO_SCENE, "FADE_OUT_WORLD_250MS_SCENE");
                 }
-            } catch { }
-            try {
-                if (Function.Call<bool>(Hash.IS_AUDIO_SCENE_ACTIVE, "MP_JOB_CHANGE_RADIO_MUTE"))
-                    Function.Call(Hash.STOP_AUDIO_SCENE, "MP_JOB_CHANGE_RADIO_MUTE");
             } catch { }
         }
 
@@ -146,9 +148,6 @@ namespace CustomRadioStations {
 
                 bool vehWasEngineRunning = veh.IsEngineRunning;
 
-                // Make vanilla radio silent
-                RadioNativeFunctions.VanillaRadioFadedOut(true);
-
                 DateTime enteredTime = DateTime.Now;
 
                 // Wait for the vehicle engine to start, but never block the script forever.
@@ -166,9 +165,6 @@ namespace CustomRadioStations {
 
                 if (UsedVehiclesManager.IsUsedVehicle(veh)) {
                     if (UsedVehiclesManager.GetVehicleStationInfo(veh) == null) {
-                        // Make vanilla radio audible
-                        RadioNativeFunctions.VanillaRadioFadedOut(false);
-
                         lastRadioWasCustom = false;
                         return;
                     }
@@ -186,9 +182,6 @@ namespace CustomRadioStations {
                     // Since I can't figure out how to see if a vehicle
                     // was emitting a station, I'll just not mess with it.
                     if (vehWasEngineRunning) {
-                        // Make vanilla radio audible
-                        RadioNativeFunctions.VanillaRadioFadedOut(false);
-
                         lastRadioWasCustom = false;
                         return;
                     }
@@ -212,9 +205,6 @@ namespace CustomRadioStations {
                     } else {
                         UsedVehiclesManager.UpdateVehicleWithStationInfo(veh, null);
 
-                        // Make vanilla radio audible
-                        RadioNativeFunctions.VanillaRadioFadedOut(false);
-
                         lastRadioWasCustom = false;
                     }
                 }
@@ -223,9 +213,6 @@ namespace CustomRadioStations {
             GeneralEvents.OnPlayerExitedVehicle += (veh) => {
                 if (veh == null)
                     return;
-
-                // Make vanilla radio audible
-                RadioNativeFunctions.VanillaRadioFadedOut(false);
 
                 StationWheelPair selectedPair = null;
                 if (lastRadioWasCustom && WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.SelectedCategory != null) {
@@ -279,9 +266,6 @@ namespace CustomRadioStations {
                         loaded = true;
                         return;
                     }
-
-                    // Allow playing MP audio sounds and scenes
-                    Function.Call(Hash.SET_AUDIO_FLAG, "LoadMPData", true);
 
                     RadioNativeFunctions.DashboardScaleform = Scaleform.RequestMovie("dashboard");
 
@@ -437,9 +421,6 @@ namespace CustomRadioStations {
                         WheelVars.CurrentRadioWheel.Visible = false;
                     }
 
-                    // Make vanilla radio audible
-                    RadioNativeFunctions.VanillaRadioFadedOut(false);
-
                 }
             }
         }
@@ -473,7 +454,6 @@ namespace CustomRadioStations {
                     RadioStation.CurrentPlaying = null;
                     RadioStation.NextQueuedStation = null;
                     RadioNativeFunctions.SetVanillaRadioOff();
-                    RadioNativeFunctions.VanillaRadioFadedOut(false);
                     lastRadioWasCustom = false;
                 } else if (ActionQueued == ActionOptions.StopCurrent) {
                     if (RadioStation.CurrentPlaying != null) {
@@ -482,10 +462,6 @@ namespace CustomRadioStations {
 
                         // Enable last played vanilla radio
                         RadioNativeFunctions.SET_RADIO_TO_STATION_INDEX(lastVanillaStationPlayed);
-
-                        // Make vanilla radio audible
-                        RadioNativeFunctions.VanillaRadioFadedOut(false);
-
 
                         RadioStation.CurrentPlaying = null;
                         lastRadioWasCustom = false;
@@ -511,9 +487,6 @@ namespace CustomRadioStations {
                             // Set vanilla radio to Off but save what station was playing beforehand
                             lastVanillaStationPlayed = RadioNativeFunctions.GET_PLAYER_RADIO_STATION_INDEX();
                             RadioNativeFunctions.SetVanillaRadioOff();
-
-                            // Make vanilla radio audible (custom audio is independent).
-                            RadioNativeFunctions.VanillaRadioFadedOut(false);
 
                             lastRadioWasCustom = true;
                         }

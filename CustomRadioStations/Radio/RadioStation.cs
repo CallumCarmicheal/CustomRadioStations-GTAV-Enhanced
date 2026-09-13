@@ -401,7 +401,6 @@ namespace CustomRadioStations {
             ResetAudioFlags();
             if (ReferenceEquals(CurrentPlaying, this))
                 CurrentPlaying = null;
-            RadioNativeFunctions.VanillaRadioFadedOut(false);
         }
 
         private void UpdateProgrammeLength() {
