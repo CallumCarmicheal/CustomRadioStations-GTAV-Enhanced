@@ -77,6 +77,13 @@ namespace CustomRadioStations {
 
         [JsonProperty("highlightIconSizeMultiplier")]
         public double HighlightIconSizeMultiplier { get; set; } = 1.45;
+
+        [JsonProperty("unicodeTextMode")]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public UnicodeTextMode UnicodeTextMode { get; set; } = CustomRadioStations.UnicodeTextMode.Auto;
+
+        [JsonProperty("unicodeFont")]
+        public string UnicodeFont { get; set; } = string.Empty;
     }
 
     internal sealed class KeyboardControlSettings {

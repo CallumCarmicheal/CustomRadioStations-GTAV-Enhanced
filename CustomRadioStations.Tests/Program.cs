@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 
 using System;
 using System.Collections.Generic;
@@ -32,6 +32,7 @@ namespace CustomRadioStations {
                 TestRadioWheelAvailability();
                 TestBroadcastTimeline();
                 TestWheelDisplayMetricsAndIconVariants();
+                TestUnicodeTextSupport();
                 Console.WriteLine("Passed " + passed + " station configuration tests.");
                 return 0;
             } catch (Exception ex) {
@@ -345,6 +346,50 @@ namespace CustomRadioStations {
                 "broadcast timeline safely skips zero-length entries");
         }
 
+
+        private static void TestUnicodeTextSupport() {
+            Assert(!UnicodeTextSupport.RequiresFallback("The Midnight - Sunset"), "ASCII metadata stays on GTA native text path");
+            Assert(!UnicodeTextSupport.RequiresFallback("Beyoncé – Déjà Vu…"), "western Latin and common punctuation stay native");
+            Assert(!UnicodeTextSupport.RequiresFallback("Škoda – Živě"), "common Latin Extended-A metadata stays native");
+            Assert(UnicodeTextSupport.RequiresFallback("好き？ Suki!"), "mixed Japanese metadata uses Unicode fallback");
+            Assert(UnicodeTextSupport.RequiresFallback("夜に駆ける"), "Japanese metadata uses Unicode fallback");
+            Assert(UnicodeTextSupport.RequiresFallback("아이돌"), "Korean metadata uses Unicode fallback");
+            Assert(UnicodeTextSupport.RequiresFallback("中文"), "Chinese metadata uses Unicode fallback");
+            Assert(UnicodeTextSupport.RequiresFallback("Привет"), "Cyrillic metadata uses Unicode fallback");
+            Assert(UnicodeTextSupport.RequiresFallback("Track 😀"), "supplementary-plane characters use Unicode fallback");
+            Assert(UnicodeTextSupport.RequiresFallback("ｱｲﾄﾞﾙ"), "half-width Katakana uses Unicode fallback");
+            Assert(UnicodeTextSupport.RequiresFallback("ＡＢＣ１２３"), "full-width Latin/digits use Unicode fallback");
+            Assert(UnicodeTextSupport.RequiresFallback("Hello！"), "full-width punctuation uses Unicode fallback");
+            Assert(UnicodeTextSupport.RequiresFallback("Cafe\u0301"), "combining-mark metadata uses one Unicode fallback renderer");
+            Assert(UnicodeTextSupport.RequiresFallback("Καλημέρα"), "Greek metadata uses Unicode fallback");
+            Assert(UnicodeTextSupport.RequiresFallback("Ƶ Track"), "less-reliable Latin Extended-B metadata uses Unicode fallback");
+
+            List<string> familyEmoji = UnicodeTextSupport.SplitTextElements("A👨‍👩‍👧‍👦B");
+            Assert(familyEmoji.Count == 3 && familyEmoji[1] == "👨‍👩‍👧‍👦",
+                "emoji ZWJ family remains one wrapping element");
+            List<string> tonedEmoji = UnicodeTextSupport.SplitTextElements("👍🏽");
+            Assert(tonedEmoji.Count == 1, "emoji skin-tone modifier remains attached to its base");
+            List<string> flagEmoji = UnicodeTextSupport.SplitTextElements("🇯🇵");
+            Assert(flagEmoji.Count == 1, "regional-indicator flag remains one wrapping element");
+            List<string> variationEmoji = UnicodeTextSupport.SplitTextElements("✈️");
+            Assert(variationEmoji.Count == 1, "variation selector remains attached to its base glyph");
+            List<string> halfWidthVoiced = UnicodeTextSupport.SplitTextElements("ｶﾞ");
+            Assert(halfWidthVoiced.Count == 1, "half-width Katakana voiced mark remains attached to its base");
+
+            List<string> japanesePunctuation = UnicodeTextSupport.SplitTextElements("日本語。テスト");
+            Assert(UnicodeTextSupport.AdjustWrapBreak(japanesePunctuation, 0, 3) == 2,
+                "Japanese closing punctuation is not left at the start of a wrapped line");
+            List<string> japaneseOpening = UnicodeTextSupport.SplitTextElements("日本「語」");
+            Assert(UnicodeTextSupport.AdjustWrapBreak(japaneseOpening, 0, 3) == 2,
+                "Japanese opening punctuation is not left at the end of a wrapped line");
+
+            string first = UnicodeTextSupport.ComputeStableHash("好き？ Suki!");
+            string second = UnicodeTextSupport.ComputeStableHash("好き？ Suki!");
+            string different = UnicodeTextSupport.ComputeStableHash("夜に駆ける");
+            Assert(first == second && first.Length == 64, "Unicode texture cache key is stable SHA-256");
+            Assert(first != different, "Unicode texture cache key changes with text");
+        }
+
         private static void TestWheelDisplayMetricsAndIconVariants() {
             AssertClose(WheelDisplayMetrics.GetVirtualWidth(854, 480), 1281f, "480p 16:9 canvas width");
             AssertClose(WheelDisplayMetrics.GetVirtualWidth(640, 480), 960f, "480p 4:3 canvas width");
@@ -353,6 +398,22 @@ namespace CustomRadioStations {
             AssertClose(WheelDisplayMetrics.GetVirtualWidth(5120, 1440), 2560f, "1440p 32:9 canvas width");
             AssertClose(WheelDisplayMetrics.GetVirtualWidth(1024, 768), 960f, "4:3 canvas width");
             AssertClose(WheelDisplayMetrics.GetVirtualWidth(3840, 2160), 1280f, "4K 16:9 canvas width");
+
+            AssertClose(WheelDisplayMetrics.GetTextRenderScale(480), 1f, "480p Unicode text keeps 720p texture density");
+            AssertClose(WheelDisplayMetrics.GetTextRenderScale(720), 1f, "720p Unicode text renders 1:1 virtual density");
+            AssertClose(WheelDisplayMetrics.GetTextRenderScale(768), 1.25f, "768p Unicode text rounds up to the next quarter-density bucket");
+            AssertClose(WheelDisplayMetrics.GetTextRenderScale(900), 1.25f, "900p Unicode text reuses the 1.25x density bucket");
+            AssertClose(WheelDisplayMetrics.GetTextRenderScale(1080), 1.5f, "1080p Unicode text keeps the exact 1.5x density bucket");
+            AssertClose(WheelDisplayMetrics.GetTextRenderScale(1200), 1.75f, "1200p Unicode text rounds up without creating per-pixel variants");
+            AssertClose(WheelDisplayMetrics.GetTextRenderScale(1440), 2f, "1440p Unicode text keeps the exact 2x density bucket");
+            AssertClose(WheelDisplayMetrics.GetTextRenderScale(2160), 3f, "4K Unicode text keeps the exact 3x density bucket");
+            for (int height = 480; height <= 2160; height += 37) {
+                float physicalScale = Math.Max(1f, height / WheelDisplayMetrics.VirtualHeight);
+                float bucketedScale = WheelDisplayMetrics.GetTextRenderScale(height);
+                Assert(bucketedScale + 0.0001f >= physicalScale, "Unicode density buckets never undersample output height " + height);
+                AssertClose(bucketedScale * 4f, (float)Math.Round(bucketedScale * 4f),
+                    "Unicode density bucket is a quarter-step at output height " + height);
+            }
 
             Assert(WheelDisplayMetrics.GetRequiredIconPixels(64, 64, 480) == 43, "480p icon scale");
             Assert(WheelDisplayMetrics.GetRequiredIconPixels(64, 64, 1080) == 96, "1080p icon scale");

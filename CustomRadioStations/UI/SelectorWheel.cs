@@ -488,7 +488,7 @@ namespace SelectorWheel {
 
             }
 
-            UIHelper.DrawCustomText(SelectedCategory.SelectedItem.Name, 0.45f, FontSelectedItem, 255, 255, 255, 255, _origin.X, AddYPixelDistanceToPercent(_origin.Y, -50), 50, 0, 0, 0, 255, UIHelper.TextJustification.Center);
+            DrawSelectedItemName(SelectedCategory.SelectedItem.Name);
             if (SelectedCategory.ItemCount() > 1) {
                 UIHelper.DrawCustomText((SelectedCategory.CurrentItemIndex + 1).ToString() + " / " + SelectedCategory.ItemCount().ToString(), 0.55f, FontCategoryItemCount, 255, 255, 255, 255, _origin.X, AddYPixelDistanceToPercent(_origin.Y, -50), 50, 0, 0, 0, 255, UIHelper.TextJustification.Center);
             }
@@ -499,6 +499,40 @@ namespace SelectorWheel {
             DrawDescription(description);
 
             CategorySelectionControls();
+        }
+
+        private void DrawSelectedItemName(string text) {
+            if (string.IsNullOrEmpty(text))
+                return;
+
+            const float fontSize = 0.45f;
+            float x = _origin.X;
+            float startY = AddYPixelDistanceToPercent(_origin.Y, -50);
+            float lineHeight = UIHelper.MeasureFontHeightNoConvert(fontSize, FontSelectedItem);
+            if (lineHeight <= 0f || float.IsNaN(lineHeight) || float.IsInfinity(lineHeight))
+                lineHeight = 0.03f;
+
+            string[] lines = NormalizeItemTextLines(text);
+            Color textColor = Color.FromArgb(255, 255, 255, 255);
+            Color shadowColor = Color.FromArgb(255, 0, 0, 0);
+            for (int index = 0; index < lines.Length; index++) {
+                string line = lines[index];
+                float y = startY + (index * lineHeight);
+                if (!string.IsNullOrEmpty(line) && !CustomRadioStations.UnicodeTextRenderer.TryDraw(
+                    line, fontSize, FontSelectedItem, textColor, shadowColor, x, y,
+                    CustomRadioStations.UnicodeTextAlignment.Center)) {
+                    UIHelper.DrawCustomText(line, fontSize, FontSelectedItem,
+                        255, 255, 255, 255, x, y,
+                        50, 0, 0, 0, 255, UIHelper.TextJustification.Center);
+                }
+            }
+        }
+
+        private static string[] NormalizeItemTextLines(string text) {
+            return (text ?? string.Empty)
+                .Replace("\r\n", "\n")
+                .Replace('\r', '\n')
+                .Split(new[] { '\n' }, StringSplitOptions.None);
         }
 
         private void DrawDescription(string description) {
@@ -515,9 +549,23 @@ namespace SelectorWheel {
             float descriptionWidth = Math.Min(0.60f, UIHelper.XPixelToPercentage(1100));
             float startWrap = centerX - (descriptionWidth / 2f);
             float endWrap = centerX + (descriptionWidth / 2f);
-            float fontHeight = UIHelper.MeasureFontHeightNoConvert(fontSize, FontDescription);
-            int lineCount = Math.Max(1, UIHelper.GetStringLineCount(
-                description, fontSize, FontDescription, startWrap, endWrap, centerX, bottomEdge));
+            float fontHeight;
+            int lineCount;
+            CustomRadioStations.UnicodeTextLayout unicodeLayout;
+            float unicodeWrapWidth = (endWrap - startWrap) * UIScreen.ScaledWidth;
+            bool measureUnicodeLayout = CustomRadioStations.Config.UnicodeMode == CustomRadioStations.UnicodeTextMode.BitmapFallback ||
+                (CustomRadioStations.Config.UnicodeMode == CustomRadioStations.UnicodeTextMode.Auto &&
+                    CustomRadioStations.UnicodeTextSupport.RequiresFallback(description));
+            if (measureUnicodeLayout && CustomRadioStations.UnicodeTextRenderer.TryGetLayout(
+                description, fontSize, FontDescription, Color.White, Color.Transparent,
+                CustomRadioStations.UnicodeTextAlignment.Center, unicodeWrapWidth, out unicodeLayout)) {
+                fontHeight = unicodeLayout.LineHeightVirtual / CustomRadioStations.WheelDisplayMetrics.VirtualHeight;
+                lineCount = Math.Max(1, unicodeLayout.LineCount);
+            } else {
+                fontHeight = UIHelper.MeasureFontHeightNoConvert(fontSize, FontDescription);
+                lineCount = Math.Max(1, UIHelper.GetStringLineCount(
+                    description, fontSize, FontDescription, startWrap, endWrap, centerX, bottomEdge));
+            }
             float paddingY = UIHelper.YPixelToPercentage(10);
             float topPadding = UIHelper.YPixelToPercentage(10);
             float textY = Math.Max(0.72f, bottomEdge - (lineCount * fontHeight) - paddingY);
@@ -956,20 +1004,41 @@ namespace SelectorWheel {
             bool withRectangle = false, int R = 0, int G = 0, int B = 0, int A = 255,
             float rectWidthOffset = 0f, float rectHeightOffset = 0f, float rectYPosDivisor = 23.5f,
             float rectYOffset = 0f) {
-            Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "jamyfafi"); //Required, don't change this! AKA BEGIN_TEXT_COMMAND_DISPLAY_TEXT
-            Function.Call(Hash.SET_TEXT_SCALE, FontSize, FontSize); //1st param: 1.0f
-            Function.Call(Hash.SET_TEXT_FONT, (int)FontType);
-            Function.Call(Hash.SET_TEXT_COLOUR, Red, Green, Blue, Alpha);
-            Function.Call((Hash)0x465C84BC39F1C351, dropShawdowPixelDistance, dRed, dGreen, dBlue, dAlpha); // SET_TEXT_DROPSHADOW
-            Function.Call(Hash.SET_TEXT_OUTLINE);
-            Function.Call(Hash.SET_TEXT_JUSTIFICATION, (int)justifyType);
-            if (justifyType == TextJustification.Right || ForceTextWrap) {
-                Function.Call(Hash.SET_TEXT_WRAP, startWrap, endWrap);
+            CustomRadioStations.UnicodeTextAlignment unicodeAlignment = justifyType == TextJustification.Center
+                ? CustomRadioStations.UnicodeTextAlignment.Center
+                : (justifyType == TextJustification.Right
+                    ? CustomRadioStations.UnicodeTextAlignment.Right
+                    : CustomRadioStations.UnicodeTextAlignment.Left);
+            Color textColor = Color.FromArgb(Alpha, Red, Green, Blue);
+            Color shadowColor = dropShawdowPixelDistance > 0
+                ? Color.FromArgb(dAlpha, dRed, dGreen, dBlue)
+                : Color.FromArgb(0, dRed, dGreen, dBlue);
+            float unicodeWrapWidth = ForceTextWrap
+                ? Math.Max(0f, (endWrap - startWrap) * UIScreen.ScaledWidth)
+                : 0f;
+            CustomRadioStations.UnicodeTextLayout unicodeLayout;
+            bool unicodeDrawn = CustomRadioStations.UnicodeTextRenderer.TryDrawWrapped(
+                Message, FontSize, FontType, textColor, shadowColor, XPos, YPos, unicodeAlignment, unicodeWrapWidth, out unicodeLayout);
+
+            if (!unicodeDrawn) {
+                Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "jamyfafi"); //Required, don't change this! AKA BEGIN_TEXT_COMMAND_DISPLAY_TEXT
+                Function.Call(Hash.SET_TEXT_SCALE, FontSize, FontSize); //1st param: 1.0f
+                Function.Call(Hash.SET_TEXT_FONT, (int)FontType);
+                Function.Call(Hash.SET_TEXT_COLOUR, Red, Green, Blue, Alpha);
+                Function.Call((Hash)0x465C84BC39F1C351, dropShawdowPixelDistance, dRed, dGreen, dBlue, dAlpha); // SET_TEXT_DROPSHADOW
+                Function.Call(Hash.SET_TEXT_OUTLINE);
+                Function.Call(Hash.SET_TEXT_JUSTIFICATION, (int)justifyType);
+                if (justifyType == TextJustification.Right || ForceTextWrap) {
+                    Function.Call(Hash.SET_TEXT_WRAP, startWrap, endWrap);
+                }
+
+                AddLongString(Message);
+
+                Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, XPos, YPos); //AKA END_TEXT_COMMAND_DISPLAY_TEXT
             }
 
-            AddLongString(Message);
-
-            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, XPos, YPos); //AKA END_TEXT_COMMAND_DISPLAY_TEXT
+            if (unicodeDrawn && !withRectangle)
+                return;
 
             if (withRectangle) {
                 switch (FontType) {
@@ -990,11 +1059,14 @@ namespace SelectorWheel {
                     break;
                 }
 
-                float adjWidth = MeasureStringWidthNoConvert(Message, FontType, FontSize);
-                float fontHeight = MeasureFontHeightNoConvert(FontSize, FontType);
+                float fontHeight = unicodeDrawn
+                    ? unicodeLayout.LineHeightVirtual / CustomRadioStations.WheelDisplayMetrics.VirtualHeight
+                    : MeasureFontHeightNoConvert(FontSize, FontType);
                 float rectangleWidth = (endWrap - startWrap) + rectWidthOffset;
                 float baseYPos = YPos + (FontSize / rectYPosDivisor);
-                int numLines = GetStringLineCount(Message, FontSize, FontType, startWrap, endWrap, XPos, YPos);
+                int numLines = unicodeDrawn
+                    ? Math.Max(1, unicodeLayout.LineCount)
+                    : GetStringLineCount(Message, FontSize, FontType, startWrap, endWrap, XPos, YPos);
                 for (int i = 0; i < numLines; i++) {
                     float adjustedYPos = i == 0 ? baseYPos - rectHeightOffset / 2
                         : (i == numLines - 1 ? baseYPos + rectHeightOffset / 2

@@ -55,6 +55,7 @@
     <Compile Include="..\CustomRadioStations\Utilities\RadialSelectionHysteresis.cs" Link="RadialSelectionHysteresis.cs" />
     <Compile Include="..\CustomRadioStations\Game\RadioWheelAvailability.cs" Link="RadioWheelAvailability.cs" />
     <Compile Include="..\CustomRadioStations\UI\WheelDisplayMetrics.cs" Link="WheelDisplayMetrics.cs" />
+    <Compile Include="..\CustomRadioStations\UI\UnicodeTextSupport.cs" Link="UnicodeTextSupport.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

@@ -18,6 +18,19 @@ namespace CustomRadioStations {
             return VirtualHeight * outputWidth / outputHeight;
         }
 
+        internal static float GetTextRenderScale(int outputHeight) {
+            if (outputHeight <= 0)
+                return 1f;
+
+            // ScriptHookV retains every texture path until scripts reload. If the
+            // exact window height were used here, dragging a window through many
+            // heights could create a native texture variant for every single pixel.
+            // Round UP to 0.25x density buckets: this never undersamples the current
+            // output and keeps common 1080p/1440p/4K scales exactly 1.5/2/3x.
+            float physicalScale = Math.Max(1f, outputHeight / VirtualHeight);
+            return (float)(Math.Ceiling(physicalScale * 4f) / 4f);
+        }
+
         internal static int GetRequiredIconPixels(int virtualWidth, int virtualHeight, int outputHeight) {
             if (outputHeight <= 0)
                 outputHeight = (int)VirtualHeight;

@@ -1,4 +1,4 @@
-# Custom Radio Stations for GTA V
+﻿# Custom Radio Stations for GTA V
 
 > **Enhanced compatibility port v0.6 (2026):** GTA V Enhanced, ScriptHookVDotNet Enhanced, the ScriptHookVDotNet3 API, .NET Framework 4.8, and MiniAudioEx 3.3.6.
 
@@ -139,6 +139,34 @@ Example `wheel.json`:
   "radius": 300.0
 }
 ```
+
+### Unicode wheel text
+
+Custom wheel labels use GTA's native text renderer whenever the active Western font can represent the text. `graphics.unicodeTextMode` defaults to `Auto`; when a label contains characters outside the known-safe Western set, CRS renders the complete label once into a transparent texture and reuses the cached texture. This avoids the missing-glyph boxes GTA shows for titles such as `好き？ Suki!` while preserving the original native path for ordinary English/Latin titles.
+
+The bitmap fallback first looks for `graphics.unicodeFont`, then for a supported font in `scripts\Custom Radio Stations\Fonts`, and finally for suitable CJK fonts already installed by Windows. A bundled/private font is preferred because it gives consistent coverage without installing anything globally. TTF is the safest format for the .NET Framework/GDI+ renderer. Private font candidates are probed with the actual vector-outline operation before use, so an unsupported OpenType/CFF font is skipped in favour of the next usable font instead of failing title-by-title. See `Fonts\README.txt` for suggested filenames and licensing notes.
+
+The fallback keeps GDI+'s alternate-font fallback enabled, so an uncommon glyph missing from the
+primary family can still be sourced from another installed Windows font while the complete label is
+composited into one bitmap. ScriptHookV itself does not expose per-texture deletion: a texture made
+with `createTexture` is released when scripts reload. CRS therefore keeps generated filenames
+immutable (to avoid stale ScriptHookV textures), bounds its managed and disk caches, and only creates
+a native texture when a Unicode label is actually shown. Over a very long single game session the
+native texture table can still grow by one entry for each distinct Unicode label encountered; there
+is no safe standalone SHVDN API to reclaim those entries individually.
+
+The fallback is measured, not monospaced: GDI+ calculates each line's typographic advance and the renderer separately measures the real glyph-outline bounds before allocating the texture. The exact floating-point advance is retained for alignment instead of being rounded to a texture pixel. This covers proportional Latin, full-width forms, half-width Katakana and mixed CJK/Latin correctly, including outline/shadow overhang. Wrapped station/item descriptions use the same renderer: wrapping is measured with the selected fallback font and split at Unicode text-element boundaries. The .NET Framework text elements are additionally merged for modern emoji ZWJ chains, variation selectors, skin-tone modifiers, regional-indicator flags and half-width Katakana voiced marks, so those sequences are not cut in half. Basic Japanese/CJK kinsoku rules also keep closing punctuation and small kana off the start of a new line and opening brackets off the previous line end. Its line height is calibrated from GTA's selected native font slot so it occupies the same native text scale, although the visible glyph proportions can differ slightly because the fallback typeface is not Chalet London. Textures are rasterized from vertical output resolution and drawn through GTA's 720-high scaled UI canvas; raster density rounds upward in 0.25x buckets so window resizing cannot create a new native texture for every individual output height, and aspect ratio does not stretch the glyphs.
+
+```json
+{
+  "graphics": {
+    "unicodeTextMode": "Auto",
+    "unicodeFont": ""
+  }
+}
+```
+
+Modes are `Auto`, `NativeOnly`, and `BitmapFallback`. Generated PNGs use immutable content/style hashes under `scripts\Custom Radio Stations\cache\text`; the cache is bounded and stale entries are pruned. If the private renderer or font fails, CRS logs the failure and falls back to GTA's original text path instead of breaking the radio wheel. Rockstar's separate vehicle-dashboard `dashboard` Scaleform remains GTA-owned and therefore still follows the game's active font library.
 
 Station artwork uses a 720-high virtual canvas and therefore scales with the game's output resolution. The default 64x64 size becomes 128x128 physical pixels at 1440p while remaining square on ultrawide displays. Existing generated settings that still contain the old 30x30 defaults are upgraded automatically; deliberately customized sizes are preserved. Station descriptions are centered near the bottom of the screen and use a capped text width so the wheel remains readable on ultrawide resolutions such as 5120x1440.
 

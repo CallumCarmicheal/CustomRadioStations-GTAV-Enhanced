@@ -12,7 +12,7 @@ using Control = GTA.Control;
 
 namespace CustomRadioStations {
     public static class Config {
-        private const int CurrentSettingsVersion = 3;
+        private const int CurrentSettingsVersion = 4;
         private const int LegacyDefaultIconSize = 30;
         private const int CurrentDefaultIconSize = 64;
 
@@ -37,6 +37,8 @@ namespace CustomRadioStations {
         public static Color IconHL;
         public static double IconBgSizeMultiple;
         public static double IconHlSizeMultiple;
+        public static UnicodeTextMode UnicodeMode = UnicodeTextMode.Auto;
+        public static string UnicodeFont = string.Empty;
 
         public static Keys KB_Toggle;
         public static Control KB_Skip_Track;
@@ -64,6 +66,7 @@ namespace CustomRadioStations {
             bool shouldSaveUpgrade = UpgradeSettings();
             NormalizeSettings();
             ApplySettings();
+            UnicodeTextRenderer.NotifyConfigurationChanged();
 
             if (shouldCreate || shouldSaveUpgrade)
                 Save();
@@ -102,6 +105,8 @@ namespace CustomRadioStations {
                 settings.Graphics.IconHighlightColor = GeneralHelper.ColorToHex(IconHL);
                 settings.Graphics.BackgroundIconSizeMultiplier = IconBgSizeMultiple;
                 settings.Graphics.HighlightIconSizeMultiplier = IconHlSizeMultiple;
+                settings.Graphics.UnicodeTextMode = UnicodeMode;
+                settings.Graphics.UnicodeFont = UnicodeFont ?? string.Empty;
 
                 settings.KeyboardControls.ToggleModifier = KB_Toggle;
                 settings.KeyboardControls.SkipTrack = KB_Skip_Track;
@@ -187,6 +192,7 @@ namespace CustomRadioStations {
             settings.Graphics.WheelRadius = Math.Max(1f, settings.Graphics.WheelRadius);
             settings.Graphics.BackgroundIconSizeMultiplier = Math.Max(0.1, settings.Graphics.BackgroundIconSizeMultiplier);
             settings.Graphics.HighlightIconSizeMultiplier = Math.Max(0.1, settings.Graphics.HighlightIconSizeMultiplier);
+            settings.Graphics.UnicodeFont = (settings.Graphics.UnicodeFont ?? string.Empty).Trim();
             settings.GamepadControls.RadialDeadzone = Clamp(settings.GamepadControls.RadialDeadzone, 0f, 0.95f,
                 "gamepadControls.radialDeadzone");
             settings.GamepadControls.RadialHysteresisDegrees = Clamp(settings.GamepadControls.RadialHysteresisDegrees, 0f, 30f,
@@ -209,6 +215,8 @@ namespace CustomRadioStations {
             IconHL = ParseColor(settings.Graphics.IconHighlightColor, "#FF00CFEE", "graphics.iconHighlightColor");
             IconBgSizeMultiple = settings.Graphics.BackgroundIconSizeMultiplier;
             IconHlSizeMultiple = settings.Graphics.HighlightIconSizeMultiplier;
+            UnicodeMode = settings.Graphics.UnicodeTextMode;
+            UnicodeFont = settings.Graphics.UnicodeFont;
 
             KB_Toggle = settings.KeyboardControls.ToggleModifier;
             KB_Skip_Track = settings.KeyboardControls.SkipTrack;

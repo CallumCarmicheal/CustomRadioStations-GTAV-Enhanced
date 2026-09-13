@@ -80,6 +80,7 @@ namespace CustomRadioStations {
             try { Game.TimeScale = 1f; } catch { }
             try { SoundFile.DisposeSoundEngine(); } catch { }
             try { RadioNativeFunctions.DisposeDashboardScaleform(); } catch { }
+            try { UnicodeTextRenderer.Shutdown(); } catch { }
             try { Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER); } catch { }
             try { Function.Call(Hash.SET_AUDIO_FLAG, "LoadMPData", false); } catch { }
             try { Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", false); } catch { }

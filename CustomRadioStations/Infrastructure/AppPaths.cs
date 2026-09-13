@@ -15,6 +15,8 @@ namespace CustomRadioStations {
         internal const string HighlightIconFile = RootDirectory + @"\iconhl.png";
         internal const string BundledHighlightIconFile = RootDirectory + @"\selection-ring.png";
         internal const string NoRadioIconFile = RootDirectory + @"\no-radio.png";
+        internal const string UnicodeFontsDirectory = RootDirectory + @"\Fonts";
+        internal const string UnicodeTextCacheDirectory = RootDirectory + @"\cache\text";
         internal const string WheelSettingsFileName = "wheel.json";
         internal const string StationJsonFileName = "station.json";
         internal const string StationSettingsFileName = "station.ini";
