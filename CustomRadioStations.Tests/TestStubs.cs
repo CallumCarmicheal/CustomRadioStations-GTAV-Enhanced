@@ -2,6 +2,7 @@ using System.Collections.Generic;
 
 namespace CustomRadioStations {
     internal static class AppPaths {
+        internal static string RootDirectory;
         internal const string StationJsonFileName = "station.json";
     }
 

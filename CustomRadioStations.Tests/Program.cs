@@ -1,5 +1,7 @@
 ﻿using Newtonsoft.Json;
 
+using CustomRadioStations.UI.Settings;
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -14,6 +16,7 @@ namespace CustomRadioStations {
         private static int Main() {
             root = Path.Combine(Path.GetTempPath(), "crs-json-tests-" + Guid.NewGuid().ToString("N"));
             tracks = Path.Combine(root, "tracks");
+            AppPaths.RootDirectory = root;
             try {
                 CreateFixture();
                 TestDefaultsAndEmptyArrays();
@@ -34,6 +37,7 @@ namespace CustomRadioStations {
                 TestTrimmedBroadcastTimeline();
                 TestWheelDisplayMetricsAndIconVariants();
                 TestUnicodeTextSupport();
+                TestSettingsItems();
                 Console.WriteLine("Passed " + passed + " station configuration tests.");
                 return 0;
             } catch (Exception ex) {
@@ -188,7 +192,8 @@ namespace CustomRadioStations {
             string file = Path.Combine(tracks, "song.mp3");
             var info = new FileInfo(file);
             var analysis = new StationAnalysis();
-            analysis.Tracks[Path.GetFullPath(file)] = new TrackAnalysis {
+            analysis.Tracks[AudioAnalysisIdentity.CreateAnalysisKey(file, null, null)] = new TrackAnalysis {
+                FilePath = Path.GetFullPath(file),
                 FileSize = info.Length,
                 LastWriteUtc = info.LastWriteTimeUtc,
                 DurationMs = 10000u,
@@ -208,6 +213,12 @@ namespace CustomRadioStations {
                 "analysis audio bounds are retained");
             Assert(!definition.Tracks[0].Analysis.SourceStartMs.HasValue && !definition.Tracks[0].Analysis.SourceEndMs.HasValue,
                 "whole-file analysis does not emit logical segment bounds");
+
+            string movedFile = Path.Combine(tracks, "renamed-song.mp3");
+            File.Move(file, movedFile);
+            WriteStationJson("{\"name\":\"Analyzed\",\"tracks\":[\"renamed-song.mp3\"]}");
+            Assert(StationConfigLoader.TryLoad(root, out definition) && definition.Tracks[0].Analysis != null,
+                "content-keyed analysis survives moving or renaming a media file");
 
             var segmented = new TrackAnalysis {
                 FileSize = info.Length,
@@ -229,10 +240,33 @@ namespace CustomRadioStations {
             Assert(!wholeJson.Contains("sourceStartMs") && !wholeJson.Contains("sourceEndMs"),
                 "whole-file analysis omits optional source segment fields");
 
-            using (FileStream stream = new FileStream(file, FileMode.Append, FileAccess.Write))
+            using (FileStream stream = new FileStream(movedFile, FileMode.Append, FileAccess.Write))
                 stream.WriteByte(2);
             Assert(StationConfigLoader.TryLoad(root, out definition) && definition.Tracks[0].Analysis == null,
                 "stale station analysis is ignored after source file changes");
+
+            File.Delete(Path.Combine(root, StationAnalysisLoader.FileName));
+            var legacy = new StationAnalysis { Version = 1 };
+            var movedInfo = new FileInfo(movedFile);
+            legacy.Tracks[definition.Tracks[0].AnalysisKey] = new TrackAnalysis {
+                FileSize = movedInfo.Length,
+                LastWriteUtc = movedInfo.LastWriteTimeUtc,
+                DurationMs = 10001u,
+                AudioStartMs = 600u,
+                AudioEndMs = 9400u,
+                IntegratedLufs = -17d,
+                TruePeakDb = -2d,
+                GainDb = 1d,
+                AnalyzedUtc = DateTime.UtcNow
+            };
+            File.WriteAllText(Path.Combine(root, Analyzer.LegacyAnalysisMigrator.FileName), JsonConvert.SerializeObject(legacy));
+            Assert(StationConfigLoader.TryLoad(root, out definition) && definition.Tracks[0].Analysis == null,
+                "runtime ignores legacy per-station analysis files");
+            int migrated = Analyzer.LegacyAnalysisMigrator.Merge(root, root, definition.Tracks, new StationAnalysisSettings());
+            Assert(migrated == 1 && StationConfigLoader.TryLoad(root, out definition) && definition.Tracks[0].Analysis != null,
+                "analyzer migration merges legacy analysis into the central cache");
+            Assert(!File.Exists(Path.Combine(root, Analyzer.LegacyAnalysisMigrator.FileName)),
+                "legacy analysis is deleted after migration");
         }
 
         private static void TestMediaPlaybackBounds() {
@@ -477,6 +511,74 @@ namespace CustomRadioStations {
             string invalidPng = Path.Combine(icons, "invalid.png");
             File.WriteAllBytes(invalidPng, new byte[] { 1, 2, 3 });
             Assert(!TextureFileValidator.TryValidatePng(invalidPng, out validationError), "malformed PNG is rejected before DirectX");
+        }
+
+        private static void TestSettingsItems() {
+            bool enabled = false;
+            var toggle = new ToggleSettingsItem("Toggle", "", () => enabled, value => enabled = value, false);
+            Assert(toggle.IsDefault && toggle.DefaultValueText == "OFF", "settings toggle reports its default state");
+            toggle.Activate();
+            Assert(enabled && toggle.ValueText == "ON" && !toggle.IsDefault, "settings toggle activates and formats state");
+            toggle.Reset();
+            Assert(!enabled && toggle.IsDefault, "settings toggle resets to default");
+
+            float sliderValue = 0.2f;
+            var slider = new SliderSettingsItem("Slider", "", () => sliderValue, value => sliderValue = value,
+                0f, 1f, 0.05f, 0.3f);
+            slider.SetNormalized(0.53f);
+            AssertClose(sliderValue, 0.55f, "settings slider snaps pointer input to configured step");
+            Assert(!slider.IsDefault && slider.DefaultValueText == "0.3", "settings slider exposes its default value");
+            sliderValue = 0.32f;
+            Assert(!slider.IsDefault, "settings slider does not hide a non-default value just because it is within half a step");
+            slider.Adjust(1);
+            AssertClose(sliderValue, 0.35f, "settings slider moves an off-grid value to the next configured step");
+            sliderValue = 0.32f;
+            slider.Adjust(-1);
+            AssertClose(sliderValue, 0.30f, "settings slider moves an off-grid value to the previous configured step");
+            float midpointValue = 0f;
+            var midpointSlider = new SliderSettingsItem("Midpoint", "", () => midpointValue, value => midpointValue = value,
+                0f, 1f, 0.25f, 0f);
+            midpointSlider.SetNormalized(0.125f);
+            AssertClose(midpointValue, 0.25f, "settings slider rounds exact step midpoints away from zero");
+            slider.Reset();
+            AssertClose(sliderValue, 0.3f, "settings slider restores default value");
+            Assert(slider.IsDefault, "settings slider reports default state after reset");
+
+            int choiceIndex = 0;
+            var choice = new ChoiceSettingsItem("Choice", "", new[] { "A", "B", "C" },
+                () => choiceIndex, value => choiceIndex = value, 0);
+            Assert(choice.IsDefault && choice.DefaultValueText == "A", "settings choice reports its default option");
+            choice.Adjust(-1);
+            Assert(choiceIndex == 2 && choice.ValueText == "C" && !choice.IsDefault, "settings choice wraps backwards");
+            choice.Adjust(1);
+            Assert(choiceIndex == 0 && choice.ValueText == "A" && choice.IsDefault, "settings choice wraps forwards");
+
+            bool bindingActivated = false;
+            string bindingValue = "F10";
+            var binding = new BindingSettingsItem("Binding", "", () => bindingValue,
+                () => bindingActivated = true, () => bindingValue = "DEFAULT");
+            binding.Activate();
+            Assert(bindingActivated && binding.ValueText == "F10", "settings binding enters capture without mutating its displayed value");
+            binding.Reset();
+            Assert(bindingValue == "DEFAULT", "settings binding can restore its default value");
+
+            var info = new InfoSettingsItem("Info", "", () => "BUILT-IN");
+            Assert(!info.Selectable && info.ValueText == "BUILT-IN", "settings information rows are visible but excluded from controller selection");
+
+            var section = new SectionSettingsItem("Section", "Section summary");
+            Assert(!section.Selectable && section.ValueText == string.Empty,
+                "settings section headers are presentation-only and skipped by keyboard/controller navigation");
+
+            bool actionActivated = false;
+            var destructiveAction = new ActionSettingsItem("Reset", "", () => actionActivated = true, true);
+            destructiveAction.Activate();
+            Assert(actionActivated && destructiveAction.IsAction && destructiveAction.IsDestructive,
+                "settings actions retain destructive presentation metadata without changing activation semantics");
+
+            var page = new SettingsPage("Page", "Page summary", toggle, slider, choice, binding);
+            Assert(page.Subtitle == "Page summary", "settings page retains its optional subtitle");
+            page.SelectedIndex = 99;
+            Assert(page.SelectedItem == binding && page.SelectedIndex == 3, "settings page clamps selection to valid items");
         }
 
         private static void TestTrackDisplayMetadata() {

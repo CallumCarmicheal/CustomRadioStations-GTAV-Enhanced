@@ -6,8 +6,8 @@ using System.IO;
 
 namespace CustomRadioStations {
     public static class StationAnalysisLoader {
-        public const int CurrentVersion = 1;
-        public const string FileName = "station.analysis.json";
+        public const int CurrentVersion = 2;
+        public const string FileName = "audio-analysis.json";
 
         private static readonly JsonSerializerSettings SerializerSettings = new JsonSerializerSettings {
             MissingMemberHandling = MissingMemberHandling.Ignore,

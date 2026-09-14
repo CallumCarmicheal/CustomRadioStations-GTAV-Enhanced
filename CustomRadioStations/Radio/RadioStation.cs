@@ -836,6 +836,11 @@ namespace CustomRadioStations {
             }
         }
 
+        internal static void RefreshSettings() {
+            lock (SyncRoot)
+                Apply();
+        }
+
         internal static void NotifyStationStarted(RadioStation station) {
             lock (SyncRoot) {
                 if (!suspended || station == null || station.CurrentSoundIsPaused)
@@ -864,7 +869,8 @@ namespace CustomRadioStations {
         }
 
         private static void Apply() {
-            bool shouldSuspend = gamePaused || focusPaused;
+            bool shouldSuspend = (gamePaused && !Config.PlayInPauseMenu) ||
+                (focusPaused && !Config.PlayWhileInBackground);
             if (shouldSuspend == suspended)
                 return;
             suspended = shouldSuspend;

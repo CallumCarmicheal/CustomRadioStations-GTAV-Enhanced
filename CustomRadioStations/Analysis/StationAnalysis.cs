@@ -55,6 +55,9 @@ namespace CustomRadioStations {
     }
 
     public sealed class TrackAnalysis {
+        [JsonProperty("filePath", NullValueHandling = NullValueHandling.Ignore)]
+        public string FilePath { get; set; }
+
         [JsonProperty("fileSize")]
         public long FileSize { get; set; }
 
@@ -117,20 +120,25 @@ namespace CustomRadioStations {
         public TrackAnalysis GetFreshTrack(string filePath) {
             if (Tracks == null || string.IsNullOrWhiteSpace(filePath))
                 return null;
-            string fullPath = Path.GetFullPath(filePath);
-            TrackAnalysis analysis;
-            return Tracks.TryGetValue(fullPath, out analysis) && analysis != null && analysis.IsCurrentFor(fullPath)
-                ? analysis
-                : null;
+            try {
+                string key = AudioAnalysisIdentity.CreateAnalysisKey(filePath, null, null);
+                TrackAnalysis analysis;
+                return Tracks.TryGetValue(key, out analysis) ? analysis : null;
+            } catch {
+                return null;
+            }
         }
 
         public TrackAnalysis GetFreshTrack(ResolvedMediaSource source) {
             if (Tracks == null || source == null || string.IsNullOrWhiteSpace(source.FilePath))
                 return null;
-            TrackAnalysis analysis;
-            return Tracks.TryGetValue(source.AnalysisKey, out analysis) && analysis != null && analysis.IsCurrentFor(source.FilePath)
-                ? analysis
-                : null;
+            try {
+                string key = AudioAnalysisIdentity.CreateAnalysisKey(source);
+                TrackAnalysis analysis;
+                return Tracks.TryGetValue(key, out analysis) ? analysis : null;
+            } catch {
+                return null;
+            }
         }
     }
 }

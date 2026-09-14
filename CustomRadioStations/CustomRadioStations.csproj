@@ -64,6 +64,7 @@
     <Compile Include="Audio\MiniAudioFrameworkCompatibility.cs" />
     <Compile Include="Audio\Track.cs" />
     <Compile Include="Audio\TrackMetadataReader.cs" />
+    <Compile Include="Analysis\AudioAnalysisIdentity.cs" />
     <Compile Include="Analysis\LoudnessNormalization.cs" />
     <Compile Include="Analysis\MediaPlaybackBounds.cs" />
     <Compile Include="Analysis\StationAnalysis.cs" />
@@ -96,6 +97,12 @@
     <Compile Include="Scripts\MainScript.cs" />
     <Compile Include="Scripts\NativeWheelOrganizerScript.cs" />
     <Compile Include="UI\SelectorWheel.cs" />
+    <Compile Include="UI\Settings\SettingsInput.cs" />
+    <Compile Include="UI\Settings\SettingsItem.cs" />
+    <Compile Include="UI\Settings\SettingsLayout.cs" />
+    <Compile Include="UI\Settings\SettingsMenu.cs" />
+    <Compile Include="UI\Settings\SettingsPage.cs" />
+    <Compile Include="UI\Settings\SettingsTheme.cs" />
     <Compile Include="UI\UnicodeTextRenderer.cs" />
     <Compile Include="UI\UnicodeTextSupport.cs" />
     <Compile Include="UI\WheelDisplayMetrics.cs" />

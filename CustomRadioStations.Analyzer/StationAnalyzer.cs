@@ -36,6 +36,7 @@ namespace CustomRadioStations.Analyzer {
     internal sealed class StationAnalyzer {
         private readonly AnalyzerOptions options;
         private readonly FfmpegAudioAnalyzer analyzer;
+        private readonly string analysisRoot;
         private readonly object sync = new object();
         private readonly Dictionary<int, ActiveWork> active = new Dictionary<int, ActiveWork>();
         private long completedWeight;
@@ -45,14 +46,14 @@ namespace CustomRadioStations.Analyzer {
         private int failed;
         private readonly List<string> failures = new List<string>();
 
-        internal StationAnalyzer(AnalyzerOptions options, string ffmpegPath) {
+        internal StationAnalyzer(AnalyzerOptions options, string ffmpegPath, string analysisRoot) {
             this.options = options;
             analyzer = new FfmpegAudioAnalyzer(ffmpegPath, options.Settings);
+            this.analysisRoot = analysisRoot;
         }
 
         internal async Task<StationAnalyzerResult> AnalyzeAsync(StationDefinition station, Action<AnalyzerProgress> progress, CancellationToken cancellationToken) {
-            string stationDirectory = Path.GetDirectoryName(station.ConfigPath);
-            StationAnalysis sidecar = StationAnalysisLoader.LoadOrCreate(stationDirectory);
+            StationAnalysis sidecar = StationAnalysisLoader.LoadOrCreate(analysisRoot);
             bool settingsRequireRescan = sidecar.Settings == null || sidecar.Settings.RequiresAudioRescan(options.Settings);
             sidecar.Tracks = sidecar.Tracks == null
                 ? new Dictionary<string, TrackAnalysis>(StringComparer.OrdinalIgnoreCase)
@@ -66,6 +67,7 @@ namespace CustomRadioStations.Analyzer {
                 .ToList();
 
             var physicalDurations = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
+            var physicalFingerprints = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var jobs = new List<AnalysisJob>();
             foreach (ResolvedMediaSource source in sources) {
                 string path = Path.GetFullPath(source.FilePath);
@@ -74,10 +76,17 @@ namespace CustomRadioStations.Analyzer {
                 uint segmentEnd;
                 GetSegmentBounds(source, physicalDuration, out segmentStart, out segmentEnd);
                 uint segmentDuration = segmentEnd > segmentStart ? segmentEnd - segmentStart : physicalDuration;
+                string fingerprint;
+                if (!physicalFingerprints.TryGetValue(path, out fingerprint)) {
+                    fingerprint = AudioAnalysisIdentity.CreateFileFingerprint(path);
+                    physicalFingerprints[path] = fingerprint;
+                }
+                string cacheKey = AudioAnalysisIdentity.CreateAnalysisKeyFromFingerprint(fingerprint, source.StartMs, source.EndMs);
 
                 TrackAnalysis existing;
-                bool fresh = sidecar.Tracks.TryGetValue(source.AnalysisKey, out existing) && existing != null && existing.IsCurrentFor(path);
+                bool fresh = sidecar.Tracks.TryGetValue(cacheKey, out existing) && existing != null;
                 if (fresh && !options.Force && !settingsRequireRescan) {
+                    existing.FilePath = path;
                     SetSourceBounds(existing, source, segmentStart, segmentEnd);
                     existing.GainDb = LoudnessNormalization.CalculateGainDb(existing.IntegratedLufs, existing.TruePeakDb, options.Settings);
                     if (!options.Settings.TrimSilence) {
@@ -93,13 +102,13 @@ namespace CustomRadioStations.Analyzer {
                 }
 
                 long jobWeight = Weight(segmentDuration);
-                jobs.Add(new AnalysisJob(source, physicalDuration, segmentStart, segmentEnd, segmentDuration, jobWeight));
+                jobs.Add(new AnalysisJob(source, cacheKey, physicalDuration, segmentStart, segmentEnd, segmentDuration, jobWeight));
                 totalWeight += jobWeight;
             }
 
             sidecar.Settings = CloneSettings(options.Settings);
             if (jobs.Count == 0) {
-                StationAnalysisLoader.SaveAtomic(stationDirectory, sidecar);
+                StationAnalysisLoader.SaveAtomic(analysisRoot, sidecar);
                 Report(progress, null, sources.Count);
                 return new StationAnalyzerResult { Total = sources.Count, Cached = cached, Analyzed = 0, Failed = 0, Failures = new List<string>() };
             }
@@ -109,7 +118,7 @@ namespace CustomRadioStations.Analyzer {
             var workers = new List<Task>();
             for (int workerIndex = 0; workerIndex < workerCount; workerIndex++) {
                 int captured = workerIndex;
-                workers.Add(Task.Run(() => WorkerAsync(captured, queue, sidecar, stationDirectory, sources.Count, progress, cancellationToken), cancellationToken));
+                workers.Add(Task.Run(() => WorkerAsync(captured, queue, sidecar, sources.Count, progress, cancellationToken), cancellationToken));
             }
 
             try {
@@ -128,7 +137,7 @@ namespace CustomRadioStations.Analyzer {
         }
 
         private async Task WorkerAsync(int workerIndex, ConcurrentQueue<AnalysisJob> queue, StationAnalysis sidecar,
-            string stationDirectory, int total, Action<AnalyzerProgress> progress, CancellationToken cancellationToken) {
+            int total, Action<AnalyzerProgress> progress, CancellationToken cancellationToken) {
             AnalysisJob job;
             while (!cancellationToken.IsCancellationRequested && queue.TryDequeue(out job)) {
                 SetActive(workerIndex, job, 0d, progress, total);
@@ -149,6 +158,7 @@ namespace CustomRadioStations.Analyzer {
                     detectedEnd = Math.Max(detectedStart, Math.Min(detectedEnd, job.SegmentEndMs));
 
                     var track = new TrackAnalysis {
+                        FilePath = info.FullName,
                         FileSize = info.Length,
                         LastWriteUtc = info.LastWriteTimeUtc,
                         DurationMs = job.PhysicalDurationMs,
@@ -163,9 +173,9 @@ namespace CustomRadioStations.Analyzer {
                     };
 
                     lock (sync) {
-                        sidecar.Tracks[job.Source.AnalysisKey] = track;
+                        sidecar.Tracks[job.CacheKey] = track;
                         sidecar.Settings = CloneSettings(options.Settings);
-                        StationAnalysisLoader.SaveAtomic(stationDirectory, sidecar);
+                        StationAnalysisLoader.SaveAtomic(analysisRoot, sidecar);
                         completed++;
                         completedWeight += job.Weight;
                         active.Remove(workerIndex);
@@ -267,9 +277,10 @@ namespace CustomRadioStations.Analyzer {
         }
 
         private sealed class AnalysisJob {
-            internal AnalysisJob(ResolvedMediaSource source, uint physicalDurationMs, uint segmentStartMs,
+            internal AnalysisJob(ResolvedMediaSource source, string cacheKey, uint physicalDurationMs, uint segmentStartMs,
                 uint segmentEndMs, uint segmentDurationMs, long weight) {
                 Source = source;
+                CacheKey = cacheKey;
                 PhysicalDurationMs = physicalDurationMs;
                 SegmentStartMs = segmentStartMs;
                 SegmentEndMs = segmentEndMs;
@@ -282,6 +293,7 @@ namespace CustomRadioStations.Analyzer {
             }
 
             internal ResolvedMediaSource Source { get; }
+            internal string CacheKey { get; }
             internal uint PhysicalDurationMs { get; }
             internal uint SegmentStartMs { get; }
             internal uint SegmentEndMs { get; }

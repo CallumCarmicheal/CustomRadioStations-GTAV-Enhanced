@@ -10,6 +10,7 @@ namespace CustomRadioStations {
         internal const string MainLogFile = RootDirectory + @"\CustomRadioStations.log";
         internal const string NativeStationsLogFile = RootDirectory + @"\NativeStations.log";
         internal const string NativeWheelsFile = RootDirectory + @"\native-wheels.json";
+        internal const string AudioAnalysisFile = RootDirectory + @"\audio-analysis.json";
         internal const string BackgroundIconFile = RootDirectory + @"\iconbg.png";
         internal const string BundledBackgroundIconFile = RootDirectory + @"\station-background.png";
         internal const string HighlightIconFile = RootDirectory + @"\iconhl.png";

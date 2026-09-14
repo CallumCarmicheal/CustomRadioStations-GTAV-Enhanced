@@ -47,6 +47,7 @@
   <ItemGroup>
     <Compile Include="AnalyzerOptions.cs" />
     <Compile Include="FfmpegAudioAnalyzer.cs" />
+    <Compile Include="LegacyAnalysisMigrator.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="StationAnalyzer.cs" />
   </ItemGroup>

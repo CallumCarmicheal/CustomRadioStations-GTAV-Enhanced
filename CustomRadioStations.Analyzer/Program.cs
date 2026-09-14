@@ -33,6 +33,7 @@ namespace CustomRadioStations.Analyzer {
             IReadOnlyList<string> stationDirectories = DiscoverStations(options.InputPath);
             if (stationDirectories.Count == 0)
                 throw new InvalidOperationException("No station.json files were found under: " + options.InputPath);
+            string analysisRoot = ResolveAnalysisRoot(options.InputPath);
 
             using (var cancellation = new CancellationTokenSource()) {
                 int cancelCount = 0;
@@ -66,7 +67,13 @@ namespace CustomRadioStations.Analyzer {
                         foreach (string warning in warnings.Where(value => value.StartsWith("WARNING", StringComparison.OrdinalIgnoreCase)))
                             AnsiConsole.MarkupLine("[grey]" + Markup.Escape(warning) + "[/]");
 
-                        var analyzer = new StationAnalyzer(options, ffmpeg);
+                        IEnumerable<ResolvedMediaSource> sources = station.Tracks.Concat(station.Commercials ?? new ResolvedMediaSource[0]);
+                        int migrated = LegacyAnalysisMigrator.Merge(stationDirectory, analysisRoot, sources, options.Settings,
+                            message => AnsiConsole.MarkupLine("[yellow]Migration warning:[/] " + Markup.Escape(message)));
+                        if (migrated > 0)
+                            AnsiConsole.MarkupLine("[green]Migrated[/] " + migrated + " legacy analysis entries into " + Markup.Escape(StationAnalysisLoader.FileName));
+
+                        var analyzer = new StationAnalyzer(options, ffmpeg, analysisRoot);
                         StationAnalyzerResult result = null;
                         await AnsiConsole.Progress()
                             .AutoClear(false)
@@ -99,7 +106,7 @@ namespace CustomRadioStations.Analyzer {
                             });
 
                         if (result != null) {
-                            AnsiConsole.MarkupLine("[green]Saved[/] " + Markup.Escape(Path.Combine(stationDirectory, StationAnalysisLoader.FileName)) +
+                            AnsiConsole.MarkupLine("[green]Saved[/] " + Markup.Escape(Path.Combine(analysisRoot, StationAnalysisLoader.FileName)) +
                                 "  [grey](cached " + result.Cached + ", analyzed " + result.Analyzed + ", failed " + result.Failed + ")[/]");
                             if (result.Failures != null) {
                                 foreach (string failure in result.Failures)
@@ -145,6 +152,23 @@ namespace CustomRadioStations.Analyzer {
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+        }
+
+        private static string ResolveAnalysisRoot(string input) {
+            string full = Path.GetFullPath(input);
+            string directory = File.Exists(full) ? Path.GetDirectoryName(full) : full;
+            if (!File.Exists(Path.Combine(directory, "station.json")))
+                return directory;
+
+            for (DirectoryInfo current = new DirectoryInfo(directory); current != null; current = current.Parent) {
+                if (string.Equals(current.Name, "Custom Radio Stations", StringComparison.OrdinalIgnoreCase) ||
+                    File.Exists(Path.Combine(current.FullName, "settings.json")) ||
+                    File.Exists(Path.Combine(current.FullName, "no-radio.png")) ||
+                    File.Exists(Path.Combine(current.FullName, "selection-ring.png")) ||
+                    File.Exists(Path.Combine(current.FullName, "station-background.png")))
+                    return current.FullName;
+            }
+            return directory;
         }
 
         private static string FindFfmpeg(string configured) {

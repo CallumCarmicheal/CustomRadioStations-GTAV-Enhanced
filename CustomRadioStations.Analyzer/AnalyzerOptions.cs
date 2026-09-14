@@ -2,6 +2,7 @@
 
 using System;
 using System.Globalization;
+using System.IO;
 
 namespace CustomRadioStations.Analyzer {
     internal sealed class AnalyzerOptions {
@@ -12,13 +13,19 @@ namespace CustomRadioStations.Analyzer {
         internal StationAnalysisSettings Settings { get; private set; }
 
         internal static AnalyzerOptions Parse(string[] args) {
-            if (args == null || args.Length == 0)
-                throw new ArgumentException("A station folder, station.json, or Custom Radio Stations root folder is required.");
-
             var options = new AnalyzerOptions {
                 Jobs = Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2)),
                 Settings = new StationAnalysisSettings()
             };
+
+            if (args == null || args.Length == 0) {
+                string defaultInputPath = Path.GetFullPath(Path.Combine(
+                    Environment.CurrentDirectory, @"..\..\scripts\Custom Radio Stations"));
+                if (!IsDefaultRoot(defaultInputPath))
+                    throw new ArgumentException("A station folder, station.json, or Custom Radio Stations root folder is required.");
+                options.InputPath = defaultInputPath;
+                return options;
+            }
 
             for (int i = 0; i < args.Length; i++) {
                 string arg = args[i];
@@ -75,6 +82,14 @@ namespace CustomRadioStations.Analyzer {
             if (string.IsNullOrWhiteSpace(options.InputPath))
                 throw new ArgumentException("An input path is required.");
             return options;
+        }
+
+        private static bool IsDefaultRoot(string path) {
+            return Directory.Exists(path) &&
+                (File.Exists(Path.Combine(path, "no-radio.png")) ||
+                    File.Exists(Path.Combine(path, "selection-ring.png")) ||
+                    File.Exists(Path.Combine(path, "station-background.png")) ||
+                    File.Exists(Path.Combine(path, "settings.json")));
         }
 
         private static string Next(string[] args, ref int index, string option) {

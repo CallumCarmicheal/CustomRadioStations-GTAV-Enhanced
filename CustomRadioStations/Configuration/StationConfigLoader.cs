@@ -52,9 +52,10 @@ namespace CustomRadioStations {
                 }
 
                 StationAnalysis analysis;
-                if (StationAnalysisLoader.TryLoad(stationDirectory, out analysis, message => warn("WARNING: Station '" + config.Name + "': " + message))) {
-                    AttachAnalysis(tracks, analysis);
-                    AttachAnalysis(commercials, analysis);
+                if (StationAnalysisLoader.TryLoad(AppPaths.RootDirectory, out analysis, message => warn("WARNING: Station '" + config.Name + "': " + message))) {
+                    var fingerprints = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    AttachAnalysis(tracks, analysis, fingerprints);
+                    AttachAnalysis(commercials, analysis, fingerprints);
                 }
 
                 definition = new StationDefinition {
@@ -105,11 +106,25 @@ namespace CustomRadioStations {
             return "station-" + StableHash(source).ToString("x8", CultureInfo.InvariantCulture);
         }
 
-        private static void AttachAnalysis(IEnumerable<ResolvedMediaSource> sources, StationAnalysis analysis) {
+        private static void AttachAnalysis(IEnumerable<ResolvedMediaSource> sources, StationAnalysis analysis,
+            IDictionary<string, string> fingerprints) {
             if (analysis == null || sources == null)
                 return;
-            foreach (ResolvedMediaSource source in sources)
-                source.Analysis = analysis.GetFreshTrack(source);
+            foreach (ResolvedMediaSource source in sources) {
+                try {
+                    string path = Path.GetFullPath(source.FilePath);
+                    string fingerprint;
+                    if (!fingerprints.TryGetValue(path, out fingerprint)) {
+                        fingerprint = AudioAnalysisIdentity.CreateFileFingerprint(path);
+                        fingerprints[path] = fingerprint;
+                    }
+                    string key = AudioAnalysisIdentity.CreateAnalysisKeyFromFingerprint(fingerprint, source.StartMs, source.EndMs);
+                    TrackAnalysis trackAnalysis;
+                    source.Analysis = analysis.Tracks.TryGetValue(key, out trackAnalysis) ? trackAnalysis : null;
+                } catch {
+                    source.Analysis = null;
+                }
+            }
         }
 
         private static void Normalize(StationConfig config, string folderName, string configPath, Action<string> warn) {

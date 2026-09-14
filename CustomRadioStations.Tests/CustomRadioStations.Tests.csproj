@@ -38,11 +38,13 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="TestStubs.cs" />
+    <Compile Include="..\CustomRadioStations.Analyzer\LegacyAnalysisMigrator.cs" Link="LegacyAnalysisMigrator.cs" />
     <Compile Include="..\CustomRadioStations\Configuration\StationConfig.cs" Link="StationConfig.cs" />
     <Compile Include="..\CustomRadioStations\Configuration\StationConfigLoader.cs" Link="StationConfigLoader.cs" />
     <Compile Include="..\CustomRadioStations\Configuration\Settings.cs" Link="Settings.cs" />
     <Compile Include="..\CustomRadioStations\Audio\Track.cs" Link="Track.cs" />
     <Compile Include="..\CustomRadioStations\Audio\TrackMetadataReader.cs" Link="TrackMetadataReader.cs" />
+    <Compile Include="..\CustomRadioStations\Analysis\AudioAnalysisIdentity.cs" Link="AudioAnalysisIdentity.cs" />
     <Compile Include="..\CustomRadioStations\Analysis\LoudnessNormalization.cs" Link="LoudnessNormalization.cs" />
     <Compile Include="..\CustomRadioStations\Analysis\MediaPlaybackBounds.cs" Link="MediaPlaybackBounds.cs" />
     <Compile Include="..\CustomRadioStations\Analysis\StationAnalysis.cs" Link="StationAnalysis.cs" />
@@ -56,6 +58,8 @@
     <Compile Include="..\CustomRadioStations\Game\RadioWheelAvailability.cs" Link="RadioWheelAvailability.cs" />
     <Compile Include="..\CustomRadioStations\UI\WheelDisplayMetrics.cs" Link="WheelDisplayMetrics.cs" />
     <Compile Include="..\CustomRadioStations\UI\UnicodeTextSupport.cs" Link="UnicodeTextSupport.cs" />
+    <Compile Include="..\CustomRadioStations\UI\Settings\SettingsItem.cs" Link="SettingsItem.cs" />
+    <Compile Include="..\CustomRadioStations\UI\Settings\SettingsPage.cs" Link="SettingsPage.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

@@ -6,13 +6,13 @@ using System;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
-using System.Windows.Forms;
+using Keys = System.Windows.Forms.Keys;
 
 using Control = GTA.Control;
 
 namespace CustomRadioStations {
     public static class Config {
-        private const int CurrentSettingsVersion = 4;
+        private const int CurrentSettingsVersion = 7;
         private const int LegacyDefaultIconSize = 30;
         private const int CurrentDefaultIconSize = 64;
 
@@ -29,6 +29,12 @@ namespace CustomRadioStations {
         public static int LoadStartDelay;
         public static bool DisplayHelpText;
         public static bool EnableWheelSlowmotion;
+        public static bool PlayInPauseMenu;
+        public static bool PlayWhileInBackground;
+        public static bool RememberSettingsPage = ApplicationSettingsDefaults.RememberSettingsPage;
+        public static string LastSettingsPage = ApplicationSettingsDefaults.LastSettingsPage;
+        public static int SettingsMenuHoldDelayMs = ApplicationSettingsDefaults.MenuHoldDelayMs;
+        public static int SettingsMenuRepeatRateMs = ApplicationSettingsDefaults.MenuRepeatRateMs;
 
         public static int IconX;
         public static int IconY;
@@ -37,18 +43,20 @@ namespace CustomRadioStations {
         public static Color IconHL;
         public static double IconBgSizeMultiple;
         public static double IconHlSizeMultiple;
-        public static UnicodeTextMode UnicodeMode = UnicodeTextMode.Auto;
-        public static string UnicodeFont = string.Empty;
+        public static UnicodeTextMode UnicodeMode = ApplicationSettingsDefaults.UnicodeTextMode;
+        public static string UnicodeFont = ApplicationSettingsDefaults.UnicodeFont;
 
         public static Keys KB_Toggle;
         public static Control KB_Skip_Track;
         public static Control KB_Volume_Up;
         public static Control KB_Volume_Down;
+        public static Keys KB_OpenSettings = ApplicationSettingsDefaults.KeyboardOpenSettings;
 
         public static Control GP_Toggle;
         public static Control GP_Skip_Track;
         public static Control GP_Volume_Up;
         public static Control GP_Volume_Down;
+        public static Control GP_OpenSettings = ApplicationSettingsDefaults.GamepadOpenSettings;
         public static float GP_RadialDeadzone;
         public static float GP_RadialHysteresisDegrees;
 
@@ -88,7 +96,23 @@ namespace CustomRadioStations {
             return true;
         }
 
+        public static void ResetToDefaults() {
+            TryResetToDefaults();
+        }
+
+        internal static bool TryResetToDefaults() {
+            settings = new ApplicationSettings { Version = CurrentSettingsVersion };
+            NormalizeSettings();
+            ApplySettings();
+            UnicodeTextRenderer.NotifyConfigurationChanged();
+            return TrySave();
+        }
+
         public static void Save() {
+            TrySave();
+        }
+
+        internal static bool TrySave() {
             try {
                 settings.General.MasterVolume = SoundFile.SoundEngine.SoundVolume;
                 settings.General.CustomWheelAsDefault = CustomWheelAsDefault;
@@ -97,6 +121,12 @@ namespace CustomRadioStations {
                 settings.General.LoadStartDelayMs = LoadStartDelay;
                 settings.General.DisplayHelpText = DisplayHelpText;
                 settings.General.EnableWheelSlowMotion = EnableWheelSlowmotion;
+                settings.General.PlayInPauseMenu = PlayInPauseMenu;
+                settings.General.PlayWhileInBackground = PlayWhileInBackground;
+                settings.Ui.RememberSettingsPage = RememberSettingsPage;
+                settings.Ui.LastSettingsPage = LastSettingsPage ?? ApplicationSettingsDefaults.LastSettingsPage;
+                settings.Ui.MenuHoldDelayMs = SettingsMenuHoldDelayMs;
+                settings.Ui.MenuRepeatRateMs = SettingsMenuRepeatRateMs;
 
                 settings.Graphics.IconWidth = IconX;
                 settings.Graphics.IconHeight = IconY;
@@ -112,18 +142,22 @@ namespace CustomRadioStations {
                 settings.KeyboardControls.SkipTrack = KB_Skip_Track;
                 settings.KeyboardControls.VolumeUp = KB_Volume_Up;
                 settings.KeyboardControls.VolumeDown = KB_Volume_Down;
+                settings.KeyboardControls.OpenSettings = KB_OpenSettings;
 
                 settings.GamepadControls.ToggleModifier = GP_Toggle;
                 settings.GamepadControls.SkipTrack = GP_Skip_Track;
                 settings.GamepadControls.VolumeUp = GP_Volume_Up;
                 settings.GamepadControls.VolumeDown = GP_Volume_Down;
+                settings.GamepadControls.OpenSettings = GP_OpenSettings;
                 settings.GamepadControls.RadialDeadzone = GP_RadialDeadzone;
                 settings.GamepadControls.RadialHysteresisDegrees = GP_RadialHysteresisDegrees;
 
                 Directory.CreateDirectory(AppPaths.RootDirectory);
                 File.WriteAllText(AppPaths.SettingsFile, JsonConvert.SerializeObject(settings, Formatting.Indented));
+                return true;
             } catch (Exception ex) {
                 Logger.Log("ERROR: Failed to save global settings JSON '" + AppPaths.SettingsFile + "': " + ex.Message);
+                return false;
             }
         }
 
@@ -182,6 +216,7 @@ namespace CustomRadioStations {
             settings.Graphics = settings.Graphics ?? new GraphicsSettings();
             settings.KeyboardControls = settings.KeyboardControls ?? new KeyboardControlSettings();
             settings.GamepadControls = settings.GamepadControls ?? new GamepadControlSettings();
+            settings.Ui = settings.Ui ?? new UiSettings();
 
             settings.General.MasterVolume = Clamp(settings.General.MasterVolume, 0f, 1f, "general.masterVolume");
             settings.General.WheelActionDelayMs = Math.Max(0, settings.General.WheelActionDelayMs);
@@ -197,6 +232,11 @@ namespace CustomRadioStations {
                 "gamepadControls.radialDeadzone");
             settings.GamepadControls.RadialHysteresisDegrees = Clamp(settings.GamepadControls.RadialHysteresisDegrees, 0f, 30f,
                 "gamepadControls.radialHysteresisDegrees");
+            settings.Ui.LastSettingsPage = string.IsNullOrWhiteSpace(settings.Ui.LastSettingsPage)
+                ? "Playback"
+                : settings.Ui.LastSettingsPage.Trim();
+            settings.Ui.MenuHoldDelayMs = Math.Max(100, Math.Min(1000, settings.Ui.MenuHoldDelayMs));
+            settings.Ui.MenuRepeatRateMs = Math.Max(50, Math.Min(500, settings.Ui.MenuRepeatRateMs));
         }
 
         private static void ApplySettings() {
@@ -207,6 +247,12 @@ namespace CustomRadioStations {
             LoadStartDelay = settings.General.LoadStartDelayMs;
             DisplayHelpText = settings.General.DisplayHelpText;
             EnableWheelSlowmotion = settings.General.EnableWheelSlowMotion;
+            PlayInPauseMenu = settings.General.PlayInPauseMenu;
+            PlayWhileInBackground = settings.General.PlayWhileInBackground;
+            RememberSettingsPage = settings.Ui.RememberSettingsPage;
+            LastSettingsPage = settings.Ui.LastSettingsPage;
+            SettingsMenuHoldDelayMs = settings.Ui.MenuHoldDelayMs;
+            SettingsMenuRepeatRateMs = settings.Ui.MenuRepeatRateMs;
 
             IconX = settings.Graphics.IconWidth;
             IconY = settings.Graphics.IconHeight;
@@ -222,10 +268,12 @@ namespace CustomRadioStations {
             KB_Skip_Track = settings.KeyboardControls.SkipTrack;
             KB_Volume_Up = settings.KeyboardControls.VolumeUp;
             KB_Volume_Down = settings.KeyboardControls.VolumeDown;
+            KB_OpenSettings = settings.KeyboardControls.OpenSettings;
             GP_Toggle = settings.GamepadControls.ToggleModifier;
             GP_Skip_Track = settings.GamepadControls.SkipTrack;
             GP_Volume_Up = settings.GamepadControls.VolumeUp;
             GP_Volume_Down = settings.GamepadControls.VolumeDown;
+            GP_OpenSettings = settings.GamepadControls.OpenSettings;
             GP_RadialDeadzone = settings.GamepadControls.RadialDeadzone;
             GP_RadialHysteresisDegrees = settings.GamepadControls.RadialHysteresisDegrees;
         }

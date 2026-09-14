@@ -8,12 +8,15 @@ using GTAVFunctions;
 
 using SelectorWheel;
 
+using CustomRadioStations.UI.Settings;
+
 using System;
 using System.IO;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Policy;
-using System.Windows.Forms;
+using KeyEventArgs = System.Windows.Forms.KeyEventArgs;
+using Keys = System.Windows.Forms.Keys;
 
 using UIScreen = GTA.UI.Screen;
 using Hash = GTA.Native.Hash;
@@ -38,6 +41,15 @@ namespace CustomRadioStations {
 
         private GameFocusPauseMonitor focusPauseMonitor;
 
+        private SettingsMenu settingsMenu;
+        private float settingsPreviousTimeScale = 1f;
+        private string settingsPreviousWheelName = string.Empty;
+        private int settingsPreviousWheelIndex = -1;
+        private string settingsPreviousCategoryName = string.Empty;
+        private int settingsPreviousCategoryIndex = -1;
+        private string settingsPreviousItemName = string.Empty;
+        private int settingsPreviousItemIndex = -1;
+
         private enum ActionOptions {
             DoNothing,
             PlayQueued,
@@ -61,8 +73,10 @@ namespace CustomRadioStations {
                 try { Logger.Log("FATAL: Startup dependency/configuration failure: " + ex); } catch { }
             }
 
-            if (initializationFailure == null)
+            if (initializationFailure == null) {
                 focusPauseMonitor = new GameFocusPauseMonitor();
+                settingsMenu = new SettingsMenu(ReloadStationsFromSettings, ReloadSettingsFromSettings, OnSettingsClosed);
+            }
 
             Tick += OnTick;
             KeyDown += OnKeyDown;
@@ -75,6 +89,7 @@ namespace CustomRadioStations {
 
         private void OnAbort(object sender, EventArgs e) {
             CRSApiRuntime.Unregister(this);
+            try { settingsMenu?.Close(); } catch { }
             // Cleanup is intentionally best-effort: an unavailable Enhanced native or an
             // already-disposed audio engine must not turn script shutdown into a crash.
             try { focusPauseMonitor?.Dispose(); } catch { }
@@ -291,6 +306,24 @@ namespace CustomRadioStations {
                 return; // Return if loaded is still not true
             }
 
+            if (settingsMenu != null) {
+                if (!settingsMenu.IsOpen && GTAFunction.UsingGamepad() &&
+                    WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Visible) {
+                    ControlInput.DisableThisFrame(Config.GP_OpenSettings);
+                    if (ControlInput.IsJustPressed(Config.GP_OpenSettings))
+                        OpenSettingsMenu(true, false);
+                }
+
+                if (settingsMenu.IsOpen) {
+                    settingsMenu.Process();
+                    SoundFile.ManageSoundEngine();
+                    RadioStation.ManageStations();
+                    UpdateDashboardInfo();
+                    GeneralEvents.Update();
+                    return;
+                }
+            }
+
             CRSApiRuntime.ProcessPending(this);
 
             if (GTAFunction.HasCheatStringJustBeenEntered("radio_reload")) {
@@ -368,6 +401,9 @@ namespace CustomRadioStations {
                     ControlPrevWheel = GTAFunction.UsingGamepad() ? GTA.Control.VehicleBrake : GTA.Control.WeaponWheelNext;
 
                     if (Config.DisplayHelpText) {
+                        string settingsInput = GTAFunction.UsingGamepad()
+                            ? GTAFunction.InputString(Config.GP_OpenSettings)
+                            : GTAFunction.InputString(Config.KB_OpenSettings);
                         GTAFunction.DisplayHelpTextThisFrame(
                             GTAFunction.InputString(ControlSkipTrack) +
                             " : Skip Track\n" +
@@ -377,7 +413,8 @@ namespace CustomRadioStations {
                             Math.Round(SoundFile.SoundEngine.SoundVolume * 100, 0) + "%\n" +
                             GTAFunction.InputString(ControlNextWheel) + " " +
                             GTAFunction.InputString(ControlPrevWheel) +
-                            " : Next / Prev Wheel\n", false, false);
+                            " : Next / Prev Wheel\n" +
+                            settingsInput + " : CRS Settings\n", false, false);
                     }
 
                     if (ControlInput.IsJustPressed(ControlSkipTrack)) {
@@ -391,6 +428,11 @@ namespace CustomRadioStations {
                         if (increase != decrease)
                             ChangeVolume(increase ? 0.05f : -0.05f, now);
                     }
+                } else if (Config.DisplayHelpText) {
+                    string settingsInput = GTAFunction.UsingGamepad()
+                        ? GTAFunction.InputString(Config.GP_OpenSettings)
+                        : GTAFunction.InputString(Config.KB_OpenSettings);
+                    GTAFunction.DisplayHelpTextThisFrame(settingsInput + " : CRS Settings\n", false, false);
                 }
             }
 
@@ -698,8 +740,150 @@ namespace CustomRadioStations {
         }
 
         private void OnKeyDown(object sender, KeyEventArgs e) {
+            if (settingsMenu != null && settingsMenu.IsOpen) {
+                settingsMenu.HandleKeyDown(e.KeyCode);
+                return;
+            }
+
+            if (e.KeyCode == Config.KB_OpenSettings && loaded) {
+                OpenSettingsMenu(WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Visible, true);
+                return;
+            }
+
             if (e.KeyCode == Keys.Escape)
                 AudioPauseCoordinator.NotifyPauseInput();
+        }
+
+        private void OpenSettingsMenu(bool returnToWheel, bool openedFromKeyboard) {
+            if (settingsMenu == null || settingsMenu.IsOpen)
+                return;
+
+            CancelQueuedStationAction();
+            CaptureSettingsWheelContext(returnToWheel);
+            try {
+                settingsPreviousTimeScale = Game.TimeScale;
+                Game.TimeScale = Math.Min(settingsPreviousTimeScale, 0.05f);
+            } catch {
+                settingsPreviousTimeScale = 1f;
+            }
+            foreach (Wheel wheel in WheelVars.RadioWheels)
+                wheel.Visible = false;
+            settingsMenu.Open(returnToWheel,
+                openedFromKeyboard ? SettingsInputMode.Keyboard : SettingsInputMode.Controller);
+        }
+
+        private void OnSettingsClosed(bool returnToWheel) {
+            try { Game.TimeScale = settingsPreviousTimeScale; } catch { }
+
+            // The radio wheel is hold-to-open. The player will normally release that
+            // control while navigating settings, and its release event is intentionally
+            // not processed while the settings menu owns input. Only restore the wheel
+            // when the hold control is still down; otherwise we could leave it stuck open.
+            if (returnToWheel && ControlInput.IsPressed(GTA.Control.VehicleRadioWheel))
+                RestoreSettingsWheelContext();
+
+            ClearSettingsWheelContext();
+        }
+
+        private void CaptureSettingsWheelContext(bool returnToWheel) {
+            ClearSettingsWheelContext();
+            if (!returnToWheel || WheelVars.CurrentRadioWheel == null)
+                return;
+
+            Wheel wheel = WheelVars.CurrentRadioWheel;
+            settingsPreviousWheelName = wheel.WheelName ?? string.Empty;
+            settingsPreviousWheelIndex = WheelVars.RadioWheels.IndexOf(wheel);
+            if (wheel.Categories == null || wheel.Categories.Count == 0)
+                return;
+
+            settingsPreviousCategoryIndex = Math.Max(0, Math.Min(wheel.Categories.Count - 1, wheel.CurrentCatIndex));
+            WheelCategory category = wheel.Categories[settingsPreviousCategoryIndex];
+            if (category == null)
+                return;
+
+            settingsPreviousCategoryName = category.Name ?? string.Empty;
+            if (category.ItemCount() > 0) {
+                settingsPreviousItemIndex = Math.Max(0, Math.Min(category.ItemCount() - 1, category.CurrentItemIndex));
+                WheelCategoryItem item = category.ItemList[settingsPreviousItemIndex];
+                settingsPreviousItemName = item == null ? string.Empty : (item.Name ?? string.Empty);
+            }
+        }
+
+        private void RestoreSettingsWheelContext() {
+            Wheel wheel = null;
+            if (!string.IsNullOrEmpty(settingsPreviousWheelName)) {
+                foreach (Wheel candidate in WheelVars.RadioWheels) {
+                    if (candidate != null && string.Equals(candidate.WheelName, settingsPreviousWheelName, StringComparison.OrdinalIgnoreCase)) {
+                        wheel = candidate;
+                        break;
+                    }
+                }
+            }
+            if (wheel == null && settingsPreviousWheelIndex >= 0 && settingsPreviousWheelIndex < WheelVars.RadioWheels.Count)
+                wheel = WheelVars.RadioWheels[settingsPreviousWheelIndex];
+            if (wheel == null)
+                wheel = WheelVars.CurrentRadioWheel;
+            if (wheel == null)
+                return;
+
+            WheelVars.CurrentRadioWheel = wheel;
+            if (wheel.Categories != null && wheel.Categories.Count > 0 && settingsPreviousCategoryIndex >= 0) {
+                int categoryIndex = FindWheelCategoryIndex(wheel, settingsPreviousCategoryName);
+                if (categoryIndex < 0)
+                    categoryIndex = Math.Max(0, Math.Min(wheel.Categories.Count - 1, settingsPreviousCategoryIndex));
+                wheel.CurrentCatIndex = categoryIndex;
+
+                WheelCategory category = wheel.Categories[wheel.CurrentCatIndex];
+                if (category != null && category.ItemCount() > 0 && settingsPreviousItemIndex >= 0) {
+                    int itemIndex = FindWheelItemIndex(category, settingsPreviousItemName);
+                    if (itemIndex < 0)
+                        itemIndex = Math.Max(0, Math.Min(category.ItemCount() - 1, settingsPreviousItemIndex));
+                    category.CurrentItemIndex = itemIndex;
+                }
+            }
+            wheel.Visible = true;
+        }
+
+        private static int FindWheelCategoryIndex(Wheel wheel, string name) {
+            if (wheel == null || wheel.Categories == null || string.IsNullOrEmpty(name))
+                return -1;
+            for (int index = 0; index < wheel.Categories.Count; index++) {
+                WheelCategory category = wheel.Categories[index];
+                if (category != null && string.Equals(category.Name, name, StringComparison.OrdinalIgnoreCase))
+                    return index;
+            }
+            return -1;
+        }
+
+        private static int FindWheelItemIndex(WheelCategory category, string name) {
+            if (category == null || string.IsNullOrEmpty(name))
+                return -1;
+            for (int index = 0; index < category.ItemCount(); index++) {
+                WheelCategoryItem item = category.ItemList[index];
+                if (item != null && string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))
+                    return index;
+            }
+            return -1;
+        }
+
+        private void ClearSettingsWheelContext() {
+            settingsPreviousWheelName = string.Empty;
+            settingsPreviousWheelIndex = -1;
+            settingsPreviousCategoryName = string.Empty;
+            settingsPreviousCategoryIndex = -1;
+            settingsPreviousItemName = string.Empty;
+            settingsPreviousItemIndex = -1;
+        }
+
+        private void ReloadStationsFromSettings() {
+            Config.Save();
+            SetupRadio();
+        }
+
+        private void ReloadSettingsFromSettings() {
+            Config.Load();
+            AudioPauseCoordinator.RefreshSettings();
+            SetupRadio();
         }
 
         private void OnKeyUp(object sender, KeyEventArgs e) {
