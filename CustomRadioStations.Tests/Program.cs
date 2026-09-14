@@ -31,6 +31,7 @@ namespace CustomRadioStations {
                 TestRadialSelectionHysteresis();
                 TestRadioWheelAvailability();
                 TestBroadcastTimeline();
+                TestTrimmedBroadcastTimeline();
                 TestWheelDisplayMetricsAndIconVariants();
                 TestUnicodeTextSupport();
                 Console.WriteLine("Passed " + passed + " station configuration tests.");
@@ -344,6 +345,33 @@ namespace CustomRadioStations {
             position = BroadcastTimeline.Advance(withZeroLength, 0, 170000u, 20000u, true);
             Assert(!position.Finished && position.Index == 2 && position.Position == 10000u,
                 "broadcast timeline safely skips zero-length entries");
+
+            position = BroadcastTimeline.AdvanceKnownPrefix(withZeroLength, 0, 170000u, 5000u, true);
+            Assert(!position.Finished && position.Index == 0 && position.Position == 175000u,
+                "inactive preview advances exactly while the known current item still contains the elapsed time");
+
+            position = BroadcastTimeline.AdvanceKnownPrefix(withZeroLength, 0, 170000u, 20000u, true);
+            Assert(!position.Finished && position.Index == 1 && position.Position == 0u,
+                "inactive preview stops at the first unknown-duration item instead of guessing past it");
+        }
+
+
+        private static void TestTrimmedBroadcastTimeline() {
+            MediaPlaybackBounds first = MediaPlaybackBounds.Calculate(300000u, 30000u, 270000u, null);
+            var analyzed = new TrackAnalysis {
+                DurationMs = 240000u,
+                AudioStartMs = 15000u,
+                AudioEndMs = 225000u
+            };
+            MediaPlaybackBounds second = MediaPlaybackBounds.Calculate(240000u, null, null, analyzed);
+
+            Assert(first.LengthMs == 240000u && second.LengthMs == 210000u,
+                "programme lengths use manual and analyzed playback bounds rather than physical file length");
+
+            BroadcastPosition position = BroadcastTimeline.Advance(
+                new[] { first.LengthMs, second.LengthMs }, 0, 230000u, 20000u, true);
+            Assert(!position.Finished && position.Index == 1 && position.Position == 10000u,
+                "broadcast projection crosses trimmed track boundaries using logical playback time");
         }
 
 

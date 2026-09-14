@@ -1,4 +1,4 @@
-using MiniAudioEx.Core.StandardAPI;
+﻿using MiniAudioEx.Core.StandardAPI;
 
 using Newtonsoft.Json;
 
@@ -35,22 +35,17 @@ namespace CustomRadioStations {
             }
         }
 
-        public string PreviewDisplayName {
-            get {
-                Track firstTrack = HasTrackList && Tracklist != null
-                    ? Tracklist.FirstOrDefault()
-                    : null;
-                return firstTrack == null
-                    ? _displayName
-                    : TrackMetadataReader.FormatDisplayName(firstTrack.Artist, firstTrack.Title, _displayName);
-            }
-        }
+        public string PreviewDisplayName { get { return GetDisplayNameAtLogicalPosition(0u); } }
 
         /// <summary>Logical playable length in milliseconds after configured/detected trimming.</summary>
         public uint Length { get; private set; }
         public uint PhysicalLength { get { return physicalLength; } }
         public uint PlaybackStartMs { get { return playbackStartMs; } }
         public uint PlaybackEndMs { get { return playbackEndMs; } }
+        internal uint? ConfiguredStartMs { get { return mediaSource.StartMs; } }
+        internal uint? ConfiguredEndMs { get { return mediaSource.EndMs; } }
+        internal TrackAnalysis Analysis { get { return mediaSource.Analysis; } }
+        internal bool AllowAnalysisTrimWithinBounds { get { return mediaSource.AllowAnalysisTrimWithinBounds; } }
         public float NormalizationGain { get; private set; } = 1f;
         public bool LengthAdded { get; set; }
 
@@ -79,13 +74,19 @@ namespace CustomRadioStations {
             FilePath = publicPath;
             Clip = new AudioClip(audioPath, true);
             FileName = Path.GetFileNameWithoutExtension(audioPath);
-            _displayName = TrackMetadataReader.ReadDisplayName(audioPath, DisplayNameFromFilename(), mediaSource.Artist, mediaSource.Title);
+
+            TrackMetadataInfo metadata = TrackMetadataReader.ReadMetadata(audioPath,
+                message => Logger.Log("WARNING: " + message + ". Using the filename for display metadata."));
+            string artist = !string.IsNullOrWhiteSpace(mediaSource.Artist) ? mediaSource.Artist : metadata.Artist;
+            string title = !string.IsNullOrWhiteSpace(mediaSource.Title) ? mediaSource.Title : metadata.Title;
+            _displayName = TrackMetadataReader.FormatDisplayName(artist, title, DisplayNameFromFilename());
             HasTrackList = TracklistExists(publicPath);
 
-            if (mediaSource.Analysis != null) {
-                physicalLength = mediaSource.Analysis.DurationMs;
+            physicalLength = mediaSource.Analysis != null && mediaSource.Analysis.DurationMs > 0u
+                ? mediaSource.Analysis.DurationMs
+                : metadata.DurationMs;
+            if (mediaSource.Analysis != null)
                 NormalizationGain = LoudnessNormalization.DbToLinear(mediaSource.Analysis.GainDb);
-            }
             RecalculatePlaybackBounds();
         }
 
@@ -132,17 +133,124 @@ namespace CustomRadioStations {
         }
 
         public Track GetCurrentTrack() {
+            return GetTrackAtRawPosition(RawPlayPosition());
+        }
+
+        internal string GetDisplayNameAtLogicalPosition(uint logicalPositionMs) {
+            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0)
+                return _displayName;
+
+            Track track = GetTrackAtRawPosition(LogicalToRawPosition(logicalPositionMs));
+            return track == null
+                ? _displayName
+                : TrackMetadataReader.FormatDisplayName(track.Artist, track.Title, _displayName);
+        }
+
+        private Track GetTrackAtRawPosition(uint rawPositionMs) {
             if (!HasTrackList || Tracklist == null || Tracklist.Count == 0)
                 return null;
-            uint rawPosition = RawPlayPosition();
-            Track track = Tracklist.LastOrDefault(candidate => rawPosition >= candidate.StartTime);
+            Track track = Tracklist.LastOrDefault(candidate => rawPositionMs >= candidate.StartTime);
             return track == default(Track) ? null : track;
+        }
+
+        private uint LogicalToRawPosition(uint logicalPositionMs) {
+            uint logical = Length > 0u ? Math.Min(logicalPositionMs, Length - 1u) : 0u;
+            ulong raw = (ulong)playbackStartMs + logical;
+            uint upper = playbackEndMs > playbackStartMs ? playbackEndMs - 1u : playbackStartMs;
+            return (uint)Math.Min((ulong)upper, raw);
         }
 
         public int GetCurrentTrackIndex() {
             if (!HasTrackList || Tracklist == null || Tracklist.Count == 0)
                 return -1;
             return Tracklist.IndexOf(GetCurrentTrack());
+        }
+
+        internal int GetTrackIndexAtLogicalPosition(uint logicalPositionMs) {
+            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0)
+                return -1;
+            Track track = GetTrackAtRawPosition(LogicalToRawPosition(logicalPositionMs));
+            return track == null ? -1 : Tracklist.IndexOf(track);
+        }
+
+        internal void GetLogicalTrackBounds(uint logicalPositionMs, out uint startMs, out uint endMs) {
+            startMs = 0u;
+            endMs = Length;
+            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0 || Length == 0u)
+                return;
+
+            uint rawPosition = LogicalToRawPosition(logicalPositionMs);
+            Track current = GetTrackAtRawPosition(rawPosition);
+            if (current == null)
+                return;
+
+            int index = Tracklist.IndexOf(current);
+            uint rawStart = Math.Max(playbackStartMs, current.StartTime);
+            uint rawEnd = playbackEndMs;
+            if (index >= 0 && index < Tracklist.Count - 1)
+                rawEnd = Math.Min(rawEnd, Tracklist[index + 1].StartTime);
+
+            startMs = rawStart > playbackStartMs ? rawStart - playbackStartMs : 0u;
+            endMs = rawEnd > playbackStartMs ? rawEnd - playbackStartMs : 0u;
+            startMs = Math.Min(startMs, Length);
+            endMs = Math.Min(Math.Max(endMs, startMs), Length);
+        }
+
+        internal bool SeekToTrackIndex(int index) {
+            if (!HasTrackList || Tracklist == null || Sound == null || index < 0 || index >= Tracklist.Count)
+                return false;
+            uint raw = Math.Max(playbackStartMs, Tracklist[index].StartTime);
+            uint upper = playbackEndMs > playbackStartMs ? playbackEndMs - 1u : playbackStartMs;
+            Sound.PlayPosition = Math.Min(raw, upper);
+            return true;
+        }
+
+        internal int GetNextPlayableTrackIndex(int currentIndex) {
+            if (!HasTrackList || Tracklist == null)
+                return -1;
+            for (int index = Math.Max(-1, currentIndex) + 1; index < Tracklist.Count; index++) {
+                if (IsTrackPlayable(index))
+                    return index;
+            }
+            return -1;
+        }
+
+        internal int GetPreviousPlayableTrackIndex(int currentIndex) {
+            if (!HasTrackList || Tracklist == null)
+                return -1;
+            for (int index = Math.Min(currentIndex - 1, Tracklist.Count - 1); index >= 0; index--) {
+                if (IsTrackPlayable(index))
+                    return index;
+            }
+            return -1;
+        }
+
+        internal int GetLastPlayableTrackIndex() {
+            if (!HasTrackList || Tracklist == null)
+                return -1;
+            for (int index = Tracklist.Count - 1; index >= 0; index--) {
+                if (IsTrackPlayable(index))
+                    return index;
+            }
+            return -1;
+        }
+
+        private bool IsTrackPlayable(int index) {
+            if (Tracklist == null || index < 0 || index >= Tracklist.Count || playbackEndMs <= playbackStartMs)
+                return false;
+            uint trackStart = Tracklist[index].StartTime;
+            uint trackEnd = index < Tracklist.Count - 1 ? Tracklist[index + 1].StartTime : playbackEndMs;
+            return trackStart < playbackEndMs && trackEnd > playbackStartMs;
+        }
+
+        internal bool RestartCurrentTrack() {
+            if (Sound == null)
+                return false;
+            int index = GetCurrentTrackIndex();
+            if (index >= 0)
+                return SeekToTrackIndex(index);
+            Seek(0u);
+            return true;
         }
 
         public Track GetNextTrack() {
@@ -229,9 +337,17 @@ namespace CustomRadioStations {
         }
 
         public void StopSound() {
-            if (Sound == null || Sound.Finished)
+            if (Sound == null)
                 return;
-            Sound.Stop();
+            if (!Sound.Finished)
+                Sound.Stop();
+        }
+
+        public void ReleaseSound() {
+            if (Sound == null)
+                return;
+            Sound.Dispose();
+            Sound = null;
         }
 
         public bool IsPaused {

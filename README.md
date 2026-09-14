@@ -112,9 +112,53 @@ Title
 
 Both tags must contain text. If either Artist or Title is absent, invalid, or unreadable, the mod falls back to its existing filename display convention (for example `Artist - Track` or `Track - Artist`, shown as separate lines). Timed `.tracklist.json` metadata continues to take precedence for long mixes and recordings.
 
-Track labels are cached when the station catalog loads and retain the latest known playing title. Moving quickly around the wheel therefore shows each station's station/artist/title text immediately; the configured audio-switch delay does not delay the label.
+Track labels are derived from the station's logical playback timeline rather than cached as a last-known title. When the wheel opens or selection moves to a station, the mod projects that station's current programme item and logical position immediately, even if its MiniAudio source is not active. The programme timeline uses each source's effective playable length after manual `start`/`end` bounds and analyzer-detected audio bounds are applied. Continuous CUE/tracklist metadata is then resolved against the projected raw source position, so the wheel can show the correct sub-track before the delayed audio-switch action runs.
+
+Physical duration is read during the same TagLib metadata pass already used for Artist/Title, so this does not add another file scan. Once a source is actually opened by MiniAudio its decoder-reported length replaces the metadata estimate in the timeline. If a malformed/unusual file has no discoverable duration, broadcast preview still advances through the known part of the programme and stops when it reaches the first unknown-length item instead of guessing past it; normal playback resolves that duration when the source is opened.
 
 Volume controls change the master volume by 5% immediately when pressed. Holding a volume control pauses briefly, then repeats in 5% steps until released. The final value is persisted after input settles rather than writing `settings.json` for every repeated step.
+
+
+### F4 console API
+
+A small public `CRSAPI` facade is exposed in the global namespace for ScriptHookVDotNet's F4 C# console. Read-only properties return live snapshots, while mutating commands are queued onto the main radio script tick so MiniAudio, GTA natives, wheel state and the playback timeline are never mutated from the console evaluator thread.
+
+Examples:
+
+```csharp
+return CRSAPI.CurrentStation;
+return CRSAPI.CurrentTrack;
+return CRSAPI.Position;
+return CRSAPI.Duration;
+
+CRSAPI.NextSong();
+CRSAPI.PreviousSong();
+CRSAPI.RestartSong();
+CRSAPI.Seek(30);
+CRSAPI.SeekRelative(-10);
+CRSAPI.SeekPercent(50);
+
+CRSAPI.Pause();
+CRSAPI.Play();
+CRSAPI.TogglePause();
+
+CRSAPI.NextStation();
+CRSAPI.PreviousStation();
+CRSAPI.SetStation("Nocturne");
+CRSAPI.SetStation(0);
+
+return CRSAPI.Status();
+return CRSAPI.TrackInfo();
+return CRSAPI.Timeline();
+return CRSAPI.BoundsInfo();
+return CRSAPI.DumpProgramme();
+return CRSAPI.Stations();
+```
+
+`CRSAPI.Position` and `CRSAPI.Duration` refer to the current logical song. For a continuous CUE/tracklist source this means the current sub-track, not the full backing mix. `CRSAPI.Track.MediaPosition` / `MediaDuration` and `BoundsInfo()` expose the containing trimmed media source when lower-level debugging is needed. Public `CRSTrackInfo` and `CRSStationInfo` objects are immutable snapshots; the API intentionally does not expose mutable `RadioStation`, `SoundFile` or MiniAudio objects.
+
+Commands return a short `Queued: ...` string immediately. The actual mutation is processed on the next Custom Radio Stations tick (normally within the script's 10 ms interval), and `CRSAPI.LastResult` contains the most recent execution result.
+
 
 Controller radial selection uses a `0.20` stick deadzone and 4 degrees of angular hysteresis by default, preventing selection flicker near the boundary between stations. These can be adjusted with `gamepadControls.radialDeadzone` and `gamepadControls.radialHysteresisDegrees` in `settings.json`.
 

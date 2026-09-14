@@ -70,9 +70,11 @@ namespace CustomRadioStations {
             Aborted += OnAbort;
 
             Interval = 10;
+            CRSApiRuntime.Register(this);
         }
 
         private void OnAbort(object sender, EventArgs e) {
+            CRSApiRuntime.Unregister(this);
             // Cleanup is intentionally best-effort: an unavailable Enhanced native or an
             // already-disposed audio engine must not turn script shutdown into a crash.
             try { focusPauseMonitor?.Dispose(); } catch { }
@@ -110,6 +112,10 @@ namespace CustomRadioStations {
                     if (pair == null)
                         return;
 
+                    // Refresh from the station's logical playback timeline before the
+                    // delayed play action runs. This keeps the wheel metadata accurate
+                    // even while a broadcast station is inactive.
+                    pair.Station.RefreshWheelInfo();
                     ActionQueued = ActionOptions.PlayQueued;
                     RadioStation.NextQueuedStation = pair.Station;
                     SetActionDelay(Config.WheelActionDelay);
@@ -285,6 +291,8 @@ namespace CustomRadioStations {
                 return; // Return if loaded is still not true
             }
 
+            CRSApiRuntime.ProcessPending(this);
+
             if (GTAFunction.HasCheatStringJustBeenEntered("radio_reload")) {
                 Config.Load();
                 SetupRadio();
@@ -404,6 +412,122 @@ namespace CustomRadioStations {
 
                 RadioNativeFunctions.SetVanillaRadioOff();
             }
+        }
+
+        internal bool ApiIsLoaded => loaded && initializationFailure == null;
+
+        internal string ApiPlay() {
+            if (!ApiIsLoaded)
+                return "Custom Radio Stations is not ready.";
+
+            if (RadioStation.CurrentPlaying != null) {
+                if (RadioStation.CurrentPlaying.CurrentSoundIsPaused) {
+                    if (!RadioStation.CurrentPlaying.SetPaused(false))
+                        return "Cannot resume while the game/focus pause coordinator is active.";
+                    return "OK: resumed " + RadioStation.CurrentPlaying.Name + ".";
+                }
+                if (RadioStation.CurrentPlaying.IsPlaying)
+                    return "Already playing: " + RadioStation.CurrentPlaying.Name + ".";
+            }
+
+            StationWheelPair pair = null;
+            if (WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Categories.Count > 0) {
+                SelectorWheel.WheelCategory selected = WheelVars.CurrentRadioWheel.SelectedCategory;
+                pair = StationWheelPair.List.Find(candidate =>
+                    candidate.Wheel == WheelVars.CurrentRadioWheel && candidate.Category == selected);
+            }
+            if (pair == null && StationWheelPair.List.Count > 0)
+                pair = StationWheelPair.List[0];
+            return pair == null ? "No custom stations are loaded." : ApiSwitchToStation(pair);
+        }
+
+        internal string ApiStop() {
+            CancelQueuedStationAction();
+            if (RadioStation.CurrentPlaying == null)
+                return "No custom station is active.";
+
+            string name = RadioStation.CurrentPlaying.Name;
+            RadioStation.CurrentPlaying.Stop();
+            RadioStation.CurrentPlaying = null;
+            RadioNativeFunctions.SetVanillaRadioOff();
+            lastRadioWasCustom = false;
+            return "OK: stopped " + name + ".";
+        }
+
+        internal string ApiChangeStation(int direction) {
+            if (StationWheelPair.List.Count == 0)
+                return "No custom stations are loaded.";
+
+            int currentIndex = RadioStation.CurrentPlaying == null
+                ? -1
+                : StationWheelPair.List.FindIndex(pair => ReferenceEquals(pair.Station, RadioStation.CurrentPlaying));
+            if (currentIndex < 0)
+                currentIndex = direction >= 0 ? -1 : 0;
+            int count = StationWheelPair.List.Count;
+            int next = ((currentIndex + (direction >= 0 ? 1 : -1)) % count + count) % count;
+            return ApiSwitchToStation(StationWheelPair.List[next]);
+        }
+
+        internal string ApiSetStation(int index) {
+            if (index < 0 || index >= StationWheelPair.List.Count)
+                return "Station index out of range. Use CRSAPI.Stations() to list valid indexes.";
+            return ApiSwitchToStation(StationWheelPair.List[index]);
+        }
+
+        internal string ApiSetStation(string nameOrId) {
+            if (string.IsNullOrWhiteSpace(nameOrId))
+                return "Station name/ID cannot be blank.";
+            StationWheelPair pair = StationWheelPair.List.Find(candidate =>
+                string.Equals(candidate.Station.Name, nameOrId.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(candidate.Station.Id, nameOrId.Trim(), StringComparison.OrdinalIgnoreCase));
+            return pair == null
+                ? "Station not found: " + nameOrId + ". Use CRSAPI.Stations() to list loaded stations."
+                : ApiSwitchToStation(pair);
+        }
+
+        private string ApiSwitchToStation(StationWheelPair pair) {
+            if (pair == null || pair.Station == null)
+                return "Station is unavailable.";
+
+            CancelQueuedStationAction();
+            if (ReferenceEquals(RadioStation.CurrentPlaying, pair.Station)) {
+                if (pair.Station.CurrentSoundIsPaused && !pair.Station.SetPaused(false))
+                    return "Station is selected but remains paused while the game/focus pause coordinator is active.";
+                pair.Station.RefreshWheelInfo();
+                return "Already selected: " + pair.Station.Name + ".";
+            }
+
+            bool hadCustomStation = RadioStation.CurrentPlaying != null;
+            if (RadioStation.CurrentPlaying != null)
+                RadioStation.CurrentPlaying.Stop();
+            if (!hadCustomStation)
+                lastVanillaStationPlayed = RadioNativeFunctions.GET_PLAYER_RADIO_STATION_INDEX();
+
+            bool wheelWasVisible = WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Visible;
+            if (WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel != pair.Wheel)
+                WheelVars.CurrentRadioWheel.Visible = false;
+            WheelVars.CurrentRadioWheel = pair.Wheel;
+            pair.Wheel.Visible = wheelWasVisible;
+            pair.Wheel.SelectedCategory = pair.Category;
+            pair.Station.RefreshWheelInfo();
+            RadioStation.CurrentPlaying = pair.Station;
+            pair.Station.Play();
+            if (!pair.Station.IsPlaying) {
+                RadioStation.CurrentPlaying = null;
+                lastRadioWasCustom = false;
+                return "Failed to start station: " + pair.Station.Name + ".";
+            }
+
+            RadioNativeFunctions.SetVanillaRadioOff();
+            lastRadioWasCustom = true;
+            return "OK: " + pair.Station.Name + ".";
+        }
+
+        private void CancelQueuedStationAction() {
+            ActionQueued = ActionOptions.DoNothing;
+            RadioStation.NextQueuedStation = null;
+            WheelVars.NextQueuedWheel = null;
+            inputTimer = null;
         }
 
         private void ChangeVolume(float step, DateTime now) {
