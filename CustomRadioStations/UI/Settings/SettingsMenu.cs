@@ -1,12 +1,16 @@
 ﻿using GTA;
 using GTA.Native;
 using GTA.UI;
+
 using SelectorWheel;
+
 using GTAVFunctions;
+
 using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
+
 using Control = GTA.Control;
 using Keys = System.Windows.Forms.Keys;
 
@@ -208,6 +212,10 @@ namespace CustomRadioStations.UI.Settings {
                     "Continue custom radio when GTA loses focus or is minimized. Off prevents unexpected audio while alt-tabbed.",
                     () => Config.PlayWhileInBackground,
                     value => { Config.PlayWhileInBackground = value; AudioPauseCoordinator.RefreshSettings(); }, ApplicationSettingsDefaults.PlayWhileInBackground),
+                Toggle("Allow Skipping Radio Tracks",
+                    "Enable skipping tracks in the radio. When turned off the prompt is hidden and the action is disabled.",
+                    () => Config.AllowSkippingTracks,
+                    value => Config.AllowSkippingTracks = value, ApplicationSettingsDefaults.AllowSkippingTracks),
                 new SectionSettingsItem("Radio Wheel", "Presentation behavior while the custom station wheel is open."),
                 Toggle("Wheel Slow Motion",
                     "Slow the game while the custom radio wheel is open.",

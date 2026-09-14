@@ -10,7 +10,7 @@ using System.Text;
 /// Intended for ScriptHookVDotNet's F4 C# console, for example:
 /// CRSAPI.NextSong(); or return CRSAPI.CurrentTrack;
 /// </summary>
-public static class CRSAPI {
+public static class CRSAPI { // CRSAPI.IsReady
     public static bool IsReady => CustomRadioStations.CRSApiRuntime.IsReady;
     public static string LastResult => CustomRadioStations.CRSApiRuntime.LastResult;
     public static int StationCount => CustomRadioStations.CRSApiRuntime.StationCount;
@@ -24,8 +24,8 @@ public static class CRSAPI {
     public static bool IsPlaying => CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot().IsPlaying;
     public static bool IsPaused => CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot().IsPaused;
 
-    public static CRSTrackInfo Track => new CRSTrackInfo(CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot());
-    public static CRSStationInfo Station => new CRSStationInfo(CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot());
+    public static CustomRadioStations.CRSTrackInfo Track => new CustomRadioStations.CRSTrackInfo(CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot());
+    public static CustomRadioStations.CRSStationInfo Station => new CustomRadioStations.CRSStationInfo(CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot());
 
     public static string NextSong() => CustomRadioStations.CRSApiRuntime.Enqueue(CustomRadioStations.CRSApiCommandType.NextSong);
     public static string PreviousSong() => CustomRadioStations.CRSApiRuntime.Enqueue(CustomRadioStations.CRSApiCommandType.PreviousSong);
@@ -59,75 +59,78 @@ public static class CRSAPI {
 
 }
 
-/// <summary>Read-only snapshot of the currently selected logical song.</summary>
-public sealed class CRSTrackInfo {
-    internal CRSTrackInfo(CustomRadioStations.RadioApiSnapshot snapshot) {
-        DisplayName = snapshot.TrackDisplayName;
-        FilePath = snapshot.FilePath;
-        Position = TimeSpan.FromMilliseconds(snapshot.SongPositionMs);
-        Duration = TimeSpan.FromMilliseconds(snapshot.SongDurationMs);
-        MediaPosition = TimeSpan.FromMilliseconds(snapshot.MediaPositionMs);
-        MediaDuration = TimeSpan.FromMilliseconds(snapshot.MediaDurationMs);
-        SourceDuration = TimeSpan.FromMilliseconds(snapshot.PhysicalDurationMs);
-        PlaybackStart = TimeSpan.FromMilliseconds(snapshot.PlaybackStartMs);
-        PlaybackEnd = TimeSpan.FromMilliseconds(snapshot.PlaybackEndMs);
-        IsCommercial = snapshot.IsCommercial;
-    }
-
-    public string DisplayName { get; }
-    public string FilePath { get; }
-    public TimeSpan Position { get; }
-    public TimeSpan Duration { get; }
-    public TimeSpan MediaPosition { get; }
-    public TimeSpan MediaDuration { get; }
-    public TimeSpan SourceDuration { get; }
-    public TimeSpan PlaybackStart { get; }
-    public TimeSpan PlaybackEnd { get; }
-    public bool IsCommercial { get; }
-
-    public override string ToString() {
-        if (string.IsNullOrWhiteSpace(DisplayName))
-            return "No custom-radio track is active.";
-        return DisplayName.Replace("\r", string.Empty).Trim() + Environment.NewLine +
-            Format(Position) + " / " + Format(Duration);
-    }
-
-    private static string Format(TimeSpan value) {
-        return value.TotalHours >= 1d ? value.ToString(@"hh\:mm\:ss\.fff") : value.ToString(@"mm\:ss\.fff");
-    }
-}
-
-/// <summary>Read-only snapshot of the current custom station.</summary>
-public sealed class CRSStationInfo {
-    internal CRSStationInfo(CustomRadioStations.RadioApiSnapshot snapshot) {
-        Name = snapshot.StationName;
-        Id = snapshot.StationId;
-        Mode = snapshot.PlaybackMode;
-        ProgrammeIndex = snapshot.ProgrammeIndex;
-        ProgrammeCount = snapshot.ProgrammeCount;
-        IsPlaying = snapshot.IsPlaying;
-        IsPaused = snapshot.IsPaused;
-    }
-
-    public string Name { get; }
-    public string Id { get; }
-    public string Mode { get; }
-    public int ProgrammeIndex { get; }
-    public int ProgrammeCount { get; }
-    public bool IsPlaying { get; }
-    public bool IsPaused { get; }
-
-    public override string ToString() {
-        if (string.IsNullOrWhiteSpace(Name))
-            return "No custom station is active.";
-        return Name + " [" + Id + "]" + Environment.NewLine +
-            Mode + " | item " + (ProgrammeIndex + 1).ToString(CultureInfo.InvariantCulture) +
-            " / " + ProgrammeCount.ToString(CultureInfo.InvariantCulture) +
-            " | " + (IsPaused ? "Paused" : IsPlaying ? "Playing" : "Stopped");
-    }
-}
 
 namespace CustomRadioStations {
+
+    /// <summary>Read-only snapshot of the currently selected logical song.</summary>
+    public sealed class CRSTrackInfo {
+        internal CRSTrackInfo(CustomRadioStations.RadioApiSnapshot snapshot) {
+            DisplayName = snapshot.TrackDisplayName;
+            FilePath = snapshot.FilePath;
+            Position = TimeSpan.FromMilliseconds(snapshot.SongPositionMs);
+            Duration = TimeSpan.FromMilliseconds(snapshot.SongDurationMs);
+            MediaPosition = TimeSpan.FromMilliseconds(snapshot.MediaPositionMs);
+            MediaDuration = TimeSpan.FromMilliseconds(snapshot.MediaDurationMs);
+            SourceDuration = TimeSpan.FromMilliseconds(snapshot.PhysicalDurationMs);
+            PlaybackStart = TimeSpan.FromMilliseconds(snapshot.PlaybackStartMs);
+            PlaybackEnd = TimeSpan.FromMilliseconds(snapshot.PlaybackEndMs);
+            IsCommercial = snapshot.IsCommercial;
+        }
+
+        public string DisplayName { get; }
+        public string FilePath { get; }
+        public TimeSpan Position { get; }
+        public TimeSpan Duration { get; }
+        public TimeSpan MediaPosition { get; }
+        public TimeSpan MediaDuration { get; }
+        public TimeSpan SourceDuration { get; }
+        public TimeSpan PlaybackStart { get; }
+        public TimeSpan PlaybackEnd { get; }
+        public bool IsCommercial { get; }
+
+        public override string ToString() {
+            if (string.IsNullOrWhiteSpace(DisplayName))
+                return "No custom-radio track is active.";
+            return DisplayName.Replace("\r", string.Empty).Trim() + Environment.NewLine +
+                Format(Position) + " / " + Format(Duration);
+        }
+
+        private static string Format(TimeSpan value) {
+            return value.TotalHours >= 1d ? value.ToString(@"hh\:mm\:ss\.fff") : value.ToString(@"mm\:ss\.fff");
+        }
+    }
+
+    /// <summary>Read-only snapshot of the current custom station.</summary>
+    public sealed class CRSStationInfo {
+        internal CRSStationInfo(CustomRadioStations.RadioApiSnapshot snapshot) {
+            Name = snapshot.StationName;
+            Id = snapshot.StationId;
+            Mode = snapshot.PlaybackMode;
+            ProgrammeIndex = snapshot.ProgrammeIndex;
+            ProgrammeCount = snapshot.ProgrammeCount;
+            IsPlaying = snapshot.IsPlaying;
+            IsPaused = snapshot.IsPaused;
+        }
+
+        public string Name { get; }
+        public string Id { get; }
+        public string Mode { get; }
+        public int ProgrammeIndex { get; }
+        public int ProgrammeCount { get; }
+        public bool IsPlaying { get; }
+        public bool IsPaused { get; }
+
+        public override string ToString() {
+            if (string.IsNullOrWhiteSpace(Name))
+                return "No custom station is active.";
+            return Name + " [" + Id + "]" + Environment.NewLine +
+                Mode + " | item " + (ProgrammeIndex + 1).ToString(CultureInfo.InvariantCulture) +
+                " / " + ProgrammeCount.ToString(CultureInfo.InvariantCulture) +
+                " | " + (IsPaused ? "Paused" : IsPlaying ? "Playing" : "Stopped");
+        }
+    }
+
+
     internal enum CRSApiCommandType {
         NextSong,
         PreviousSong,

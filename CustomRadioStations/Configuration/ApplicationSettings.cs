@@ -1,4 +1,4 @@
-using GTA;
+﻿using GTA;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
@@ -24,6 +24,7 @@ namespace CustomRadioStations {
         internal const bool DisplayHelpText = true;
         internal const bool EnableWheelSlowMotion = true;
         internal const bool PlayInPauseMenu = false;
+        internal const bool AllowSkippingTracks = true;
         internal const bool PlayWhileInBackground = false;
 
         internal const int IconWidth = 64;
@@ -116,6 +117,8 @@ namespace CustomRadioStations {
 
         [JsonProperty("playInPauseMenu")]
         public bool PlayInPauseMenu { get; set; } = ApplicationSettingsDefaults.PlayInPauseMenu;
+        [JsonProperty("allowSkippingTracks")]
+        public bool AllowSkippingTracks { get; set; } = ApplicationSettingsDefaults.AllowSkippingTracks;
 
         [JsonProperty("playWhileInBackground")]
         public bool PlayWhileInBackground { get; set; } = ApplicationSettingsDefaults.PlayWhileInBackground;

@@ -404,9 +404,14 @@ namespace CustomRadioStations {
                         string settingsInput = GTAFunction.UsingGamepad()
                             ? GTAFunction.InputString(Config.GP_OpenSettings)
                             : GTAFunction.InputString(Config.KB_OpenSettings);
+
+                        string skipTrackText = "";
+
+                        if (Config.AllowSkippingTracks) 
+                            skipTrackText = GTAFunction.InputString(ControlSkipTrack) + " : Skip Track\n";
+
                         GTAFunction.DisplayHelpTextThisFrame(
-                            GTAFunction.InputString(ControlSkipTrack) +
-                            " : Skip Track\n" +
+                            skipTrackText + 
                             GTAFunction.InputString(ControlVolumeUp) + " " +
                             GTAFunction.InputString(ControlVolumeDown) +
                             " : Volume: " +
@@ -417,7 +422,7 @@ namespace CustomRadioStations {
                             settingsInput + " : CRS Settings\n", false, false);
                     }
 
-                    if (ControlInput.IsJustPressed(ControlSkipTrack)) {
+                    if (Config.AllowSkippingTracks && ControlInput.IsJustPressed(ControlSkipTrack)) {
                         RadioStation.CurrentPlaying.PlayNextSong();
                     } else {
                         DateTime now = DateTime.UtcNow;

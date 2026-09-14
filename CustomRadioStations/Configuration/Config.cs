@@ -1,4 +1,4 @@
-using GTA;
+﻿using GTA;
 
 using Newtonsoft.Json;
 
@@ -30,6 +30,7 @@ namespace CustomRadioStations {
         public static bool DisplayHelpText;
         public static bool EnableWheelSlowmotion;
         public static bool PlayInPauseMenu;
+        public static bool AllowSkippingTracks;
         public static bool PlayWhileInBackground;
         public static bool RememberSettingsPage = ApplicationSettingsDefaults.RememberSettingsPage;
         public static string LastSettingsPage = ApplicationSettingsDefaults.LastSettingsPage;
@@ -122,6 +123,7 @@ namespace CustomRadioStations {
                 settings.General.DisplayHelpText = DisplayHelpText;
                 settings.General.EnableWheelSlowMotion = EnableWheelSlowmotion;
                 settings.General.PlayInPauseMenu = PlayInPauseMenu;
+                settings.General.AllowSkippingTracks = AllowSkippingTracks;
                 settings.General.PlayWhileInBackground = PlayWhileInBackground;
                 settings.Ui.RememberSettingsPage = RememberSettingsPage;
                 settings.Ui.LastSettingsPage = LastSettingsPage ?? ApplicationSettingsDefaults.LastSettingsPage;
@@ -247,6 +249,7 @@ namespace CustomRadioStations {
             LoadStartDelay = settings.General.LoadStartDelayMs;
             DisplayHelpText = settings.General.DisplayHelpText;
             EnableWheelSlowmotion = settings.General.EnableWheelSlowMotion;
+            AllowSkippingTracks = settings.General.AllowSkippingTracks;
             PlayInPauseMenu = settings.General.PlayInPauseMenu;
             PlayWhileInBackground = settings.General.PlayWhileInBackground;
             RememberSettingsPage = settings.Ui.RememberSettingsPage;
