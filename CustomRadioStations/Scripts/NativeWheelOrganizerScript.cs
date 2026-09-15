@@ -32,8 +32,15 @@ namespace CustomRadioStations {
         }
 
         private void OnAbort(object sender, EventArgs e) {
-            if (nativeWheelWasApplied)
-                UnhideAllStations();
+            try {
+                if (nativeWheelWasApplied)
+                    UnhideAllStations();
+            } catch {
+                // GTA natives may already be unavailable during script shutdown.
+            } finally {
+                NativeWheel.WheelList.Clear();
+                currentWheel = null;
+            }
         }
 
         private void UnhideAllStations() {
@@ -73,6 +80,10 @@ namespace CustomRadioStations {
         }
 
         private void GetOrganizationLists() {
+            // NativeWheel.WheelList is static and can survive a script reload. Always rebuild
+            // it from the current file instead of appending to stale wheel definitions.
+            NativeWheel.WheelList.Clear();
+            currentWheel = null;
             if (!File.Exists(AppPaths.NativeWheelsFile) || validStationNames == null || validStationNames.Count == 0)
                 return;
 

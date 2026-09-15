@@ -20,29 +20,58 @@ namespace CustomRadioStations {
         internal static void Reload() {
             RuntimeState.CatalogLoadCompleted = false;
             ResetCatalog();
-            EnsureRootDirectory();
+            try {
+                EnsureRootDirectory();
 
-            string[] rootDirectories = GetDirectories(AppPaths.RootDirectory);
-            string[] directStationDirectories = rootDirectories.Where(IsStationDirectory).ToArray();
-            if (directStationDirectories.Length > 0)
-                LoadWheel(AppPaths.RootDirectory, directStationDirectories, "default custom wheel");
+                string[] rootDirectories = GetDirectories(AppPaths.RootDirectory);
+                string[] directStationDirectories = rootDirectories.Where(IsStationDirectory).ToArray();
+                if (directStationDirectories.Length > 0)
+                    LoadWheel(AppPaths.RootDirectory, directStationDirectories, "default custom wheel");
 
-            foreach (string wheelDirectory in rootDirectories.Where(directory => !IsStationDirectory(directory)))
-                LoadWheel(wheelDirectory);
+                foreach (string wheelDirectory in rootDirectories.Where(directory => !IsStationDirectory(directory)))
+                    LoadWheel(wheelDirectory);
 
-            RuntimeState.CatalogLoadCompleted = true;
+                RuntimeState.CatalogLoadCompleted = true;
+            } catch {
+                // Never expose a half-rebuilt catalog after an unexpected load failure.
+                // Dispose any stations/timers/audio created before the exception, then let
+                // the caller report the original failure.
+                ResetCatalog();
+                throw;
+            }
+        }
+
+        internal static void Shutdown() {
+            RuntimeState.CatalogLoadCompleted = false;
+            ResetCatalog();
         }
 
         private static void ResetCatalog() {
-            if (RadioStation.CurrentPlaying != null)
-                RadioStation.CurrentPlaying.Stop();
-            foreach (StationWheelPair pair in StationWheelPair.List)
-                pair.Station.Dispose();
+            Wheel.ResetTransitions();
+
+            RadioStation playing = RadioStation.CurrentPlaying;
+            if (playing != null) {
+                try { playing.Stop(); }
+                catch (Exception ex) {
+                    try { Logger.Log("WARNING: Failed to stop current station during catalog reset: " + ex.Message); } catch { }
+                }
+            }
+
+            // Dispose every station independently. Script abort/reload can occur while GTA
+            // natives or an audio source are already failing; one cleanup error must not
+            // prevent the remaining clips/timers from being released.
+            foreach (StationWheelPair pair in StationWheelPair.List.ToArray()) {
+                try { pair.Station.Dispose(); }
+                catch (Exception ex) {
+                    try { Logger.Log("WARNING: Failed to dispose station '" + pair.Station.Name + "': " + ex.Message); } catch { }
+                }
+            }
 
             WheelVars.RadioWheels.Clear();
             WheelVars.CurrentRadioWheel = null;
             WheelVars.NextQueuedWheel = null;
             StationWheelPair.List.Clear();
+            UsedVehiclesManager.Reset();
             LoadedStationIds.Clear();
             RadioStation.CurrentPlaying = null;
             RadioStation.NextQueuedStation = null;
@@ -156,9 +185,11 @@ namespace CustomRadioStations {
             }
 
             var pair = new StationWheelPair(wheel, category, station, stationDirectory, definition.ConfigPath, definition.IsLegacyIni);
+            // Register ownership before any remaining operation that can throw so the
+            // transactional reload cleanup can always find and dispose this station.
+            StationWheelPair.List.Add(pair);
             if (definition.IsLegacyIni)
                 pair.ReloadLegacyDescription();
-            StationWheelPair.List.Add(pair);
         }
 
         private static StationDefinition LoadLegacyDefinition(string stationDirectory, string iniPath) {

@@ -15,6 +15,7 @@ using System.IO;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Policy;
+
 using KeyEventArgs = System.Windows.Forms.KeyEventArgs;
 using Keys = System.Windows.Forms.Keys;
 
@@ -40,6 +41,12 @@ namespace CustomRadioStations {
         private string initializationFailure;
 
         private GameFocusPauseMonitor focusPauseMonitor;
+        private bool generalEventsRegistered;
+        private PlayerEnteredVehicle enteredVehicleHandler;
+        private PlayerExitedVehicle exitedVehicleHandler;
+        private static readonly object GeneralEventsRegistrationSync = new object();
+        private static PlayerEnteredVehicle activeEnteredVehicleHandler;
+        private static PlayerExitedVehicle activeExitedVehicleHandler;
 
         private SettingsMenu settingsMenu;
         private float settingsPreviousTimeScale = 1f;
@@ -68,6 +75,7 @@ namespace CustomRadioStations {
                 Logger.Init();
                 Config.SetupSystemCulture();
                 Config.Load();
+                TrackRatingStore.Load();
             } catch (Exception ex) {
                 initializationFailure = ex.ToString();
                 try { Logger.Log("FATAL: Startup dependency/configuration failure: " + ex); } catch { }
@@ -90,30 +98,30 @@ namespace CustomRadioStations {
         private void OnAbort(object sender, EventArgs e) {
             CRSApiRuntime.Unregister(this);
             try { settingsMenu?.Close(); } catch { }
+            try { TrackRatingStore.Flush(); } catch { }
             // Cleanup is intentionally best-effort: an unavailable Enhanced native or an
             // already-disposed audio engine must not turn script shutdown into a crash.
             try { focusPauseMonitor?.Dispose(); } catch { }
+            try { UnregisterGeneralEvents(); } catch { }
+            // Tear down station sounds/timers while MiniAudio is still initialized.
+            // Otherwise engine deinitialization can leave station-owned clips and queued
+            // logical-boundary callbacks pointing at an already-disposed audio context.
+            try { RadioCatalogLoader.Shutdown(); } catch { }
             try { AudioPauseCoordinator.Reset(); } catch { }
-            try { Game.TimeScale = 1f; } catch { }
+            try { Wheel.ResetTransitions(); } catch { }
             try { SoundFile.DisposeSoundEngine(); } catch { }
             try { RadioNativeFunctions.DisposeDashboardScaleform(); } catch { }
             try { UnicodeTextRenderer.Shutdown(); } catch { }
-            try { Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER); } catch { }
             try { Function.Call(Hash.SET_AUDIO_FLAG, "LoadMPData", false); } catch { }
             try { Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", false); } catch { }
             try { Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", false); } catch { }
-            try {
-                if (Function.Call<bool>(Hash.IS_AUDIO_SCENE_ACTIVE, "DEATH_SCENE")) {
-                    Function.Call(Hash.STOP_AUDIO_SCENE, "DEATH_SCENE");
-                    Function.Call(Hash.STOP_AUDIO_SCENE, "FADE_OUT_WORLD_250MS_SCENE");
-                }
-            } catch { }
         }
 
         public void SetupRadio() {
             RadioCatalogLoader.Reload();
 
             foreach (Wheel radioWheel in WheelVars.RadioWheels) {
+                radioWheel.SelectedItemSupplementRenderer = DrawSelectedTrackRating;
                 radioWheel.OnCategoryChange += (sender, selectedCategory, selectedItem, wheelJustOpened) => {
                     if (selectedCategory.IsRadioOff) {
                         ActionQueued = ActionOptions.StopAllRadio;
@@ -164,85 +172,118 @@ namespace CustomRadioStations {
         }
 
         private void SetupEvents() {
-            GeneralEvents.OnPlayerEnteredVehicle += (veh) => {
-                if (veh == null || !veh.Exists() || StationWheelPair.List.Count == 0)
-                    return;
+            if (generalEventsRegistered)
+                return;
 
-                bool vehWasEngineRunning = veh.IsEngineRunning;
+            // GeneralEvents and MainScript statics can survive SHVDN script reloads in the
+            // same AppDomain. Keep exact delegate references so a new CRS instance removes
+            // only the previous CRS handlers, never unrelated subscribers to GeneralEvents.
+            lock (GeneralEventsRegistrationSync) {
+                if (activeEnteredVehicleHandler != null)
+                    GeneralEvents.OnPlayerEnteredVehicle -= activeEnteredVehicleHandler;
+                if (activeExitedVehicleHandler != null)
+                    GeneralEvents.OnPlayerExitedVehicle -= activeExitedVehicleHandler;
 
-                DateTime enteredTime = DateTime.Now;
+                GeneralEvents.ResetState();
+                enteredVehicleHandler = OnPlayerEnteredVehicle;
+                exitedVehicleHandler = OnPlayerExitedVehicle;
+                activeEnteredVehicleHandler = enteredVehicleHandler;
+                activeExitedVehicleHandler = exitedVehicleHandler;
+                GeneralEvents.OnPlayerEnteredVehicle += enteredVehicleHandler;
+                GeneralEvents.OnPlayerExitedVehicle += exitedVehicleHandler;
+                generalEventsRegistered = true;
+            }
+        }
 
-                // Wait for the vehicle engine to start, but never block the script forever.
-                // The original condition used OR + ">", which becomes permanently true
-                // after the timeout and can hang the script.
-                while (!veh.IsEngineRunning && DateTime.Now < enteredTime.AddSeconds(10)) {
-                    vehWasEngineRunning = false;
-                    Yield();
+        private void UnregisterGeneralEvents() {
+            lock (GeneralEventsRegistrationSync) {
+                bool ownsActiveRegistration =
+                    (enteredVehicleHandler != null && ReferenceEquals(activeEnteredVehicleHandler, enteredVehicleHandler)) ||
+                    (exitedVehicleHandler != null && ReferenceEquals(activeExitedVehicleHandler, exitedVehicleHandler));
+
+                if (generalEventsRegistered) {
+                    if (enteredVehicleHandler != null)
+                        GeneralEvents.OnPlayerEnteredVehicle -= enteredVehicleHandler;
+                    if (exitedVehicleHandler != null)
+                        GeneralEvents.OnPlayerExitedVehicle -= exitedVehicleHandler;
+                    generalEventsRegistered = false;
                 }
 
-                // In case the timeout above caused the loop to break,
-                // We will not continue because the vehicle is dead.
-                if (!veh.IsEngineRunning)
+                if (ReferenceEquals(activeEnteredVehicleHandler, enteredVehicleHandler))
+                    activeEnteredVehicleHandler = null;
+                if (ReferenceEquals(activeExitedVehicleHandler, exitedVehicleHandler))
+                    activeExitedVehicleHandler = null;
+                enteredVehicleHandler = null;
+                exitedVehicleHandler = null;
+
+                // If a replacement MainScript already owns the static helper, this older
+                // instance must not reset its vehicle-transition state during late abort.
+                if (ownsActiveRegistration)
+                    GeneralEvents.ResetState();
+            }
+        }
+
+        private void OnPlayerEnteredVehicle(Vehicle veh) {
+            if (veh == null || !veh.Exists() || StationWheelPair.List.Count == 0)
+                return;
+
+            bool vehWasEngineRunning = veh.IsEngineRunning;
+            DateTime enteredTime = DateTime.Now;
+
+            // Wait for the vehicle engine to start, but never block the script forever.
+            // The original condition used OR + ">", which becomes permanently true
+            // after the timeout and can hang the script.
+            while (!veh.IsEngineRunning && DateTime.Now < enteredTime.AddSeconds(10)) {
+                vehWasEngineRunning = false;
+                Yield();
+            }
+
+            if (!veh.IsEngineRunning)
+                return;
+
+            if (UsedVehiclesManager.IsUsedVehicle(veh)) {
+                if (UsedVehiclesManager.GetVehicleStationInfo(veh) == null) {
+                    lastRadioWasCustom = false;
                     return;
-
-                if (UsedVehiclesManager.IsUsedVehicle(veh)) {
-                    if (UsedVehiclesManager.GetVehicleStationInfo(veh) == null) {
-                        lastRadioWasCustom = false;
-                        return;
-                    }
-
-                    ActionQueued = ActionOptions.PlayQueued;
-
-                    UsedVehiclesManager.SetLastStationNow(veh);
-
-                    SetActionDelay(Config.WheelActionDelay + 300);
-
-                    lastRadioWasCustom = true;
-
-                } else {
-                    // If the engine was running, don't mess with it.
-                    // Since I can't figure out how to see if a vehicle
-                    // was emitting a station, I'll just not mess with it.
-                    if (vehWasEngineRunning) {
-                        lastRadioWasCustom = false;
-                        return;
-                    }
-
-                    int chooseRandom = RadioStation.random.Next(10);
-                    // 70% chance to play a custom station.
-                    if (chooseRandom >= 3) {
-                        ActionQueued = ActionOptions.PlayQueued;
-
-                        // Set the queued radio station randomly, chosen from stationPairList.
-                        chooseRandom = RadioStation.random.Next(StationWheelPair.List.Count);
-
-                        UsedVehiclesManager.UpdateVehicleWithStationInfo(veh,
-                            StationWheelPair.List[chooseRandom]);
-
-                        UsedVehiclesManager.SetLastStationNow(veh);
-
-                        SetActionDelay(Config.WheelActionDelay + 300);
-
-                        lastRadioWasCustom = true;
-                    } else {
-                        UsedVehiclesManager.UpdateVehicleWithStationInfo(veh, null);
-
-                        lastRadioWasCustom = false;
-                    }
-                }
-            };
-
-            GeneralEvents.OnPlayerExitedVehicle += (veh) => {
-                if (veh == null)
-                    return;
-
-                StationWheelPair selectedPair = null;
-                if (lastRadioWasCustom && WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.SelectedCategory != null) {
-                    selectedPair = StationWheelPair.List.Find(x => x.Category == WheelVars.CurrentRadioWheel.SelectedCategory);
                 }
 
-                UsedVehiclesManager.UpdateVehicleWithStationInfo(veh, selectedPair);
-            };
+                ActionQueued = ActionOptions.PlayQueued;
+                UsedVehiclesManager.SetLastStationNow(veh);
+                SetActionDelay(Config.WheelActionDelay + 300);
+                lastRadioWasCustom = true;
+                return;
+            }
+
+            // If the engine was already running, don't alter its existing station.
+            if (vehWasEngineRunning) {
+                lastRadioWasCustom = false;
+                return;
+            }
+
+            int chooseRandom = RadioStation.random.Next(10);
+            // 70% chance to play a custom station.
+            if (chooseRandom >= 3) {
+                ActionQueued = ActionOptions.PlayQueued;
+                chooseRandom = RadioStation.random.Next(StationWheelPair.List.Count);
+                UsedVehiclesManager.UpdateVehicleWithStationInfo(veh, StationWheelPair.List[chooseRandom]);
+                UsedVehiclesManager.SetLastStationNow(veh);
+                SetActionDelay(Config.WheelActionDelay + 300);
+                lastRadioWasCustom = true;
+            } else {
+                UsedVehiclesManager.UpdateVehicleWithStationInfo(veh, null);
+                lastRadioWasCustom = false;
+            }
+        }
+
+        private void OnPlayerExitedVehicle(Vehicle veh) {
+            if (veh == null)
+                return;
+
+            StationWheelPair selectedPair = null;
+            if (lastRadioWasCustom && WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.SelectedCategory != null)
+                selectedPair = StationWheelPair.List.Find(x => x.Category == WheelVars.CurrentRadioWheel.SelectedCategory);
+
+            UsedVehiclesManager.UpdateVehicleWithStationInfo(veh, selectedPair);
         }
 
         private void OnTick(object sender, EventArgs e) {
@@ -257,6 +298,7 @@ namespace CustomRadioStations {
             // Run before loading gates and other radio work. GTA can suspend script
             // ticks immediately after opening the pause menu.
             HandleGamePause();
+            TrackRatingStore.Update();
 
             if (!loaded) {
                 if (Game.Player == null || !Game.Player.CanControlCharacter)
@@ -316,8 +358,7 @@ namespace CustomRadioStations {
 
                 if (settingsMenu.IsOpen) {
                     settingsMenu.Process();
-                    SoundFile.ManageSoundEngine();
-                    RadioStation.ManageStations();
+                    RadioStation.ManageGameState();
                     UpdateDashboardInfo();
                     GeneralEvents.Update();
                     return;
@@ -362,13 +403,67 @@ namespace CustomRadioStations {
             Wheel.ControlTransitions(Config.EnableWheelSlowmotion);
             WheelVars.RadioWheels.ForEach(w => w.ProcessSelectorWheel());
             HandleRadioWheelQueue();
-            SoundFile.ManageSoundEngine();
-            RadioStation.ManageStations();
+            RadioStation.ManageGameState();
             HandleRadioWheelExtraControls();
             HandleQueuedStationActions();
             HandleEnterExitVehicles();
             UpdateDashboardInfo();
             GeneralEvents.Update();
+        }
+
+        private void DrawSelectedTrackRating(Wheel wheel, WheelCategory category, WheelCategoryItem item, float y) {
+            StationWheelPair pair = FindSelectedStationPair(wheel, category);
+            if (pair == null)
+                return;
+
+            TrackRatingTarget target;
+            if (pair.Station.TryGetCurrentRatingTarget(out target))
+                TrackRatingWheelOverlay.Draw(target, y);
+        }
+
+        private void HandleTrackRatingControls() {
+            Wheel wheel = WheelVars.CurrentRadioWheel;
+            if (wheel == null || !wheel.Visible || wheel.SelectedCategory == null || wheel.SelectedCategory.IsRadioOff) {
+                ResetTrackRatingRepeats();
+                return;
+            }
+
+            StationWheelPair pair = FindSelectedStationPair(wheel, wheel.SelectedCategory);
+            if (pair == null) {
+                ResetTrackRatingRepeats();
+                return;
+            }
+
+            TrackRatingTarget target;
+            if (!pair.Station.TryGetCurrentRatingTarget(out target)) {
+                ResetTrackRatingRepeats();
+                return;
+            }
+
+            ControlInput.DisableThisFrame(TrackRatingWheelOverlay.DecreaseControl);
+            ControlInput.DisableThisFrame(TrackRatingWheelOverlay.IncreaseControl);
+            DateTime now = DateTime.UtcNow;
+            bool decrease = ratingDownRepeat.ShouldFire(
+                ControlInput.IsJustPressed(TrackRatingWheelOverlay.DecreaseControl),
+                ControlInput.IsPressed(TrackRatingWheelOverlay.DecreaseControl), now);
+            bool increase = ratingUpRepeat.ShouldFire(
+                ControlInput.IsJustPressed(TrackRatingWheelOverlay.IncreaseControl),
+                ControlInput.IsPressed(TrackRatingWheelOverlay.IncreaseControl), now);
+            if (decrease == increase)
+                return;
+
+            TrackRatingStore.ChangeRating(target, increase ? 0.5f : -0.5f);
+        }
+
+        private void ResetTrackRatingRepeats() {
+            ratingUpRepeat.Reset();
+            ratingDownRepeat.Reset();
+        }
+
+        private static StationWheelPair FindSelectedStationPair(Wheel wheel, WheelCategory category) {
+            if (wheel == null || category == null || category.IsRadioOff)
+                return null;
+            return StationWheelPair.List.Find(candidate => candidate.Wheel == wheel && candidate.Category == category);
         }
 
         public void HandleRadioWheelQueue() {
@@ -386,12 +481,16 @@ namespace CustomRadioStations {
         private GTA.Control ControlPrevWheel;
         private readonly HoldRepeatState volumeUpRepeat = new HoldRepeatState(TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(100));
         private readonly HoldRepeatState volumeDownRepeat = new HoldRepeatState(TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(100));
+        private readonly HoldRepeatState ratingUpRepeat = new HoldRepeatState(TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(100));
+        private readonly HoldRepeatState ratingDownRepeat = new HoldRepeatState(TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(100));
         private bool volumeSavePending;
         private DateTime volumeSaveAt;
 
         public void HandleRadioWheelExtraControls() {
             bool volumeControlsActive = false;
             if (WheelVars.CurrentRadioWheel != null && WheelVars.CurrentRadioWheel.Visible) {
+                HandleTrackRatingControls();
+
                 if (RadioStation.CurrentPlaying != null) {
                     volumeControlsActive = true;
                     ControlSkipTrack = GTAFunction.UsingGamepad() ? Config.GP_Skip_Track : Config.KB_Skip_Track;
@@ -404,14 +503,13 @@ namespace CustomRadioStations {
                         string settingsInput = GTAFunction.UsingGamepad()
                             ? GTAFunction.InputString(Config.GP_OpenSettings)
                             : GTAFunction.InputString(Config.KB_OpenSettings);
-
                         string skipTrackText = "";
 
-                        if (Config.AllowSkippingTracks) 
+                        if (Config.AllowSkippingTracks)
                             skipTrackText = GTAFunction.InputString(ControlSkipTrack) + " : Skip Track\n";
 
                         GTAFunction.DisplayHelpTextThisFrame(
-                            skipTrackText + 
+                            skipTrackText +
                             GTAFunction.InputString(ControlVolumeUp) + " " +
                             GTAFunction.InputString(ControlVolumeDown) +
                             " : Volume: " +
@@ -439,6 +537,8 @@ namespace CustomRadioStations {
                         : GTAFunction.InputString(Config.KB_OpenSettings);
                     GTAFunction.DisplayHelpTextThisFrame(settingsInput + " : CRS Settings\n", false, false);
                 }
+            } else {
+                ResetTrackRatingRepeats();
             }
 
             if (!volumeControlsActive) {

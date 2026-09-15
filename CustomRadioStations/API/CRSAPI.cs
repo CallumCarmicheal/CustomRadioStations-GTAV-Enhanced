@@ -10,7 +10,7 @@ using System.Text;
 /// Intended for ScriptHookVDotNet's F4 C# console, for example:
 /// CRSAPI.NextSong(); or return CRSAPI.CurrentTrack;
 /// </summary>
-public static class CRSAPI { // CRSAPI.IsReady
+public static class CRSAPI {
     public static bool IsReady => CustomRadioStations.CRSApiRuntime.IsReady;
     public static string LastResult => CustomRadioStations.CRSApiRuntime.LastResult;
     public static int StationCount => CustomRadioStations.CRSApiRuntime.StationCount;
@@ -23,6 +23,8 @@ public static class CRSAPI { // CRSAPI.IsReady
     public static double DurationSeconds => CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot().SongDurationMs / 1000d;
     public static bool IsPlaying => CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot().IsPlaying;
     public static bool IsPaused => CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot().IsPaused;
+    public static float CurrentRating => CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot().Rating;
+    public static string CurrentRatingKey => CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot().RatingKey;
 
     public static CustomRadioStations.CRSTrackInfo Track => new CustomRadioStations.CRSTrackInfo(CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot());
     public static CustomRadioStations.CRSStationInfo Station => new CustomRadioStations.CRSStationInfo(CustomRadioStations.CRSApiRuntime.GetCurrentSnapshot());
@@ -34,6 +36,10 @@ public static class CRSAPI { // CRSAPI.IsReady
     public static string Pause() => CustomRadioStations.CRSApiRuntime.Enqueue(CustomRadioStations.CRSApiCommandType.Pause);
     public static string TogglePause() => CustomRadioStations.CRSApiRuntime.Enqueue(CustomRadioStations.CRSApiCommandType.TogglePause);
     public static string Stop() => CustomRadioStations.CRSApiRuntime.Enqueue(CustomRadioStations.CRSApiCommandType.Stop);
+    public static string RateUp() => CustomRadioStations.CRSApiRuntime.Enqueue(CustomRadioStations.CRSApiCommandType.RateUp);
+    public static string RateDown() => CustomRadioStations.CRSApiRuntime.Enqueue(CustomRadioStations.CRSApiCommandType.RateDown);
+    public static string SetRating(double rating) => CustomRadioStations.CRSApiRuntime.Enqueue(CustomRadioStations.CRSApiCommandType.SetRating, rating);
+    public static string ClearRating() => CustomRadioStations.CRSApiRuntime.Enqueue(CustomRadioStations.CRSApiCommandType.ClearRating);
 
     public static string Seek(double seconds) => CustomRadioStations.CRSApiRuntime.Enqueue(CustomRadioStations.CRSApiCommandType.Seek, seconds);
     public static string SeekRelative(double seconds) => CustomRadioStations.CRSApiRuntime.Enqueue(CustomRadioStations.CRSApiCommandType.SeekRelative, seconds);
@@ -74,6 +80,8 @@ namespace CustomRadioStations {
             SourceDuration = TimeSpan.FromMilliseconds(snapshot.PhysicalDurationMs);
             PlaybackStart = TimeSpan.FromMilliseconds(snapshot.PlaybackStartMs);
             PlaybackEnd = TimeSpan.FromMilliseconds(snapshot.PlaybackEndMs);
+            Rating = snapshot.Rating;
+            RatingKey = snapshot.RatingKey;
             IsCommercial = snapshot.IsCommercial;
         }
 
@@ -86,13 +94,16 @@ namespace CustomRadioStations {
         public TimeSpan SourceDuration { get; }
         public TimeSpan PlaybackStart { get; }
         public TimeSpan PlaybackEnd { get; }
+        public float Rating { get; }
+        public string RatingKey { get; }
         public bool IsCommercial { get; }
 
         public override string ToString() {
             if (string.IsNullOrWhiteSpace(DisplayName))
                 return "No custom-radio track is active.";
             return DisplayName.Replace("\r", string.Empty).Trim() + Environment.NewLine +
-                Format(Position) + " / " + Format(Duration);
+                Format(Position) + " / " + Format(Duration) + Environment.NewLine +
+                "Rating: " + (Rating > 0f ? Rating.ToString("0.0", CultureInfo.InvariantCulture) + " / 5" : "Unrated");
         }
 
         private static string Format(TimeSpan value) {
@@ -139,6 +150,10 @@ namespace CustomRadioStations {
         Pause,
         TogglePause,
         Stop,
+        RateUp,
+        RateDown,
+        SetRating,
+        ClearRating,
         Seek,
         SeekRelative,
         SeekPercent,
@@ -169,7 +184,8 @@ namespace CustomRadioStations {
             uint songPositionMs, uint songDurationMs, uint mediaPositionMs, uint mediaDurationMs,
             uint physicalDurationMs, uint playbackStartMs, uint playbackEndMs,
             uint? configuredStartMs, uint? configuredEndMs, uint? analysisStartMs, uint? analysisEndMs,
-            uint? analysisDurationMs, bool allowAnalysisTrimWithinBounds, bool isPlaying, bool isPaused) {
+            uint? analysisDurationMs, bool allowAnalysisTrimWithinBounds, float rating, string ratingKey,
+            bool isPlaying, bool isPaused) {
             StationName = stationName ?? string.Empty;
             StationId = stationId ?? string.Empty;
             PlaybackMode = playbackMode ?? string.Empty;
@@ -191,6 +207,8 @@ namespace CustomRadioStations {
             AnalysisEndMs = analysisEndMs;
             AnalysisDurationMs = analysisDurationMs;
             AllowAnalysisTrimWithinBounds = allowAnalysisTrimWithinBounds;
+            Rating = rating;
+            RatingKey = ratingKey ?? string.Empty;
             IsPlaying = isPlaying;
             IsPaused = isPaused;
         }
@@ -198,7 +216,7 @@ namespace CustomRadioStations {
         internal static RadioApiSnapshot Empty(string stationName = "", string stationId = "", string mode = "",
             int programmeCount = 0, bool isPlaying = false, bool isPaused = false) {
             return new RadioApiSnapshot(stationName, stationId, mode, -1, programmeCount, false, string.Empty, string.Empty,
-                0u, 0u, 0u, 0u, 0u, 0u, 0u, null, null, null, null, null, false, isPlaying, isPaused);
+                0u, 0u, 0u, 0u, 0u, 0u, 0u, null, null, null, null, null, false, 0f, string.Empty, isPlaying, isPaused);
         }
 
         internal string StationName;
@@ -222,6 +240,8 @@ namespace CustomRadioStations {
         internal uint? AnalysisEndMs;
         internal uint? AnalysisDurationMs;
         internal bool AllowAnalysisTrimWithinBounds;
+        internal float Rating;
+        internal string RatingKey;
         internal bool IsPlaying;
         internal bool IsPaused;
     }
@@ -323,6 +343,14 @@ namespace CustomRadioStations {
             }
             case CRSApiCommandType.Stop:
                 return script.ApiStop();
+            case CRSApiCommandType.RateUp:
+                return ChangeCurrentRating(station, 0.5f);
+            case CRSApiCommandType.RateDown:
+                return ChangeCurrentRating(station, -0.5f);
+            case CRSApiCommandType.SetRating:
+                return SetCurrentRating(station, command.Number);
+            case CRSApiCommandType.ClearRating:
+                return SetCurrentRating(station, 0d);
             case CRSApiCommandType.Seek:
                 if (station == null) return NoStation();
                 return station.SeekCurrentSong(command.Number) ? "OK: " + FormatPosition(station.GetApiSnapshot()) : "Seek unavailable.";
@@ -389,6 +417,9 @@ namespace CustomRadioStations {
             builder.AppendLine("Song position: " + FormatMs(snapshot.SongPositionMs) + " / " + FormatMs(snapshot.SongDurationMs));
             builder.AppendLine("Media position: " + FormatMs(snapshot.MediaPositionMs) + " / " + FormatMs(snapshot.MediaDurationMs));
             builder.AppendLine("Source duration: " + FormatMs(snapshot.PhysicalDurationMs));
+            builder.AppendLine("Rating: " + (snapshot.Rating > 0f ? snapshot.Rating.ToString("0.0", CultureInfo.InvariantCulture) + " / 5" : "Unrated"));
+            if (!string.IsNullOrWhiteSpace(snapshot.RatingKey))
+                builder.AppendLine("Rating key: " + snapshot.RatingKey);
             builder.AppendLine("Commercial: " + snapshot.IsCommercial);
             return builder.ToString().TrimEnd();
         }
@@ -434,8 +465,9 @@ namespace CustomRadioStations {
 
         internal static string Help() {
             return "CRSAPI commands" + Environment.NewLine +
-                "State: CurrentStation, CurrentTrack, Position, Duration, Track, Station, IsPlaying, IsPaused, LastResult" + Environment.NewLine +
+                "State: CurrentStation, CurrentTrack, Position, Duration, CurrentRating, CurrentRatingKey, Track, Station, IsPlaying, IsPaused, LastResult" + Environment.NewLine +
                 "Playback: NextSong(), PreviousSong(), RestartSong(), Play(), Pause(), TogglePause(), Stop()" + Environment.NewLine +
+                "Ratings: RateUp(), RateDown(), SetRating(value), ClearRating()" + Environment.NewLine +
                 "Seek: Seek(seconds), SeekRelative(seconds), SeekPercent(percent)" + Environment.NewLine +
                 "Stations: NextStation(), PreviousStation(), SetStation(index/name), Stations()" + Environment.NewLine +
                 "Debug: Status(), TrackInfo(), StationInfo(), Timeline(), BoundsInfo(), DumpProgramme()" + Environment.NewLine +
@@ -464,6 +496,32 @@ namespace CustomRadioStations {
             } catch (Exception ex) {
                 return "Could not enumerate stations: " + ex.Message;
             }
+        }
+
+        private static string ChangeCurrentRating(RadioStation station, float delta) {
+            if (station == null)
+                return NoStation();
+            TrackRatingTarget target;
+            if (!station.TryGetCurrentRatingTarget(out target))
+                return "Rating unavailable for the current programme item.";
+            float value = TrackRatingStore.ChangeRating(target, delta);
+            return "OK: rating " + FormatRating(value) + ".";
+        }
+
+        private static string SetCurrentRating(RadioStation station, double requested) {
+            if (station == null)
+                return NoStation();
+            if (double.IsNaN(requested) || double.IsInfinity(requested) || requested < 0d || requested > 5d)
+                return "Rating must be between 0 and 5.";
+            TrackRatingTarget target;
+            if (!station.TryGetCurrentRatingTarget(out target))
+                return "Rating unavailable for the current programme item.";
+            float value = TrackRatingStore.SetRating(target, (float)requested);
+            return "OK: rating " + FormatRating(value) + ".";
+        }
+
+        private static string FormatRating(float rating) {
+            return rating > 0f ? rating.ToString("0.0", CultureInfo.InvariantCulture) + " / 5" : "cleared";
         }
 
         private static string CurrentTrackLabel() {

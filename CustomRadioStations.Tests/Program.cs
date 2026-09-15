@@ -37,6 +37,7 @@ namespace CustomRadioStations {
                 TestTrimmedBroadcastTimeline();
                 TestWheelDisplayMetricsAndIconVariants();
                 TestUnicodeTextSupport();
+                TestTrackRatings();
                 TestSettingsItems();
                 Console.WriteLine("Passed " + passed + " station configuration tests.");
                 return 0;
@@ -511,6 +512,114 @@ namespace CustomRadioStations {
             string invalidPng = Path.Combine(icons, "invalid.png");
             File.WriteAllBytes(invalidPng, new byte[] { 1, 2, 3 });
             Assert(!TextureFileValidator.TryValidatePng(invalidPng, out validationError), "malformed PNG is rejected before DirectX");
+        }
+
+        private static void TestTrackRatings() {
+            Assert(TrackRatingStore.NormalizeRating(3.24f) == 3.0f, "rating rounds down to nearest half star");
+            Assert(TrackRatingStore.NormalizeRating(3.25f) == 3.5f, "rating midpoint rounds up to nearest half star");
+            Assert(TrackRatingStore.NormalizeRating(9f) == 5f && TrackRatingStore.NormalizeRating(-1f) == 0f,
+                "rating clamps to zero through five stars");
+
+            string source = Path.Combine(tracks, "rating-source.mp3");
+            File.WriteAllBytes(source, Enumerable.Range(0, 255).Select(value => (byte)value).ToArray());
+            string wholeAnalysisKey = TrackRatingStore.CreateAnalysisKey(source, null, null);
+            string segmentAnalysisKey = TrackRatingStore.CreateAnalysisKey(source, 1000u, 5000u);
+            Assert(wholeAnalysisKey.StartsWith("sample-v1:", StringComparison.Ordinal),
+                "rating identity uses the analyzer sample-v1 content fingerprint");
+            Assert(!string.Equals(wholeAnalysisKey, segmentAnalysisKey, StringComparison.OrdinalIgnoreCase),
+                "analysis segments retain distinct content-hash identities");
+
+            var whole = new TrackRatingTarget(wholeAnalysisKey, source, null, "Artist", "Whole");
+            var segment = new TrackRatingTarget(segmentAnalysisKey, source, null, "Artist", "Segment");
+            var subTrack = new TrackRatingTarget(wholeAnalysisKey, source, 2500u, "Artist", "Subtrack");
+            Assert(!string.Equals(whole.Key, segment.Key, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(whole.Key, subTrack.Key, StringComparison.OrdinalIgnoreCase),
+                "whole files, source segments and continuous subtracks receive distinct rating identities");
+
+            TrackRatingStore.Load();
+            Assert(TrackRatingStore.SetRating(whole, 3.5f) == 3.5f && TrackRatingStore.GetRating(whole) == 3.5f,
+                "rating updates immediately in memory");
+            TrackRatingStore.Flush();
+            Assert(File.Exists(AppPaths.TrackRatingsFile), "rating store persists track-ratings.json");
+
+            var saved = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(AppPaths.TrackRatingsFile));
+            Assert((int)saved["version"] == TrackRatingStore.CurrentVersion, "rating document uses current hash schema version");
+            var savedRatings = (Newtonsoft.Json.Linq.JObject)saved["ratings"];
+            Assert(savedRatings.Property(whole.Key) != null, "rating document is keyed by the sampled-content hash");
+            Assert(string.Equals((string)savedRatings[whole.Key]["file"], Path.GetFullPath(source), StringComparison.OrdinalIgnoreCase),
+                "rating document stores the current file path only as a hint");
+
+            string moved = Path.Combine(tracks, "rating-source-moved.mp3");
+            File.Move(source, moved);
+            string movedAnalysisKey = TrackRatingStore.CreateAnalysisKey(moved, null, null);
+            Assert(string.Equals(wholeAnalysisKey, movedAnalysisKey, StringComparison.OrdinalIgnoreCase),
+                "moving a file keeps the sampled-content rating identity");
+            var movedTarget = new TrackRatingTarget(movedAnalysisKey, moved, null, "Artist", "Whole");
+            Assert(TrackRatingStore.GetRating(movedTarget) == 3.5f, "rating follows the audio file after a move");
+            TrackRatingStore.SetRating(movedTarget, 3.5f);
+            TrackRatingStore.Flush();
+            saved = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(AppPaths.TrackRatingsFile));
+            savedRatings = (Newtonsoft.Json.Linq.JObject)saved["ratings"];
+            Assert(string.Equals((string)savedRatings[movedTarget.Key]["file"], Path.GetFullPath(moved), StringComparison.OrdinalIgnoreCase),
+                "rating the moved file again refreshes its file-location hint even when the score is unchanged");
+
+            TrackRatingStore.Load();
+            Assert(TrackRatingStore.GetRating(movedTarget) == 3.5f, "hash-based rating survives reload from disk");
+            TrackRatingStore.SetRating(movedTarget, 0f);
+            TrackRatingStore.Flush();
+            TrackRatingStore.Load();
+            Assert(TrackRatingStore.GetRating(movedTarget) == 0f, "zero rating clears the saved rating");
+
+            string malformedHintJson = "{\"version\":2,\"ratings\":{" + JsonConvert.ToString(movedTarget.Key) +
+                ":{\"file\":" + JsonConvert.ToString("\0stale-location") + ",\"rating\":4.5}}}";
+            File.WriteAllText(AppPaths.TrackRatingsFile, malformedHintJson);
+            TrackRatingStore.Load();
+            Assert(TrackRatingStore.GetRating(movedTarget) == 4.5f,
+                "a malformed file hint cannot invalidate a hash-keyed rating");
+
+            string legacySource = Path.Combine(tracks, "legacy-rating.mp3");
+            File.WriteAllBytes(legacySource, new byte[] { 9, 8, 7, 6, 5, 4, 3, 2, 1 });
+            File.WriteAllText(AppPaths.TrackRatingsFile,
+                "{\"version\":1,\"ratings\":[{\"source\":" + JsonConvert.ToString(legacySource) +
+                ",\"rating\":4.0,\"artist\":\"Legacy Artist\",\"title\":\"Legacy Title\"}]}");
+            TrackRatingStore.Load();
+            string migratedKey = TrackRatingStore.CreateAnalysisKey(legacySource, null, null);
+            var migratedTarget = new TrackRatingTarget(migratedKey, legacySource, null, "Legacy Artist", "Legacy Title");
+            Assert(TrackRatingStore.GetRating(migratedTarget) == 4f, "legacy path-based rating migrates to the content hash when the old file exists");
+            TrackRatingStore.Flush();
+            saved = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(AppPaths.TrackRatingsFile));
+            Assert(saved["ratings"] is Newtonsoft.Json.Linq.JObject, "legacy rating migration rewrites ratings as a hash-keyed object");
+
+            string analysisCurrentPath = Path.Combine(tracks, "analysis-rating-current.mp3");
+            string analysisOldPath = Path.Combine(tracks, "analysis-rating-old.mp3");
+            File.WriteAllBytes(analysisCurrentPath, new byte[] { 4, 8, 15, 16, 23, 42 });
+            string analysisMigrationKey = TrackRatingStore.CreateAnalysisKey(analysisCurrentPath, null, null);
+            var analysis = new StationAnalysis();
+            analysis.Tracks[analysisMigrationKey] = new TrackAnalysis { FilePath = analysisOldPath, FileSize = 6 };
+            StationAnalysisLoader.SaveAtomic(root, analysis);
+            File.WriteAllText(AppPaths.TrackRatingsFile,
+                "{\"version\":1,\"ratings\":[{\"source\":" + JsonConvert.ToString(analysisOldPath) +
+                ",\"rating\":2.5}]}");
+            TrackRatingStore.Load();
+            var analysisMigratedTarget = new TrackRatingTarget(analysisMigrationKey, analysisCurrentPath, null, string.Empty, string.Empty);
+            Assert(TrackRatingStore.GetRating(analysisMigratedTarget) == 2.5f,
+                "legacy rating migration can recover a moved file through audio-analysis.json's old file hint");
+            TrackRatingStore.Flush();
+
+            string legacyBackup = AppPaths.TrackRatingsFile + ".v1.bak";
+            if (File.Exists(legacyBackup))
+                File.Delete(legacyBackup);
+            string unavailableLegacyPath = Path.Combine(tracks, "unavailable-legacy-rating.mp3");
+            File.WriteAllText(AppPaths.TrackRatingsFile,
+                "{\"version\":1,\"ratings\":[{\"source\":" + JsonConvert.ToString(unavailableLegacyPath) +
+                ",\"rating\":1.5}]}");
+            TrackRatingStore.Load();
+            Assert(File.Exists(legacyBackup), "legacy rating file is backed up even when no entry can currently be migrated");
+            TrackRatingStore.SetRating(analysisMigratedTarget, 3f);
+            TrackRatingStore.Flush();
+            var preservedLegacy = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(legacyBackup));
+            Assert(preservedLegacy["ratings"] is Newtonsoft.Json.Linq.JArray,
+                "unresolved legacy path ratings remain recoverable after new hash-based ratings are saved");
         }
 
         private static void TestSettingsItems() {

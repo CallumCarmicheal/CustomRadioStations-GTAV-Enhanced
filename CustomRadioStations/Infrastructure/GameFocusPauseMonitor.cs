@@ -15,10 +15,12 @@ namespace CustomRadioStations {
         private bool escapeWasDown;
         private uint startButtonMask;
         private bool xinputUnavailable;
-        private bool disposed;
+        private volatile bool disposed;
+        private int pollActive;
 
         private const int VirtualKeyEscape = 0x1b;
         private const ushort XInputGamepadStart = 0x0010;
+
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
@@ -34,10 +36,13 @@ namespace CustomRadioStations {
         }
 
         private void Poll(object state) {
-            if (disposed)
+            if (disposed || Interlocked.Exchange(ref pollActive, 1) != 0)
                 return;
 
             try {
+                if (disposed)
+                    return;
+
                 IntPtr gameWindow = Process.GetCurrentProcess().MainWindowHandle;
                 if (gameWindow == IntPtr.Zero)
                     return;
@@ -51,6 +56,8 @@ namespace CustomRadioStations {
                 PollPauseButtons(isForeground);
             } catch {
                 // Focus monitoring is best-effort and must never take down the script.
+            } finally {
+                Volatile.Write(ref pollActive, 0);
             }
         }
 
@@ -91,8 +98,16 @@ namespace CustomRadioStations {
             if (disposed)
                 return;
             disposed = true;
-            timer.Dispose();
-            AudioPauseCoordinator.SetFocusPaused(false);
+
+            // Timer.Dispose() alone does not wait for a callback that is already running.
+            // Drain that callback before station/audio teardown so the focus monitor cannot
+            // touch AudioPauseCoordinator after its station has been disposed.
+            using (var callbacksDrained = new ManualResetEvent(false)) {
+                try {
+                    if (timer.Dispose(callbacksDrained))
+                        callbacksDrained.WaitOne();
+                } catch (ObjectDisposedException) { }
+            }
         }
 
         [StructLayout(LayoutKind.Sequential)]

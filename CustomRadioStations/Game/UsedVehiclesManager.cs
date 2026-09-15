@@ -58,6 +58,13 @@ namespace CustomRadioStations {
         public static StationWheelPair GetVehicleStationInfo(Vehicle vehicle) {
             return IsUsedVehicle(vehicle) ? GetFromList(vehicle).RadioInfo : null;
         }
+
+        internal static void Reset() {
+            // StationWheelPair instances are rebuilt on every catalog reload. Keeping them
+            // here would retain disposed stations/wheels and make restoration fail because
+            // the new catalog contains different pair objects.
+            vehicles.Clear();
+        }
     }
 
     internal sealed class UsedVehicle {

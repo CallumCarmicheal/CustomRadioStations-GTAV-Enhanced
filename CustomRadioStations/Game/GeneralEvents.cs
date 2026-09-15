@@ -91,5 +91,14 @@ namespace EventHelper {
             UpdatePlayerEnteredExitedVehicle();
             UpdatePlayerVehicleEngineTurnedOn();
         }
+
+        internal static void ResetState() {
+            Player = null;
+            PlayerVehicle = null;
+            enteredVehicleOldHandle = -1;
+            enteredVehicleNewHandle = -1;
+            engineTurnedOnToggle = false;
+        }
+
     }
 }

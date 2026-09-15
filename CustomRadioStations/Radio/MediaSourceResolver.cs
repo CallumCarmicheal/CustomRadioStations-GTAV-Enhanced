@@ -30,6 +30,7 @@ namespace CustomRadioStations {
         public string CuePath { get; }
         public bool AllowAnalysisTrimWithinBounds { get; }
         public string AnalysisKey { get; }
+        internal string StableAnalysisKey { get; set; }
         public TrackAnalysis Analysis { get; internal set; }
 
         public bool IsSegment { get { return StartMs.HasValue || EndMs.HasValue; } }

@@ -1,16 +1,12 @@
 ﻿using GTA;
 using GTA.Native;
 using GTA.UI;
-
 using SelectorWheel;
-
 using GTAVFunctions;
-
 using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
-
 using Control = GTA.Control;
 using Keys = System.Windows.Forms.Keys;
 

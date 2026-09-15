@@ -7,6 +7,7 @@ namespace CustomRadioStations {
     internal static class AppPaths {
         internal const string RootDirectory = @"scripts\Custom Radio Stations";
         internal const string SettingsFile = RootDirectory + @"\settings.json";
+        internal const string TrackRatingsFile = RootDirectory + @"\track-ratings.json";
         internal const string MainLogFile = RootDirectory + @"\CustomRadioStations.log";
         internal const string NativeStationsLogFile = RootDirectory + @"\NativeStations.log";
         internal const string NativeWheelsFile = RootDirectory + @"\native-wheels.json";

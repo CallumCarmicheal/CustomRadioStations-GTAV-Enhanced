@@ -94,9 +94,11 @@
     <Compile Include="Radio\MediaSourceResolver.cs" />
     <Compile Include="Radio\StationDefinition.cs" />
     <Compile Include="Radio\StationWheelPair.cs" />
+    <Compile Include="Radio\TrackRatingStore.cs" />
     <Compile Include="Scripts\MainScript.cs" />
     <Compile Include="Scripts\NativeWheelOrganizerScript.cs" />
     <Compile Include="UI\SelectorWheel.cs" />
+    <Compile Include="UI\TrackRatingWheelOverlay.cs" />
     <Compile Include="UI\Settings\SettingsInput.cs" />
     <Compile Include="UI\Settings\SettingsItem.cs" />
     <Compile Include="UI\Settings\SettingsLayout.cs" />

@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 
 namespace CustomRadioStations {
     internal sealed class RadioStation : IDisposable {
@@ -16,17 +17,25 @@ namespace CustomRadioStations {
         private readonly List<ResolvedMediaSource> trackSources;
         private readonly List<ResolvedMediaSource> commercialSources;
         private readonly List<StationMediaItem> programme = new List<StationMediaItem>();
+        private readonly List<SoundFile> ownedSounds = new List<SoundFile>();
         private readonly PlaybackConfig playback;
         private readonly CommercialBreakConfig commercialBreaks;
 
-        private SoundFile currentSound;
+        private volatile SoundFile currentSound;
+        private readonly object playbackTransitionSync = new object();
+        private volatile bool disposed;
+        private int pendingWheelInfoRefresh;
+        private int pendingAudioFlagsReset;
+        private int pendingCurrentPlayingClear;
         private bool hasPlayedOnce;
         private bool playbackFinished;
         private int lastPlayedSoundIndex;
         private int lastCommercialIndex = -1;
         private uint stoppedPositionSound;
         private DateTime lastPlayedTimeUtc;
-        private DateTime trackUpdateTimer = DateTime.Now;
+        private readonly object trackUpdateTimerSync = new object();
+        private Timer trackUpdateTimer;
+        private int trackUpdateGeneration;
         private readonly int initialProgrammeIndex;
         private readonly uint initialProgrammePosition;
         private readonly DateTime broadcastEpochUtc;
@@ -42,15 +51,23 @@ namespace CustomRadioStations {
             trackSources = new List<ResolvedMediaSource>(definition.Tracks ?? new ResolvedMediaSource[0]);
             commercialSources = new List<ResolvedMediaSource>(definition.Commercials ?? new ResolvedMediaSource[0]);
 
-            BuildProgramme();
-            programmeLengths = programme.Select(item => item.SoundFile.Length).ToArray();
-            initialProgrammeIndex = SelectInitialProgrammeIndex();
-            initialProgrammePosition = SelectInitialProgrammePosition();
-            broadcastEpochUtc = DateTime.UtcNow;
-            lastPlayedSoundIndex = IsBroadcastMode ? initialProgrammeIndex : 0;
-            stoppedPositionSound = IsBroadcastMode ? initialProgrammePosition : 0u;
-            lastPlayedTimeUtc = broadcastEpochUtc;
-            RefreshWheelInfo();
+            try {
+                BuildProgramme();
+                programmeLengths = programme.Select(item => item.SoundFile.Length).ToArray();
+                initialProgrammeIndex = SelectInitialProgrammeIndex();
+                initialProgrammePosition = SelectInitialProgrammePosition();
+                broadcastEpochUtc = DateTime.UtcNow;
+                lastPlayedSoundIndex = IsBroadcastMode ? initialProgrammeIndex : 0;
+                stoppedPositionSound = IsBroadcastMode ? initialProgrammePosition : 0u;
+                lastPlayedTimeUtc = broadcastEpochUtc;
+                RefreshWheelInfo();
+            } catch {
+                // A constructor failure happens before this station can be added to the
+                // catalog, so transactional catalog cleanup cannot see it. Roll back every
+                // SoundFile created so far before preserving the original exception.
+                DisposeOwnedSounds();
+                throw;
+            }
         }
 
         internal string Id { get; }
@@ -114,16 +131,28 @@ namespace CustomRadioStations {
         }
 
         private SoundFile TryCreateSound(ResolvedMediaSource source, string kind) {
+            SoundFile sound = null;
             try {
                 string path = source.FilePath;
                 if (string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase)) {
                     string target = GeneralHelper.GetShortcutTargetFile(path);
                     if (string.IsNullOrEmpty(target))
                         throw new FileNotFoundException("Shortcut target does not exist.", path);
-                    return new SoundFile(target, path, source);
+                    sound = new SoundFile(target, path, source);
+                } else {
+                    sound = new SoundFile(source);
                 }
-                return new SoundFile(source);
+
+                sound.PlaybackEnded += OnSoundPlaybackEnded;
+                ownedSounds.Add(sound);
+                return sound;
             } catch (Exception ex) {
+                // If failure happens after construction but before ownership is registered,
+                // do not leave a detached SoundFile/clip behind.
+                if (sound != null && !ownedSounds.Contains(sound)) {
+                    try { sound.PlaybackEnded -= OnSoundPlaybackEnded; } catch { }
+                    try { sound.Dispose(); } catch { }
+                }
                 Logger.Log("WARNING: Could not load " + kind + " '" + source.FilePath + "' for station '" + Name + "': " + ex.Message);
                 return null;
             }
@@ -209,60 +238,87 @@ namespace CustomRadioStations {
             return GetInactivePlaybackPosition(DateTime.UtcNow);
         }
 
-        internal void Update() {
-            if (currentSound == null || currentSound.Sound == null)
-                return;
-            if (currentSound.HasTrackList && trackUpdateTimer < DateTime.Now) {
+        internal void UpdateGameState() {
+            // Audio progression is event/timer driven. The GTA tick only applies work
+            // that belongs on the game thread (wheel metadata and GTA audio flags).
+            if (Interlocked.Exchange(ref pendingAudioFlagsReset, 0) != 0)
+                ResetAudioFlags();
+
+            bool clearCurrentPlaying = Interlocked.Exchange(ref pendingCurrentPlayingClear, 0) != 0;
+            bool refreshRequested = Interlocked.Exchange(ref pendingWheelInfoRefresh, 0) != 0;
+            if (refreshRequested) {
                 UpdateWheelInfo();
                 UpdateTrackUpdateTimer();
             }
-            if (currentSound.IsFinishedPlaying())
-                PlayNextSound();
+
+            if (clearCurrentPlaying && ReferenceEquals(CurrentPlaying, this))
+                CurrentPlaying = null;
+        }
+
+        private void OnSoundPlaybackEnded(SoundFile sound) {
+            lock (playbackTransitionSync) {
+                // Validate only after acquiring the same lock used by manual skip/seek
+                // operations. A completion can be queued just before the GTA thread seeks
+                // the same source; in that case the seek re-arms SoundFile completion and
+                // this stale callback must not advance the newly selected position.
+                if (disposed || !ReferenceEquals(currentSound, sound) || !sound.IsFinishedPlaying())
+                    return;
+
+                try {
+                    PlayNextSound(true);
+                } catch (Exception ex) {
+                    Logger.Log("ERROR: Failed to advance station '" + Name + "' after playback ended: " + ex);
+                }
+            }
         }
 
         internal void Play() {
-            if (!HasPlayableSounds) {
-                Logger.Log("WARNING: Station '" + Name + "' has no playable tracks; ignoring play request.");
-                return;
-            }
-
-            if (!hasPlayedOnce) {
-                if (IsBroadcastMode && !HasCompleteProgrammeTimeline()) {
-                    ulong elapsed = (ulong)Math.Max(0d, (DateTime.UtcNow - broadcastEpochUtc).TotalMilliseconds);
-                    if (!ResumeBroadcastWithUnknownLengths(initialProgrammeIndex, initialProgrammePosition, elapsed))
-                        return;
-                    currentSound.Sound.Paused = false;
-                } else {
-                    BroadcastPosition target = GetInactivePlaybackPosition(DateTime.UtcNow);
-                    if (target.Finished) {
-                        FinishPlayback();
-                        return;
-                    }
-
-                    int requestedIndex = Math.Max(0, Math.Min(target.Index, programme.Count - 1));
-                    int startedIndex;
-                    if (!TryStartProgrammeItem(requestedIndex, false, IsBroadcastMode && playback.Loop, out startedIndex))
-                        return;
-                    lastPlayedSoundIndex = startedIndex;
-                    currentSound.Seek(startedIndex == requestedIndex ? target.Position : 0u);
-                    currentSound.Sound.Paused = false;
-                    UpdateProgrammeLength();
+            lock (playbackTransitionSync) {
+                if (disposed)
+                    return;
+                if (!HasPlayableSounds) {
+                    Logger.Log("WARNING: Station '" + Name + "' has no playable tracks; ignoring play request.");
+                    return;
                 }
-                hasPlayedOnce = true;
-                playbackFinished = false;
-                UpdateWheelInfo();
-            } else if (IsBroadcastMode) {
-                ResumeBroadcastContinuity();
-            } else {
-                ResumePlaylist();
+
+                if (!hasPlayedOnce) {
+                    if (IsBroadcastMode && !HasCompleteProgrammeTimeline()) {
+                        ulong elapsed = (ulong)Math.Max(0d, (DateTime.UtcNow - broadcastEpochUtc).TotalMilliseconds);
+                        if (!ResumeBroadcastWithUnknownLengths(initialProgrammeIndex, initialProgrammePosition, elapsed))
+                            return;
+                        CurrentSoundIsPaused = false;
+                    } else {
+                        BroadcastPosition target = GetInactivePlaybackPosition(DateTime.UtcNow);
+                        if (target.Finished) {
+                            FinishPlayback();
+                            return;
+                        }
+
+                        int requestedIndex = Math.Max(0, Math.Min(target.Index, programme.Count - 1));
+                        int startedIndex;
+                        if (!TryStartProgrammeItem(requestedIndex, false, IsBroadcastMode && playback.Loop, out startedIndex))
+                            return;
+                        lastPlayedSoundIndex = startedIndex;
+                        currentSound.Seek(startedIndex == requestedIndex ? target.Position : 0u);
+                        CurrentSoundIsPaused = false;
+                        UpdateProgrammeLength();
+                    }
+                    hasPlayedOnce = true;
+                    playbackFinished = false;
+                    UpdateWheelInfo();
+                } else if (IsBroadcastMode) {
+                    ResumeBroadcastContinuity();
+                } else {
+                    ResumePlaylist();
+                }
+
+                if (currentSound == null || currentSound.Sound == null)
+                    return;
+
+                Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", true);
+                Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", true);
+                AudioPauseCoordinator.NotifyStationStarted(this);
             }
-
-            if (currentSound == null || currentSound.Sound == null)
-                return;
-
-            Function.Call(Hash.SET_AUDIO_FLAG, "DisableFlightMusic", true);
-            Function.Call(Hash.SET_AUDIO_FLAG, "DisableWantedMusic", true);
-            AudioPauseCoordinator.NotifyStationStarted(this);
         }
 
         private bool StartCurrentSound(bool resume = false) {
@@ -349,8 +405,20 @@ namespace CustomRadioStations {
                 RefreshProgrammeLength(index);
                 UpdateProgrammeLength();
                 uint length = currentSound.Length;
+                if (length == 0u) {
+                    // A local decoder normally reveals its duration after first open. If it
+                    // still cannot, there is no mathematically valid way to project an
+                    // inactive broadcast through this item. Keep it playable at the start
+                    // instead of looping forever while elapsed time can never decrease.
+                    lastPlayedSoundIndex = index;
+                    currentSound.Seek(0u);
+                    Logger.Log("WARNING: Duration is unavailable for '" + currentSound.FilePath +
+                        "' on station '" + Name + "'; broadcast continuity resumes at the start of this item.");
+                    return true;
+                }
+
                 ulong remaining = length > position ? (ulong)(length - position) : 0UL;
-                if (length > 0 && elapsed < remaining) {
+                if (elapsed < remaining) {
                     lastPlayedSoundIndex = index;
                     currentSound.Seek(position + (uint)elapsed);
                     return true;
@@ -422,237 +490,290 @@ namespace CustomRadioStations {
         }
 
         internal void Stop() {
-            if (currentSound == null || currentSound.Sound == null)
-                return;
-            StationMediaItem item = programme.Find(candidate => candidate.SoundFile == currentSound);
-            if (item == null)
-                return;
+            lock (playbackTransitionSync) {
+                SoundFile sound = currentSound;
+                if (sound == null || sound.Sound == null)
+                    return;
+                StationMediaItem item = programme.Find(candidate => candidate.SoundFile == sound);
+                if (item == null)
+                    return;
 
-            stoppedPositionSound = currentSound.PlayPosition();
-            lastPlayedSoundIndex = programme.IndexOf(item);
-            lastPlayedTimeUtc = DateTime.UtcNow;
-            playbackFinished = false;
-            CurrentSoundIsPaused = true;
-            AudioPauseCoordinator.NotifyStationStopped(this);
-            currentSound = null;
-            RefreshWheelInfo();
-            ResetAudioFlags();
+                stoppedPositionSound = sound.PlayPosition();
+                lastPlayedSoundIndex = programme.IndexOf(item);
+                lastPlayedTimeUtc = DateTime.UtcNow;
+                playbackFinished = false;
+                sound.IsPaused = true;
+                AudioPauseCoordinator.NotifyStationStopped(this);
+                currentSound = null;
+                CancelTrackUpdateTimer();
+                RefreshWheelInfo();
+                ResetAudioFlags();
+            }
         }
 
-        private void PlayNextSound() {
-            if (!HasPlayableSounds)
-                return;
-            int currentIndex = currentSound == null ? -1 : programme.FindIndex(item => item.SoundFile == currentSound);
-            SoundFile previousSound = currentSound;
-            if (previousSound != null) {
-                previousSound.StopSound();
-                previousSound.ReleaseSound();
-            }
+        private void PlayNextSound(bool deferGameState = false) {
+            lock (playbackTransitionSync) {
+                if (!HasPlayableSounds)
+                    return;
+                int currentIndex = currentSound == null ? -1 : programme.FindIndex(item => item.SoundFile == currentSound);
+                SoundFile previousSound = currentSound;
+                if (previousSound != null) {
+                    previousSound.StopSound();
+                    previousSound.ReleaseSound();
+                }
 
-            if (currentIndex >= programme.Count - 1 && !playback.Loop) {
-                FinishPlayback();
-                return;
-            }
+                if (currentIndex >= programme.Count - 1 && !playback.Loop) {
+                    FinishPlayback(deferGameState);
+                    return;
+                }
 
-            int nextIndex = currentIndex >= 0 && currentIndex < programme.Count - 1 ? currentIndex + 1 : 0;
-            int startedIndex;
-            if (!TryStartProgrammeItem(nextIndex, true, playback.Loop, out startedIndex)) {
-                FinishPlayback();
-                return;
+                int nextIndex = currentIndex >= 0 && currentIndex < programme.Count - 1 ? currentIndex + 1 : 0;
+                int startedIndex;
+                if (!TryStartProgrammeItem(nextIndex, true, playback.Loop, out startedIndex)) {
+                    FinishPlayback(deferGameState);
+                    return;
+                }
+                lastPlayedSoundIndex = startedIndex;
+                stoppedPositionSound = 0u;
+                playbackFinished = false;
+                UpdateProgrammeLength();
+                CurrentSoundIsPaused = false;
+                AudioPauseCoordinator.NotifyStationStarted(this);
+
+                if (deferGameState) {
+                    Interlocked.Exchange(ref pendingWheelInfoRefresh, 1);
+                    UpdateTrackUpdateTimer();
+                } else {
+                    UpdateWheelInfo();
+                    UpdateTrackUpdateTimer();
+                }
             }
-            lastPlayedSoundIndex = startedIndex;
-            stoppedPositionSound = 0u;
-            playbackFinished = false;
-            UpdateProgrammeLength();
-            CurrentSoundIsPaused = false;
-            UpdateWheelInfo();
-            UpdateTrackUpdateTimer();
         }
 
         internal void PlayNextSong() {
-            if (currentSound == null)
-                return;
-            int nextTrackIndex = currentSound.GetNextPlayableTrackIndex(currentSound.GetCurrentTrackIndex());
-            if (nextTrackIndex >= 0 && currentSound.SeekToTrackIndex(nextTrackIndex)) {
-                UpdateWheelInfo();
-                UpdateTrackUpdateTimer();
-            } else {
-                PlayNextSound();
+            lock (playbackTransitionSync) {
+                if (currentSound == null)
+                    return;
+                int nextTrackIndex = currentSound.GetNextPlayableTrackIndex(currentSound.GetCurrentTrackIndex());
+                if (nextTrackIndex >= 0 && currentSound.SeekToTrackIndex(nextTrackIndex)) {
+                    UpdateWheelInfo();
+                    UpdateTrackUpdateTimer();
+                } else {
+                    PlayNextSound();
+                }
             }
         }
 
         internal bool PlayPreviousSong() {
-            if (currentSound == null || currentSound.Sound == null)
-                return false;
+            lock (playbackTransitionSync) {
+                if (currentSound == null || currentSound.Sound == null)
+                    return false;
 
-            int trackIndex = currentSound.GetCurrentTrackIndex();
-            int previousTrackIndex = currentSound.GetPreviousPlayableTrackIndex(trackIndex);
-            if (previousTrackIndex >= 0) {
-                if (!currentSound.SeekToTrackIndex(previousTrackIndex))
+                int trackIndex = currentSound.GetCurrentTrackIndex();
+                int previousTrackIndex = currentSound.GetPreviousPlayableTrackIndex(trackIndex);
+                if (previousTrackIndex >= 0) {
+                    if (!currentSound.SeekToTrackIndex(previousTrackIndex))
+                        return false;
+                    UpdateWheelInfo();
+                    UpdateTrackUpdateTimer();
+                    return true;
+                }
+
+                int currentIndex = programme.FindIndex(item => item.SoundFile == currentSound);
+                int previousIndex;
+                if (currentIndex < 0 || !TryGetPreviousProgrammeIndex(currentIndex, playback.Loop, out previousIndex)) {
+                    currentSound.RestartCurrentTrack();
+                    UpdateWheelInfo();
+                    UpdateTrackUpdateTimer();
+                    return true;
+                }
+
+                SoundFile previousSound = currentSound;
+                previousSound.StopSound();
+                previousSound.ReleaseSound();
+
+                int startedIndex;
+                if (!TryStartProgrammeItem(previousIndex, true, playback.Loop, out startedIndex))
+                    return false;
+
+                lastPlayedSoundIndex = startedIndex;
+                stoppedPositionSound = 0u;
+                playbackFinished = false;
+                UpdateProgrammeLength();
+                int lastPlayableTrack = currentSound.GetLastPlayableTrackIndex();
+                if (lastPlayableTrack >= 0)
+                    currentSound.SeekToTrackIndex(lastPlayableTrack);
+                else
+                    currentSound.Seek(0u);
+                CurrentSoundIsPaused = false;
+                UpdateWheelInfo();
+                UpdateTrackUpdateTimer();
+                return true;
+            }
+        }
+
+        internal bool RestartCurrentSong() {
+            lock (playbackTransitionSync) {
+                if (currentSound == null || currentSound.Sound == null || !currentSound.RestartCurrentTrack())
                     return false;
                 UpdateWheelInfo();
                 UpdateTrackUpdateTimer();
                 return true;
             }
+        }
 
-            int currentIndex = programme.FindIndex(item => item.SoundFile == currentSound);
-            int previousIndex;
-            if (currentIndex < 0 || !TryGetPreviousProgrammeIndex(currentIndex, playback.Loop, out previousIndex)) {
-                currentSound.RestartCurrentTrack();
+        internal bool SeekCurrentSong(double seconds) {
+            lock (playbackTransitionSync) {
+                if (currentSound == null || currentSound.Sound == null || double.IsNaN(seconds) || double.IsInfinity(seconds))
+                    return false;
+
+                uint logicalPosition = currentSound.PlayPosition();
+                uint start;
+                uint end;
+                currentSound.GetLogicalTrackBounds(logicalPosition, out start, out end);
+                if (end <= start)
+                    return false;
+
+                double milliseconds = Math.Max(0d, seconds * 1000d);
+                ulong target = (ulong)start + (ulong)Math.Min(milliseconds, uint.MaxValue);
+                uint maximum = end - 1u;
+                currentSound.Seek((uint)Math.Min((ulong)maximum, target));
                 UpdateWheelInfo();
                 UpdateTrackUpdateTimer();
                 return true;
             }
-
-            SoundFile previousSound = currentSound;
-            previousSound.StopSound();
-            previousSound.ReleaseSound();
-
-            int startedIndex;
-            if (!TryStartProgrammeItem(previousIndex, true, playback.Loop, out startedIndex))
-                return false;
-
-            lastPlayedSoundIndex = startedIndex;
-            stoppedPositionSound = 0u;
-            playbackFinished = false;
-            UpdateProgrammeLength();
-            CurrentSoundIsPaused = false;
-            int lastPlayableTrack = currentSound.GetLastPlayableTrackIndex();
-            if (lastPlayableTrack >= 0)
-                currentSound.SeekToTrackIndex(lastPlayableTrack);
-            else
-                currentSound.Seek(0u);
-            UpdateWheelInfo();
-            UpdateTrackUpdateTimer();
-            return true;
-        }
-
-        internal bool RestartCurrentSong() {
-            if (currentSound == null || currentSound.Sound == null || !currentSound.RestartCurrentTrack())
-                return false;
-            UpdateWheelInfo();
-            UpdateTrackUpdateTimer();
-            return true;
-        }
-
-        internal bool SeekCurrentSong(double seconds) {
-            if (currentSound == null || currentSound.Sound == null || double.IsNaN(seconds) || double.IsInfinity(seconds))
-                return false;
-
-            uint logicalPosition = currentSound.PlayPosition();
-            uint start;
-            uint end;
-            currentSound.GetLogicalTrackBounds(logicalPosition, out start, out end);
-            if (end <= start)
-                return false;
-
-            double milliseconds = Math.Max(0d, seconds * 1000d);
-            ulong target = (ulong)start + (ulong)Math.Min(milliseconds, uint.MaxValue);
-            uint maximum = end - 1u;
-            currentSound.Seek((uint)Math.Min((ulong)maximum, target));
-            UpdateWheelInfo();
-            UpdateTrackUpdateTimer();
-            return true;
         }
 
         internal bool SeekCurrentSongRelative(double seconds) {
-            if (currentSound == null || currentSound.Sound == null || double.IsNaN(seconds) || double.IsInfinity(seconds))
-                return false;
+            lock (playbackTransitionSync) {
+                if (currentSound == null || currentSound.Sound == null || double.IsNaN(seconds) || double.IsInfinity(seconds))
+                    return false;
 
-            uint logicalPosition = currentSound.PlayPosition();
-            uint start;
-            uint end;
-            currentSound.GetLogicalTrackBounds(logicalPosition, out start, out end);
-            if (end <= start)
-                return false;
+                uint logicalPosition = currentSound.PlayPosition();
+                uint start;
+                uint end;
+                currentSound.GetLogicalTrackBounds(logicalPosition, out start, out end);
+                if (end <= start)
+                    return false;
 
-            double currentSongPosition = logicalPosition >= start ? logicalPosition - start : 0u;
-            double targetSeconds = (currentSongPosition / 1000d) + seconds;
-            return SeekCurrentSong(Math.Max(0d, targetSeconds));
+                double currentSongPosition = logicalPosition >= start ? logicalPosition - start : 0u;
+                double targetSeconds = (currentSongPosition / 1000d) + seconds;
+                return SeekCurrentSong(Math.Max(0d, targetSeconds));
+            }
         }
 
         internal bool SeekCurrentSongPercent(double percent) {
-            if (currentSound == null || currentSound.Sound == null || double.IsNaN(percent) || double.IsInfinity(percent))
-                return false;
+            lock (playbackTransitionSync) {
+                if (currentSound == null || currentSound.Sound == null || double.IsNaN(percent) || double.IsInfinity(percent))
+                    return false;
 
-            uint logicalPosition = currentSound.PlayPosition();
-            uint start;
-            uint end;
-            currentSound.GetLogicalTrackBounds(logicalPosition, out start, out end);
-            if (end <= start)
-                return false;
-            double clamped = Math.Max(0d, Math.Min(100d, percent));
-            double durationSeconds = (end - start) / 1000d;
-            return SeekCurrentSong(durationSeconds * (clamped / 100d));
+                uint logicalPosition = currentSound.PlayPosition();
+                uint start;
+                uint end;
+                currentSound.GetLogicalTrackBounds(logicalPosition, out start, out end);
+                if (end <= start)
+                    return false;
+                double clamped = Math.Max(0d, Math.Min(100d, percent));
+                double durationSeconds = (end - start) / 1000d;
+                return SeekCurrentSong(durationSeconds * (clamped / 100d));
+            }
         }
 
         internal bool SetPaused(bool paused) {
-            if (currentSound == null || currentSound.Sound == null)
-                return false;
-            if (!paused && AudioPauseCoordinator.IsSuspended)
-                return false;
-            currentSound.IsPaused = paused;
-            return true;
+            lock (playbackTransitionSync) {
+                if (currentSound == null || currentSound.Sound == null)
+                    return false;
+                if (!paused && AudioPauseCoordinator.IsSuspended)
+                    return false;
+                CurrentSoundIsPaused = paused;
+                return true;
+            }
+        }
+
+        internal bool TryGetCurrentRatingTarget(out TrackRatingTarget target) {
+            lock (playbackTransitionSync) {
+                target = default(TrackRatingTarget);
+                BroadcastPosition position = GetCurrentPlaybackPosition();
+                if (position.Finished || position.Index < 0 || position.Index >= programme.Count)
+                    return false;
+
+                StationMediaItem item = programme[position.Index];
+                if (item.IsCommercial || item.SoundFile == null)
+                    return false;
+
+                return item.SoundFile.TryGetRatingTargetAtLogicalPosition(position.Position, out target);
+            }
         }
 
         internal RadioApiSnapshot GetApiSnapshot() {
-            BroadcastPosition position = GetCurrentPlaybackPosition();
-            if (position.Finished || position.Index < 0 || position.Index >= programme.Count)
-                return RadioApiSnapshot.Empty(Name, Id, PlaybackMode, programme.Count, IsPlaying, CurrentSoundIsPaused);
+            lock (playbackTransitionSync) {
+                BroadcastPosition position = GetCurrentPlaybackPosition();
+                if (position.Finished || position.Index < 0 || position.Index >= programme.Count)
+                    return RadioApiSnapshot.Empty(Name, Id, PlaybackMode, programme.Count, IsPlaying, CurrentSoundIsPaused);
 
-            StationMediaItem item = programme[position.Index];
-            SoundFile sound = item.SoundFile;
-            uint songStart;
-            uint songEnd;
-            sound.GetLogicalTrackBounds(position.Position, out songStart, out songEnd);
-            uint songPosition = position.Position > songStart ? position.Position - songStart : 0u;
-            uint songDuration = songEnd > songStart ? songEnd - songStart : sound.Length;
-            TrackAnalysis analysis = sound.Analysis;
-            return new RadioApiSnapshot(
-                Name, Id, PlaybackMode, position.Index, programme.Count, item.IsCommercial,
-                sound.GetDisplayNameAtLogicalPosition(position.Position), sound.FilePath,
-                songPosition, songDuration, position.Position, sound.Length, sound.PhysicalLength,
-                sound.PlaybackStartMs, sound.PlaybackEndMs, sound.ConfiguredStartMs, sound.ConfiguredEndMs,
-                analysis == null ? (uint?)null : analysis.AudioStartMs,
-                analysis == null ? (uint?)null : analysis.AudioEndMs,
-                analysis == null ? (uint?)null : analysis.DurationMs,
-                sound.AllowAnalysisTrimWithinBounds, IsPlaying, CurrentSoundIsPaused);
+                StationMediaItem item = programme[position.Index];
+                SoundFile sound = item.SoundFile;
+                uint songStart;
+                uint songEnd;
+                sound.GetLogicalTrackBounds(position.Position, out songStart, out songEnd);
+                uint songPosition = position.Position > songStart ? position.Position - songStart : 0u;
+                uint songDuration = songEnd > songStart ? songEnd - songStart : sound.Length;
+                TrackAnalysis analysis = sound.Analysis;
+                TrackRatingTarget ratingTarget = default;
+                bool hasRatingTarget = !item.IsCommercial && sound.TryGetRatingTargetAtLogicalPosition(position.Position, out ratingTarget);
+                float rating = hasRatingTarget ? TrackRatingStore.GetRating(ratingTarget) : 0f;
+                string ratingKey = hasRatingTarget ? ratingTarget.Key : string.Empty;
+                return new RadioApiSnapshot(
+                    Name, Id, PlaybackMode, position.Index, programme.Count, item.IsCommercial,
+                    sound.GetDisplayNameAtLogicalPosition(position.Position), sound.FilePath,
+                    songPosition, songDuration, position.Position, sound.Length, sound.PhysicalLength,
+                    sound.PlaybackStartMs, sound.PlaybackEndMs, sound.ConfiguredStartMs, sound.ConfiguredEndMs,
+                    analysis == null ? (uint?)null : analysis.AudioStartMs,
+                    analysis == null ? (uint?)null : analysis.AudioEndMs,
+                    analysis == null ? (uint?)null : analysis.DurationMs,
+                    sound.AllowAnalysisTrimWithinBounds, rating, ratingKey, IsPlaying, CurrentSoundIsPaused);
+            }
         }
 
         internal string GetApiTimelineInfo() {
-            RadioApiSnapshot snapshot = GetApiSnapshot();
-            var lines = new List<string>();
-            lines.Add(Name + " [" + Id + "]");
-            lines.Add("Mode: " + PlaybackMode);
-            lines.Add("Live source: " + (currentSound != null && currentSound.Sound != null));
-            lines.Add("Has played: " + hasPlayedOnce);
-            lines.Add("Finished: " + playbackFinished);
-            lines.Add("Programme: " + (snapshot.ProgrammeIndex >= 0 ? (snapshot.ProgrammeIndex + 1).ToString() : "-") + " / " + programme.Count);
-            lines.Add("Projected media position: " + FormatApiDuration(snapshot.MediaPositionMs) + " / " + FormatApiDuration(snapshot.MediaDurationMs));
-            int anchorIndex = hasPlayedOnce ? lastPlayedSoundIndex : (IsBroadcastMode ? initialProgrammeIndex : 0);
-            uint anchorPosition = hasPlayedOnce ? stoppedPositionSound : (IsBroadcastMode ? initialProgrammePosition : 0u);
-            DateTime anchorTime = hasPlayedOnce ? lastPlayedTimeUtc : broadcastEpochUtc;
-            lines.Add("Anchor index: " + anchorIndex);
-            lines.Add("Anchor position: " + FormatApiDuration(anchorPosition));
-            lines.Add("Anchor UTC: " + anchorTime.ToString("O"));
-            if (IsBroadcastMode)
-                lines.Add("Elapsed since anchor: " + TimeSpan.FromMilliseconds(Math.Max(0d, (DateTime.UtcNow - anchorTime).TotalMilliseconds)).ToString());
-            lines.Add("Complete duration map: " + HasCompleteProgrammeTimeline());
-            return string.Join(Environment.NewLine, lines);
+            lock (playbackTransitionSync) {
+                RadioApiSnapshot snapshot = GetApiSnapshot();
+                var lines = new List<string>();
+                lines.Add(Name + " [" + Id + "]");
+                lines.Add("Mode: " + PlaybackMode);
+                SoundFile sound = currentSound;
+                lines.Add("Live source: " + (sound != null && sound.Sound != null));
+                lines.Add("Has played: " + hasPlayedOnce);
+                lines.Add("Finished: " + playbackFinished);
+                lines.Add("Programme: " + (snapshot.ProgrammeIndex >= 0 ? (snapshot.ProgrammeIndex + 1).ToString() : "-") + " / " + programme.Count);
+                lines.Add("Projected media position: " + FormatApiDuration(snapshot.MediaPositionMs) + " / " + FormatApiDuration(snapshot.MediaDurationMs));
+                int anchorIndex = hasPlayedOnce ? lastPlayedSoundIndex : (IsBroadcastMode ? initialProgrammeIndex : 0);
+                uint anchorPosition = hasPlayedOnce ? stoppedPositionSound : (IsBroadcastMode ? initialProgrammePosition : 0u);
+                DateTime anchorTime = hasPlayedOnce ? lastPlayedTimeUtc : broadcastEpochUtc;
+                lines.Add("Anchor index: " + anchorIndex);
+                lines.Add("Anchor position: " + FormatApiDuration(anchorPosition));
+                lines.Add("Anchor UTC: " + anchorTime.ToString("O"));
+                if (IsBroadcastMode)
+                    lines.Add("Elapsed since anchor: " + TimeSpan.FromMilliseconds(Math.Max(0d, (DateTime.UtcNow - anchorTime).TotalMilliseconds)).ToString());
+                lines.Add("Complete duration map: " + HasCompleteProgrammeTimeline());
+                return string.Join(Environment.NewLine, lines);
+            }
         }
 
         internal string DumpProgrammeForApi() {
-            var lines = new List<string>();
-            RadioApiSnapshot current = GetApiSnapshot();
-            lines.Add(Name + " — " + programme.Count + " programme items");
-            for (int index = 0; index < programme.Count; index++) {
-                SoundFile sound = programme[index].SoundFile;
-                string marker = index == current.ProgrammeIndex ? "  < CURRENT" : string.Empty;
-                string kind = programme[index].IsCommercial ? " [AD]" : string.Empty;
-                lines.Add("[" + index.ToString("D2") + "] " + FormatApiDuration(sound.Length) + "  " +
-                    sound.PreviewDisplayName.Replace("\r", " ").Replace("\n", " / ").Trim() + kind + marker);
+            lock (playbackTransitionSync) {
+                var lines = new List<string>();
+                RadioApiSnapshot current = GetApiSnapshot();
+                lines.Add(Name + " — " + programme.Count + " programme items");
+                for (int index = 0; index < programme.Count; index++) {
+                    SoundFile sound = programme[index].SoundFile;
+                    string marker = index == current.ProgrammeIndex ? "  < CURRENT" : string.Empty;
+                    string kind = programme[index].IsCommercial ? " [AD]" : string.Empty;
+                    lines.Add("[" + index.ToString("D2") + "] " + FormatApiDuration(sound.Length) + "  " +
+                        sound.PreviewDisplayName.Replace("\r", " ").Replace("\n", " / ").Trim() + kind + marker);
+                }
+                return string.Join(Environment.NewLine, lines);
             }
-            return string.Join(Environment.NewLine, lines);
         }
 
         private static string FormatApiDuration(uint milliseconds) {
@@ -662,18 +783,27 @@ namespace CustomRadioStations {
                 : value.ToString(@"mm\:ss\.fff");
         }
 
-        private void FinishPlayback() {
+        private void FinishPlayback(bool deferGameState = false) {
             AudioPauseCoordinator.NotifyStationStopped(this);
-            if (currentSound != null) {
-                currentSound.StopSound();
-                currentSound.ReleaseSound();
+            SoundFile sound = currentSound;
+            if (sound != null) {
+                sound.StopSound();
+                sound.ReleaseSound();
             }
             currentSound = null;
             playbackFinished = true;
-            RenderWheelInfo(null);
-            ResetAudioFlags();
-            if (ReferenceEquals(CurrentPlaying, this))
-                CurrentPlaying = null;
+            CancelTrackUpdateTimer();
+
+            if (deferGameState) {
+                Interlocked.Exchange(ref pendingWheelInfoRefresh, 1);
+                Interlocked.Exchange(ref pendingAudioFlagsReset, 1);
+                Interlocked.Exchange(ref pendingCurrentPlayingClear, 1);
+            } else {
+                RenderWheelInfo(null);
+                ResetAudioFlags();
+                if (ReferenceEquals(CurrentPlaying, this))
+                    CurrentPlaying = null;
+            }
         }
 
         private void UpdateProgrammeLength() {
@@ -688,11 +818,13 @@ namespace CustomRadioStations {
         }
 
         internal void RescanSoundsTracklists() {
-            foreach (StationMediaItem item in programme)
-                item.SoundFile.HasTrackList = item.SoundFile.TracklistExists(item.SoundFile.FilePath);
-            RefreshWheelInfo();
-            if (currentSound != null && currentSound.Sound != null)
-                UpdateTrackUpdateTimer();
+            lock (playbackTransitionSync) {
+                foreach (StationMediaItem item in programme)
+                    item.SoundFile.RefreshTracklist();
+                RefreshWheelInfo();
+                if (currentSound != null && currentSound.Sound != null)
+                    UpdateTrackUpdateTimer();
+            }
         }
 
         private void UpdateWheelInfo() {
@@ -700,32 +832,95 @@ namespace CustomRadioStations {
         }
 
         internal void RefreshWheelInfo() {
-            BroadcastPosition position = GetCurrentPlaybackPosition();
-            if (position.Finished || position.Index < 0 || position.Index >= programme.Count) {
-                RenderWheelInfo(null);
-                return;
-            }
+            lock (playbackTransitionSync) {
+                BroadcastPosition position = GetCurrentPlaybackPosition();
+                if (position.Finished || position.Index < 0 || position.Index >= programme.Count) {
+                    RenderWheelInfo(null);
+                    return;
+                }
 
-            SoundFile sound = programme[position.Index].SoundFile;
-            RenderWheelInfo(sound.GetDisplayNameAtLogicalPosition(position.Position));
+                SoundFile sound = programme[position.Index].SoundFile;
+                RenderWheelInfo(sound.GetDisplayNameAtLogicalPosition(position.Position));
+            }
         }
 
         internal void UpdateDashboardInfo() {
-            if (currentSound == null || currentSound.Sound == null)
-                return;
-            Ped player = Game.Player.Character;
-            if (player == null || !player.Exists() || !player.IsInVehicle())
-                return;
-            string[] info = (currentSound.DisplayName ?? string.Empty)
-                .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-            RadioNativeFunctions.UpdateRadioScaleform(Name,
-                info.Length > 0 ? info[0] : string.Empty,
-                info.Length > 1 ? info[1] : string.Empty);
+            lock (playbackTransitionSync) {
+                if (currentSound == null || currentSound.Sound == null)
+                    return;
+                Ped player = Game.Player.Character;
+                if (player == null || !player.Exists() || !player.IsInVehicle())
+                    return;
+                string[] info = (currentSound.DisplayName ?? string.Empty)
+                    .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                RadioNativeFunctions.UpdateRadioScaleform(Name,
+                    info.Length > 0 ? info[0] : string.Empty,
+                    info.Length > 1 ? info[1] : string.Empty);
+            }
         }
 
         private void UpdateTrackUpdateTimer() {
-            trackUpdateTimer = DateTime.Now.AddMilliseconds(
-                currentSound == null || currentSound.Sound == null ? 5000 : currentSound.TimeUntilNextTrack());
+            lock (trackUpdateTimerSync) {
+                trackUpdateGeneration++;
+                DisposeTrackUpdateTimerLocked();
+
+                SoundFile sound = currentSound;
+                if (sound == null || sound.Sound == null || !sound.HasTrackList || sound.IsPaused)
+                    return;
+
+                uint remaining = sound.TimeUntilNextTrack();
+                if (remaining == 0u)
+                    return;
+                int dueTime = remaining > int.MaxValue ? int.MaxValue : (int)remaining;
+                int generation = trackUpdateGeneration;
+                trackUpdateTimer = new Timer(OnTrackUpdateTimer, new TrackUpdateTimerState(sound, generation),
+                    dueTime, Timeout.Infinite);
+            }
+        }
+
+        private void OnTrackUpdateTimer(object state) {
+            var timerState = state as TrackUpdateTimerState;
+            if (timerState == null)
+                return;
+
+            lock (trackUpdateTimerSync) {
+                if (timerState.Generation != trackUpdateGeneration)
+                    return;
+                trackUpdateTimer = null;
+            }
+
+            if (disposed || !ReferenceEquals(currentSound, timerState.Sound))
+                return;
+
+            // Wheel text is GTA/UI state, so the timer only requests a refresh. The
+            // main script tick applies it on the game thread and schedules the next
+            // logical CUE/tracklist boundary.
+            Interlocked.Exchange(ref pendingWheelInfoRefresh, 1);
+        }
+
+        private void CancelTrackUpdateTimer() {
+            lock (trackUpdateTimerSync) {
+                trackUpdateGeneration++;
+                DisposeTrackUpdateTimerLocked();
+            }
+        }
+
+        private void DisposeTrackUpdateTimerLocked() {
+            Timer timer = trackUpdateTimer;
+            trackUpdateTimer = null;
+            if (timer != null) {
+                try { timer.Dispose(); } catch { }
+            }
+        }
+
+        private sealed class TrackUpdateTimerState {
+            internal TrackUpdateTimerState(SoundFile sound, int generation) {
+                Sound = sound;
+                Generation = generation;
+            }
+
+            internal SoundFile Sound { get; }
+            internal int Generation { get; }
         }
 
         private void RenderWheelInfo(string displayName) {
@@ -743,31 +938,64 @@ namespace CustomRadioStations {
         }
 
 
-        internal bool IsPlaying => currentSound != null && currentSound.IsPlaying();
+        internal bool IsPlaying {
+            get {
+                lock (playbackTransitionSync) {
+                    SoundFile sound = currentSound;
+                    return sound != null && sound.IsPlaying();
+                }
+            }
+        }
 
         internal bool CurrentSoundIsPaused {
             get {
-                return currentSound != null && currentSound.IsPaused;
+                SoundFile sound = currentSound;
+                return sound != null && sound.IsPaused;
             }
             set {
-                if (currentSound != null)
-                    currentSound.IsPaused = value;
+                SoundFile sound = currentSound;
+                if (sound == null)
+                    return;
+
+                sound.IsPaused = value;
+                if (value)
+                    CancelTrackUpdateTimer();
+                else
+                    UpdateTrackUpdateTimer();
             }
         }
 
         public void Dispose() {
-            AudioPauseCoordinator.NotifyStationStopped(this);
-            foreach (StationMediaItem item in programme)
-                item.SoundFile.Dispose();
+            lock (playbackTransitionSync) {
+                if (disposed)
+                    return;
+                disposed = true;
+                CancelTrackUpdateTimer();
+                AudioPauseCoordinator.NotifyStationStopped(this);
+                currentSound = null;
+                Interlocked.Exchange(ref pendingWheelInfoRefresh, 0);
+                Interlocked.Exchange(ref pendingAudioFlagsReset, 0);
+                Interlocked.Exchange(ref pendingCurrentPlayingClear, 0);
+                DisposeOwnedSounds();
+            }
+        }
+
+        private void DisposeOwnedSounds() {
+            foreach (SoundFile sound in ownedSounds) {
+                try { sound.PlaybackEnded -= OnSoundPlaybackEnded; } catch { }
+                try { sound.Dispose(); } catch { }
+            }
+            ownedSounds.Clear();
             programme.Clear();
         }
 
         internal static volatile RadioStation CurrentPlaying;
         internal static RadioStation NextQueuedStation;
 
-        internal static void ManageStations() {
-            if (CurrentPlaying != null)
-                CurrentPlaying.Update();
+        internal static void ManageGameState() {
+            RadioStation station = CurrentPlaying;
+            if (station != null)
+                station.UpdateGameState();
         }
     }
 

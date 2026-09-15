@@ -8,6 +8,7 @@ namespace GTAVFunctions {
     /// uses group 2 for its wheel/radio controls.
     /// </summary>
     internal static class ControlInput {
+        internal const int PlayerInputGroup = 0;
         internal const int WheelInputGroup = 2;
 
         internal static bool IsPressed(Control control) {
@@ -38,8 +39,16 @@ namespace GTAVFunctions {
             Function.Call(Hash.ENABLE_CONTROL_ACTION, WheelInputGroup, (int)control, true);
         }
 
+        internal static void EnablePlayerThisFrame(Control control) {
+            Function.Call(Hash.ENABLE_CONTROL_ACTION, PlayerInputGroup, (int)control, true);
+        }
+
         internal static void DisableAllThisFrame() {
             Function.Call(Hash.DISABLE_ALL_CONTROL_ACTIONS, WheelInputGroup);
+        }
+
+        internal static void DisableAllPlayerThisFrame() {
+            Function.Call(Hash.DISABLE_ALL_CONTROL_ACTIONS, PlayerInputGroup);
         }
     }
 }

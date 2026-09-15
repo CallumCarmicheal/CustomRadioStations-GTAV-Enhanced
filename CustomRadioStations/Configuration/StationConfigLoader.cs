@@ -119,6 +119,7 @@ namespace CustomRadioStations {
                         fingerprints[path] = fingerprint;
                     }
                     string key = AudioAnalysisIdentity.CreateAnalysisKeyFromFingerprint(fingerprint, source.StartMs, source.EndMs);
+                    source.StableAnalysisKey = key;
                     TrackAnalysis trackAnalysis;
                     source.Analysis = analysis.Tracks.TryGetValue(key, out trackAnalysis) ? trackAnalysis : null;
                 } catch {

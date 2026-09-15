@@ -1,4 +1,4 @@
-﻿using GTA;
+using GTA;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;

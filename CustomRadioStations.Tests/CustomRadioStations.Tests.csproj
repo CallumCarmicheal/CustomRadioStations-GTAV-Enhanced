@@ -53,6 +53,7 @@
     <Compile Include="..\CustomRadioStations\Radio\CueSheet.cs" Link="CueSheet.cs" />
     <Compile Include="..\CustomRadioStations\Radio\MediaSourceResolver.cs" Link="MediaSourceResolver.cs" />
     <Compile Include="..\CustomRadioStations\Radio\StationDefinition.cs" Link="StationDefinition.cs" />
+    <Compile Include="..\CustomRadioStations\Radio\TrackRatingStore.cs" Link="TrackRatingStore.cs" />
     <Compile Include="..\CustomRadioStations\Utilities\HoldRepeatState.cs" Link="HoldRepeatState.cs" />
     <Compile Include="..\CustomRadioStations\Utilities\RadialSelectionHysteresis.cs" Link="RadialSelectionHysteresis.cs" />
     <Compile Include="..\CustomRadioStations\Game\RadioWheelAvailability.cs" Link="RadioWheelAvailability.cs" />

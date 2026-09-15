@@ -25,6 +25,7 @@ namespace CustomRadioStations {
     internal static class UnicodeTextRenderer {
         // Bump when bitmap-generation semantics change so ScriptHookV never reuses a stale texture path.
         private const string RendererVersion = "7";
+        private const string RatingStarsRendererVersion = "1";
         private const int MaxManagedEntries = 128;
         private const int MaxFailedKeys = 256;
         private const int MaxDiskEntries = 512;
@@ -58,6 +59,13 @@ namespace CustomRadioStations {
             "Malgun Gothic",
             "MS Gothic",
             "MS PGothic",
+            // Segoe UI Symbol is available on Windows 7+; newer revisions include the
+            // Unicode half-star used by the rating overlay. Noto/DejaVu/Liberation are
+            // useful additional fallbacks on Wine and user-managed font installations.
+            "Segoe UI Symbol",
+            "Noto Sans Symbols 2",
+            "DejaVu Sans",
+            "Liberation Sans",
             "Segoe UI",
             "Arial"
         };
@@ -73,6 +81,48 @@ namespace CustomRadioStations {
             float xPosition, float yPosition, UnicodeTextAlignment alignment) {
             UnicodeTextLayout ignored;
             return TryDrawCore(text, fontSize, gtaFont, color, shadowColor, xPosition, yPosition, alignment, 0f, true, out ignored);
+        }
+
+        internal static bool TryDrawRatingStars(float rating, float fontSize, GtaFont gtaFont, Color color, Color shadowColor,
+            float xPosition, float yPosition, UnicodeTextAlignment alignment) {
+            if (Config.UnicodeMode == UnicodeTextMode.NativeOnly)
+                return false;
+
+            int halfUnits = Math.Max(0, Math.Min(10,
+                (int)Math.Round(TrackRatingStore.NormalizeRating(rating) * 2f, MidpointRounding.AwayFromZero)));
+
+            lock (SyncRoot) {
+                RenderKey key = default(RenderKey);
+                bool hasKey = false;
+                try {
+                    Directory.CreateDirectory(AppPaths.UnicodeTextCacheDirectory);
+                    int outputHeight = Math.Max(1, Screen.Resolution.Height);
+                    float renderScale = WheelDisplayMetrics.GetTextRenderScale(outputHeight);
+                    string vectorIdentity = "vector-rating-stars-v" + RatingStarsRendererVersion;
+                    string logicalText = "rating-stars:" + halfUnits.ToString(CultureInfo.InvariantCulture);
+                    key = new RenderKey(logicalText, fontSize, gtaFont, color, shadowColor, alignment,
+                        renderScale, vectorIdentity, 0f);
+                    hasKey = true;
+                    if (FailedKeys.Contains(key))
+                        return false;
+
+                    CacheEntry entry;
+                    if (!Cache.TryGetValue(key, out entry)) {
+                        entry = CreateRatingStarsCacheEntry(key, halfUnits);
+                        Cache.Add(key, entry);
+                        TrimManagedCache(key);
+                    }
+
+                    entry.LastAccess = ++accessCounter;
+                    DrawEntry(entry, xPosition, yPosition, alignment);
+                    return true;
+                } catch (Exception ex) {
+                    if (hasKey)
+                        RememberFailedKey(key);
+                    Logger.Log("WARNING: Vector star rating rendering failed; using text fallback instead. " + ex.Message);
+                    return false;
+                }
+            }
         }
 
         internal static bool TryDrawWrapped(string text, float fontSize, GtaFont gtaFont, Color color, Color shadowColor,
@@ -377,15 +427,148 @@ namespace CustomRadioStations {
             return new CacheEntry(sprite, leftInset, topInset, layoutWidth, layoutHeight, dimensions.LineCount, ++accessCounter);
         }
 
-        private static RenderMetrics CalculateRenderMetrics(float fontSize, GtaFont gtaFont, float renderScale) {
+        private static CacheEntry CreateRatingStarsCacheEntry(RenderKey key, int halfUnits) {
+            float targetLineHeightVirtual = GetTargetLineHeightVirtual(key.FontSize, key.GtaFont);
+            float targetLineHeightPixels = Math.Max(1f, targetLineHeightVirtual * key.RenderScale);
+            string logicalKey = RendererVersion + "|" + RatingStarsRendererVersion + "|" + key.FontSize.ToString("R", CultureInfo.InvariantCulture) + "|" +
+                ((int)key.GtaFont).ToString(CultureInfo.InvariantCulture) + "|" + key.RenderScale.ToString("R", CultureInfo.InvariantCulture) + "|" +
+                key.TextArgb.ToString(CultureInfo.InvariantCulture) + "|" + key.ShadowArgb.ToString(CultureInfo.InvariantCulture) + "|" +
+                halfUnits.ToString(CultureInfo.InvariantCulture);
+            string fileName = UnicodeTextSupport.ComputeStableHash(logicalKey) + ".png";
+            string path = Path.GetFullPath(Path.Combine(AppPaths.UnicodeTextCacheDirectory, fileName));
+            BitmapDimensions dimensions;
+
+            if (!TryReadBitmapDimensions(path, out dimensions)) {
+                dimensions = RenderRatingStarsBitmap(path, halfUnits, Color.FromArgb(key.TextArgb), Color.FromArgb(key.ShadowArgb),
+                    targetLineHeightPixels, key.RenderScale);
+                TrimDiskCache(path);
+            }
+
+            float width = dimensions.Width / key.RenderScale;
+            float height = dimensions.Height / key.RenderScale;
+            float leftInset = dimensions.LeftInset / key.RenderScale;
+            float topInset = dimensions.TopInset / key.RenderScale;
+            float layoutWidth = dimensions.LayoutWidth / key.RenderScale;
+            float layoutHeight = dimensions.LayoutHeight / key.RenderScale;
+            var sprite = new CustomSprite(path, new SizeF(width, height), PointF.Empty, Color.White, 0f, false) {
+                Enabled = false
+            };
+
+            return new CacheEntry(sprite, leftInset, topInset, layoutWidth, layoutHeight, dimensions.LineCount, ++accessCounter);
+        }
+
+        private static float GetTargetLineHeightVirtual(float fontSize, GtaFont gtaFont) {
             float targetLineHeightVirtual;
             try {
                 targetLineHeightVirtual = UIHelper.MeasureFontHeightNoConvert(fontSize, gtaFont) * VirtualHeight;
             } catch {
                 targetLineHeightVirtual = Math.Max(12f, fontSize * 42f);
             }
-            if (targetLineHeightVirtual <= 0f || float.IsNaN(targetLineHeightVirtual) || float.IsInfinity(targetLineHeightVirtual))
+
+            if (!IsFinite(targetLineHeightVirtual) || targetLineHeightVirtual <= 0f)
                 targetLineHeightVirtual = Math.Max(12f, fontSize * 42f);
+            return targetLineHeightVirtual;
+        }
+
+        private static BitmapDimensions RenderRatingStarsBitmap(string finalPath, int halfUnits, Color color, Color shadowColor,
+            float targetLineHeightPixels, float renderScale) {
+            float starSize = Math.Max(8f, targetLineHeightPixels * 0.82f);
+            float gap = Math.Max(1f, starSize * 0.10f);
+            float outlinePixels = Math.Max(renderScale, starSize * 0.045f);
+            float shadowOffset = shadowColor.A > 0 ? Math.Max(1f, outlinePixels * 0.75f) : 0f;
+            int padding = Math.Max(2, (int)Math.Ceiling((outlinePixels * 2.5f) + shadowOffset));
+            float layoutWidth = (starSize * 5f) + (gap * 4f);
+            float layoutHeight = targetLineHeightPixels;
+            int bitmapWidth = Math.Max(1, (int)Math.Ceiling(layoutWidth) + (padding * 2));
+            int bitmapHeight = Math.Max(1, (int)Math.Ceiling(layoutHeight) + (padding * 2));
+
+            if (bitmapWidth > 16384 || bitmapHeight > 16384 || (long)bitmapWidth * bitmapHeight > MaxBitmapPixels)
+                throw new InvalidOperationException("Rendered star rating texture exceeds the bitmap safety limit.");
+
+            using (var bitmap = new Bitmap(bitmapWidth, bitmapHeight, PixelFormat.Format32bppArgb))
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            using (var fillBrush = new SolidBrush(color))
+            using (var shadowPen = new Pen(shadowColor, Math.Max(1f, outlinePixels * 2.2f)))
+            using (var haloPen = new Pen(Color.FromArgb(color.A, 0, 0, 0), Math.Max(1f, outlinePixels * 2.4f)))
+            using (var edgePen = new Pen(color, Math.Max(1f, outlinePixels * 0.85f))) {
+                ConfigureGraphics(graphics);
+                graphics.Clear(Color.Transparent);
+                shadowPen.LineJoin = LineJoin.Round;
+                haloPen.LineJoin = LineJoin.Round;
+                edgePen.LineJoin = LineJoin.Round;
+
+                float y = padding + Math.Max(0f, (layoutHeight - starSize) / 2f);
+                int remainingHalfUnits = Math.Max(0, Math.Min(10, halfUnits));
+                for (int index = 0; index < 5; index++) {
+                    float x = padding + (index * (starSize + gap));
+                    int fill = remainingHalfUnits >= 2 ? 2 : remainingHalfUnits == 1 ? 1 : 0;
+                    remainingHalfUnits = Math.Max(0, remainingHalfUnits - fill);
+
+                    using (GraphicsPath star = CreateStarPath(x, y, starSize)) {
+                        if (shadowColor.A > 0) {
+                            using (var shadowPath = (GraphicsPath)star.Clone())
+                            using (var matrix = new Matrix()) {
+                                matrix.Translate(shadowOffset, shadowOffset);
+                                shadowPath.Transform(matrix);
+                                graphics.DrawPath(shadowPen, shadowPath);
+                            }
+                        }
+
+                        if (fill == 2) {
+                            graphics.FillPath(fillBrush, star);
+                        } else if (fill == 1) {
+                            GraphicsState state = graphics.Save();
+                            graphics.SetClip(new RectangleF(x - outlinePixels, y - outlinePixels,
+                                (starSize / 2f) + outlinePixels, starSize + (outlinePixels * 2f)));
+                            graphics.FillPath(fillBrush, star);
+                            graphics.Restore(state);
+                        }
+
+                        graphics.DrawPath(haloPen, star);
+                        graphics.DrawPath(edgePen, star);
+                    }
+                }
+
+                string tempPath = finalPath + ".tmp-" + Guid.NewGuid().ToString("N");
+                try {
+                    bitmap.Save(tempPath, ImageFormat.Png);
+                    if (File.Exists(finalPath))
+                        File.Delete(finalPath);
+                    File.Move(tempPath, finalPath);
+                } finally {
+                    if (File.Exists(tempPath))
+                        File.Delete(tempPath);
+                }
+            }
+
+            WriteMetricsSidecar(finalPath, padding, padding, layoutWidth, layoutHeight, 1);
+            return new BitmapDimensions(bitmapWidth, bitmapHeight, padding, padding, layoutWidth, layoutHeight, 1);
+        }
+
+        private static GraphicsPath CreateStarPath(float x, float y, float size) {
+            const int pointCount = 10;
+            var points = new PointF[pointCount];
+            float centerX = x + (size / 2f);
+            float centerY = y + (size / 2f);
+            float outerRadius = size * 0.48f;
+            float innerRadius = outerRadius * 0.43f;
+
+            for (int point = 0; point < pointCount; point++) {
+                double angle = (-Math.PI / 2d) + (point * Math.PI / 5d);
+                float radius = (point & 1) == 0 ? outerRadius : innerRadius;
+                points[point] = new PointF(
+                    centerX + ((float)Math.Cos(angle) * radius),
+                    centerY + ((float)Math.Sin(angle) * radius));
+            }
+
+            var path = new GraphicsPath();
+            path.AddPolygon(points);
+            path.CloseFigure();
+            return path;
+        }
+
+        private static RenderMetrics CalculateRenderMetrics(float fontSize, GtaFont gtaFont, float renderScale) {
+            float targetLineHeightVirtual = GetTargetLineHeightVirtual(fontSize, gtaFont);
 
             FontStyle style = GetAvailableFontStyle();
             float emHeight = fontFamily.GetEmHeight(style);

@@ -54,6 +54,7 @@ namespace SelectorWheel {
         private double TextureCatBgHighlightSizeMultiple;
 
         public Func<Color> HighlightColorProvider { private get; set; }
+        public Action<Wheel, WheelCategory, WheelCategoryItem, float> SelectedItemSupplementRenderer { private get; set; }
 
         private Size _textureSize;
         public Size TextureSize {
@@ -203,6 +204,32 @@ namespace SelectorWheel {
             DisableControls();
             ControlCategorySelection();
             ControlItemSelection();
+        }
+
+        public static void ResetTransitions() {
+            bool hadActiveTransition = transitionIn || transitionOut ||
+                Math.Abs(timeScale - 1f) > 0.0001f || timecycleCurrentStrength > 0.0001f;
+
+            transitionIn = false;
+            transitionOut = false;
+            timeScale = 1f;
+            timecycleCurrentStrength = 0f;
+
+            if (!hadActiveTransition)
+                return;
+
+            // Reload can discard every Wheel instance while a transition is active. Reset
+            // the GTA-side state here as well so stale static transition flags cannot leave
+            // slow-motion, timecycle, or muted audio scenes behind. Each operation is
+            // best-effort because this method is also used during script abort.
+            try { Game.TimeScale = 1f; } catch { }
+            try { Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER); } catch { }
+            try {
+                if (Function.Call<bool>(Hash.IS_AUDIO_SCENE_ACTIVE, MutedMuffledAudioScene))
+                    Function.Call(Hash.STOP_AUDIO_SCENE, MutedMuffledAudioScene);
+                if (Function.Call<bool>(Hash.IS_AUDIO_SCENE_ACTIVE, QuickMutedAudioScene))
+                    Function.Call(Hash.STOP_AUDIO_SCENE, QuickMutedAudioScene);
+            } catch { }
         }
 
         public static void ControlTransitions(bool useSlowmotion) {
@@ -488,7 +515,10 @@ namespace SelectorWheel {
 
             }
 
-            DrawSelectedItemName(SelectedCategory.SelectedItem.Name);
+            float selectedItemBottom = DrawSelectedItemName(SelectedCategory.SelectedItem.Name);
+            if (SelectedItemSupplementRenderer != null) {
+                try { SelectedItemSupplementRenderer(this, SelectedCategory, SelectedCategory.SelectedItem, selectedItemBottom); } catch { }
+            }
             if (SelectedCategory.ItemCount() > 1) {
                 UIHelper.DrawCustomText((SelectedCategory.CurrentItemIndex + 1).ToString() + " / " + SelectedCategory.ItemCount().ToString(), 0.55f, FontCategoryItemCount, 255, 255, 255, 255, _origin.X, AddYPixelDistanceToPercent(_origin.Y, -50), 50, 0, 0, 0, 255, UIHelper.TextJustification.Center);
             }
@@ -501,13 +531,13 @@ namespace SelectorWheel {
             CategorySelectionControls();
         }
 
-        private void DrawSelectedItemName(string text) {
-            if (string.IsNullOrEmpty(text))
-                return;
-
+        private float DrawSelectedItemName(string text) {
             const float fontSize = 0.45f;
-            float x = _origin.X;
             float startY = AddYPixelDistanceToPercent(_origin.Y, -50);
+            if (string.IsNullOrEmpty(text))
+                return startY;
+
+            float x = _origin.X;
             float lineHeight = UIHelper.MeasureFontHeightNoConvert(fontSize, FontSelectedItem);
             if (lineHeight <= 0f || float.IsNaN(lineHeight) || float.IsInfinity(lineHeight))
                 lineHeight = 0.03f;
@@ -526,6 +556,11 @@ namespace SelectorWheel {
                         50, 0, 0, 0, 255, UIHelper.TextJustification.Center);
                 }
             }
+
+            int occupiedLines = lines.Length;
+            while (occupiedLines > 1 && string.IsNullOrEmpty(lines[occupiedLines - 1]))
+                occupiedLines--;
+            return startY + (occupiedLines * lineHeight);
         }
 
         private static string[] NormalizeItemTextLines(string text) {
@@ -679,9 +714,9 @@ namespace SelectorWheel {
             Control.MoveUpDown,
             Control.MoveLeftRight,
             Control.Sprint,
-            Control.Jump,
-            Control.Enter,
-            Control.VehicleExit,
+            // X/Y are reserved for track rating while the custom wheel is open.
+            // Do not re-enable their gameplay aliases (Jump/Enter/VehicleExit), or the
+            // same physical button press can leak through and make the player exit.
             Control.VehicleAccelerate,
             Control.VehicleBrake,
             Control.VehicleMoveLeftRight,
@@ -695,10 +730,17 @@ namespace SelectorWheel {
         };
 
         protected void DisableControls() {
+            // Group 2 is the frontend/wheel control set; group 0 is normal player input.
+            // Disable both and restore only the wheel's movement/driving whitelist. This
+            // suppresses every gameplay alias of the physical X/Y buttons rather than
+            // only Jump/Enter/VehicleExit, while disabled Frontend X/Y remain readable
+            // by the rating overlay through IS_DISABLED_CONTROL_* natives.
             ControlInput.DisableAllThisFrame();
+            ControlInput.DisableAllPlayerThisFrame();
 
             foreach (Control control in ControlsToEnable) {
                 ControlInput.EnableThisFrame(control);
+                ControlInput.EnablePlayerThisFrame(control);
             }
         }
 
@@ -1021,20 +1063,8 @@ namespace SelectorWheel {
                 Message, FontSize, FontType, textColor, shadowColor, XPos, YPos, unicodeAlignment, unicodeWrapWidth, out unicodeLayout);
 
             if (!unicodeDrawn) {
-                Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "jamyfafi"); //Required, don't change this! AKA BEGIN_TEXT_COMMAND_DISPLAY_TEXT
-                Function.Call(Hash.SET_TEXT_SCALE, FontSize, FontSize); //1st param: 1.0f
-                Function.Call(Hash.SET_TEXT_FONT, (int)FontType);
-                Function.Call(Hash.SET_TEXT_COLOUR, Red, Green, Blue, Alpha);
-                Function.Call((Hash)0x465C84BC39F1C351, dropShawdowPixelDistance, dRed, dGreen, dBlue, dAlpha); // SET_TEXT_DROPSHADOW
-                Function.Call(Hash.SET_TEXT_OUTLINE);
-                Function.Call(Hash.SET_TEXT_JUSTIFICATION, (int)justifyType);
-                if (justifyType == TextJustification.Right || ForceTextWrap) {
-                    Function.Call(Hash.SET_TEXT_WRAP, startWrap, endWrap);
-                }
-
-                AddLongString(Message);
-
-                Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, XPos, YPos); //AKA END_TEXT_COMMAND_DISPLAY_TEXT
+                DrawNativeText(Message, FontSize, FontType, Red, Green, Blue, Alpha, XPos, YPos,
+                    dropShawdowPixelDistance, dRed, dGreen, dBlue, dAlpha, justifyType, ForceTextWrap, startWrap, endWrap);
             }
 
             if (unicodeDrawn && !withRectangle)
@@ -1082,6 +1112,25 @@ namespace SelectorWheel {
                     DrawRectangle(adjustedXPos, adjustedYPos + (i * fontHeight) + rectYOffset, rectangleWidth, adjustedRectangleHeight, R, G, B, A);
                 }
             }
+        }
+
+        public static void DrawNativeText(string Message, float FontSize, Font FontType,
+            int Red, int Green, int Blue, int Alpha, float XPos, float YPos,
+            int dropShawdowPixelDistance, int dRed, int dGreen, int dBlue, int dAlpha,
+            TextJustification justifyType = TextJustification.Left, bool ForceTextWrap = false,
+            float startWrap = 0f, float endWrap = 1f) {
+            Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "jamyfafi"); //Required, don't change this! AKA BEGIN_TEXT_COMMAND_DISPLAY_TEXT
+            Function.Call(Hash.SET_TEXT_SCALE, FontSize, FontSize); //1st param: 1.0f
+            Function.Call(Hash.SET_TEXT_FONT, (int)FontType);
+            Function.Call(Hash.SET_TEXT_COLOUR, Red, Green, Blue, Alpha);
+            Function.Call((Hash)0x465C84BC39F1C351, dropShawdowPixelDistance, dRed, dGreen, dBlue, dAlpha); // SET_TEXT_DROPSHADOW
+            Function.Call(Hash.SET_TEXT_OUTLINE);
+            Function.Call(Hash.SET_TEXT_JUSTIFICATION, (int)justifyType);
+            if (justifyType == TextJustification.Right || ForceTextWrap)
+                Function.Call(Hash.SET_TEXT_WRAP, startWrap, endWrap);
+
+            AddLongString(Message);
+            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, XPos, YPos); //AKA END_TEXT_COMMAND_DISPLAY_TEXT
         }
 
         public static void DrawRectangle(float BgXpos, float BgYpos, float BgWidth, float BgHeight, int bgR, int bgG, int bgB, int bgA) {

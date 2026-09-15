@@ -1,8 +1,10 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System.IO;
 
 namespace CustomRadioStations {
     internal static class AppPaths {
         internal static string RootDirectory;
+        internal static string TrackRatingsFile { get { return Path.Combine(RootDirectory, "track-ratings.json"); } }
         internal const string StationJsonFileName = "station.json";
     }
 

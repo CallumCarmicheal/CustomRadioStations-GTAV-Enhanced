@@ -9,20 +9,35 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace CustomRadioStations {
     internal class SoundFile {
-        public MiniAudioSound Sound;
+        public volatile MiniAudioSound Sound;
         private AudioClip Clip;
+        private MiniAudioEngine owningEngine;
         private readonly ResolvedMediaSource mediaSource;
         private uint physicalLength;
         private uint playbackStartMs;
         private uint playbackEndMs;
+        private readonly object logicalEndTimerSync = new object();
+        private Timer logicalEndTimer;
+        private int logicalEndGeneration;
+        private int playbackCompletionSignaled;
+
+        internal event Action<SoundFile> PlaybackEnded;
 
         public string FileName;
         public string FilePath;
 
         private string _displayName;
+        private string ratingArtist;
+        private string ratingTitle;
+        private string ratingFilePath;
+        private string ratingAnalysisKey;
+        private bool ratingTargetsBuilt;
+        private TrackRatingTarget baseRatingTarget;
+        private TrackRatingTarget[] subTrackRatingTargets = new TrackRatingTarget[0];
         public string DisplayName {
             get {
                 if (HasTrackList) {
@@ -72,22 +87,41 @@ namespace CustomRadioStations {
 
         private void Initialize(string audioPath, string publicPath) {
             FilePath = publicPath;
-            Clip = new AudioClip(audioPath, true);
-            FileName = Path.GetFileNameWithoutExtension(audioPath);
+            try {
+                owningEngine = SoundEngine;
+                Clip = owningEngine.CreateClip(audioPath, true);
+                FileName = Path.GetFileNameWithoutExtension(audioPath);
 
-            TrackMetadataInfo metadata = TrackMetadataReader.ReadMetadata(audioPath,
-                message => Logger.Log("WARNING: " + message + ". Using the filename for display metadata."));
-            string artist = !string.IsNullOrWhiteSpace(mediaSource.Artist) ? mediaSource.Artist : metadata.Artist;
-            string title = !string.IsNullOrWhiteSpace(mediaSource.Title) ? mediaSource.Title : metadata.Title;
-            _displayName = TrackMetadataReader.FormatDisplayName(artist, title, DisplayNameFromFilename());
-            HasTrackList = TracklistExists(publicPath);
+                TrackMetadataInfo metadata = TrackMetadataReader.ReadMetadata(audioPath,
+                    message => Logger.Log("WARNING: " + message + ". Using the filename for display metadata."));
+                string artist = !string.IsNullOrWhiteSpace(mediaSource.Artist) ? mediaSource.Artist : metadata.Artist;
+                string title = !string.IsNullOrWhiteSpace(mediaSource.Title) ? mediaSource.Title : metadata.Title;
+                ratingArtist = artist ?? string.Empty;
+                ratingTitle = title ?? string.Empty;
+                ratingFilePath = Path.GetFullPath(audioPath);
+                ratingAnalysisKey = mediaSource.StableAnalysisKey ?? string.Empty;
+                _displayName = TrackMetadataReader.FormatDisplayName(artist, title, DisplayNameFromFilename());
+                HasTrackList = TracklistExists(publicPath);
+                InvalidateRatingTargets();
 
-            physicalLength = mediaSource.Analysis != null && mediaSource.Analysis.DurationMs > 0u
-                ? mediaSource.Analysis.DurationMs
-                : metadata.DurationMs;
-            if (mediaSource.Analysis != null)
-                NormalizationGain = LoudnessNormalization.DbToLinear(mediaSource.Analysis.GainDb);
-            RecalculatePlaybackBounds();
+                physicalLength = mediaSource.Analysis != null && mediaSource.Analysis.DurationMs > 0u
+                    ? mediaSource.Analysis.DurationMs
+                    : metadata.DurationMs;
+                if (mediaSource.Analysis != null)
+                    NormalizationGain = LoudnessNormalization.DbToLinear(mediaSource.Analysis.GainDb);
+                RecalculatePlaybackBounds();
+            } catch {
+                // Constructors that fail after CreateClip() do not return an object to the
+                // caller, so release the partially owned MiniAudio clip here.
+                AudioClip clip = Clip;
+                MiniAudioEngine engine = owningEngine;
+                Clip = null;
+                owningEngine = null;
+                if (clip != null && engine != null) {
+                    try { engine.DisposeClip(clip); } catch { }
+                }
+                throw;
+            }
         }
 
         private string DisplayNameFromFilename() {
@@ -132,6 +166,11 @@ namespace CustomRadioStations {
             }
         }
 
+        internal void RefreshTracklist() {
+            HasTrackList = TracklistExists(FilePath);
+            InvalidateRatingTargets();
+        }
+
         public Track GetCurrentTrack() {
             return GetTrackAtRawPosition(RawPlayPosition());
         }
@@ -173,6 +212,56 @@ namespace CustomRadioStations {
             return track == null ? -1 : Tracklist.IndexOf(track);
         }
 
+        internal bool TryGetRatingTargetAtLogicalPosition(uint logicalPositionMs, out TrackRatingTarget target) {
+            if (!EnsureRatingTargets()) {
+                target = default(TrackRatingTarget);
+                return false;
+            }
+
+            if (!HasTrackList || Tracklist == null || Tracklist.Count == 0) {
+                target = baseRatingTarget;
+                return !string.IsNullOrEmpty(target.Key);
+            }
+
+            int index = GetTrackIndexAtLogicalPosition(logicalPositionMs);
+            if (index < 0 || index >= subTrackRatingTargets.Length) {
+                target = default(TrackRatingTarget);
+                return false;
+            }
+
+            target = subTrackRatingTargets[index];
+            return !string.IsNullOrEmpty(target.Key);
+        }
+
+        private bool EnsureRatingTargets() {
+            if (ratingTargetsBuilt)
+                return !string.IsNullOrWhiteSpace(ratingAnalysisKey);
+
+            if (string.IsNullOrWhiteSpace(ratingAnalysisKey)) {
+                try {
+                    ratingAnalysisKey = TrackRatingStore.CreateAnalysisKey(ratingFilePath, mediaSource.StartMs, mediaSource.EndMs);
+                } catch (Exception ex) {
+                    ratingTargetsBuilt = true;
+                    Logger.Log("WARNING: Could not create stable rating identity for '" + ratingFilePath + "': " + ex.Message);
+                    return false;
+                }
+            }
+
+            baseRatingTarget = new TrackRatingTarget(ratingAnalysisKey, ratingFilePath, null, ratingArtist, ratingTitle);
+            subTrackRatingTargets = !HasTrackList || Tracklist == null || Tracklist.Count == 0
+                ? new TrackRatingTarget[0]
+                : Tracklist.Select(track => new TrackRatingTarget(ratingAnalysisKey, ratingFilePath,
+                    track.StartTime, track.Artist, track.Title)).ToArray();
+            ratingTargetsBuilt = true;
+            return true;
+        }
+
+        private void InvalidateRatingTargets() {
+            ratingTargetsBuilt = false;
+            baseRatingTarget = default(TrackRatingTarget);
+            subTrackRatingTargets = new TrackRatingTarget[0];
+        }
+
         internal void GetLogicalTrackBounds(uint logicalPositionMs, out uint startMs, out uint endMs) {
             startMs = 0u;
             endMs = Length;
@@ -197,11 +286,14 @@ namespace CustomRadioStations {
         }
 
         internal bool SeekToTrackIndex(int index) {
-            if (!HasTrackList || Tracklist == null || Sound == null || index < 0 || index >= Tracklist.Count)
+            MiniAudioSound sound = Sound;
+            if (!HasTrackList || Tracklist == null || sound == null || index < 0 || index >= Tracklist.Count)
                 return false;
             uint raw = Math.Max(playbackStartMs, Tracklist[index].StartTime);
             uint upper = playbackEndMs > playbackStartMs ? playbackEndMs - 1u : playbackStartMs;
-            Sound.PlayPosition = Math.Min(raw, upper);
+            sound.PlayPosition = Math.Min(raw, upper);
+            Interlocked.Exchange(ref playbackCompletionSignaled, 0);
+            ScheduleLogicalEnd();
             return true;
         }
 
@@ -264,13 +356,16 @@ namespace CustomRadioStations {
         }
 
         public void SkipToNextTrack() {
-            if (!HasTrackList || Sound == null)
+            MiniAudioSound sound = Sound;
+            if (!HasTrackList || sound == null)
                 return;
             Track next = GetNextTrack();
             if (next == null)
                 return;
             uint upper = playbackEndMs > 0 ? playbackEndMs - 1 : 0u;
-            Sound.PlayPosition = Math.Max(playbackStartMs, Math.Min(upper, next.StartTime));
+            sound.PlayPosition = Math.Max(playbackStartMs, Math.Min(upper, next.StartTime));
+            Interlocked.Exchange(ref playbackCompletionSignaled, 0);
+            ScheduleLogicalEnd();
         }
 
         public uint TimeUntilNextTrack() {
@@ -287,14 +382,19 @@ namespace CustomRadioStations {
         }
 
         public void PlaySound(bool resume, bool playLooped = false, bool playPaused = false, bool allowMultipleInstances = false, bool allowSoundEffects = false) {
-            if (Clip == null)
+            MiniAudioEngine engine = owningEngine;
+            if (Clip == null || engine == null)
                 return;
 
             if (!allowMultipleInstances && Sound != null && !Sound.Finished && !IsPaused)
                 return;
 
             if (resume && IsPaused) {
-                IsPaused = false;
+                // Station resume paths reposition retained sources before playback continues.
+                // Respect playPaused so an old cursor cannot become briefly audible before
+                // RadioStation applies the projected/stored seek and explicitly unpauses it.
+                if (!playPaused)
+                    IsPaused = false;
                 return;
             }
 
@@ -304,7 +404,8 @@ namespace CustomRadioStations {
             }
 
             try {
-                Sound = SoundEngine.Play2D(Clip, playLooped, playPaused);
+                Interlocked.Exchange(ref playbackCompletionSignaled, 0);
+                Sound = engine.Play2D(Clip, playLooped, playPaused, OnPhysicalPlaybackEnded);
                 if (Sound == null)
                     return;
                 physicalLength = Sound.PlayLength;
@@ -319,6 +420,127 @@ namespace CustomRadioStations {
             }
         }
 
+        private void OnPhysicalPlaybackEnded(MiniAudioSound sound) {
+            if (!ReferenceEquals(Sound, sound))
+                return;
+            SignalPlaybackEnded(sound);
+        }
+
+        private void ScheduleLogicalEnd() {
+            lock (logicalEndTimerSync) {
+                DisposeLogicalEndTimerLocked();
+
+                MiniAudioSound sound = Sound;
+                if (sound == null || sound.Paused || sound.Finished || playbackEndMs <= playbackStartMs)
+                    return;
+
+                // Physical EOF already produces AudioSource.End. A timer is only needed when
+                // CRS intentionally ends playback before the file's real end (analysis/manual trim).
+                if (physicalLength == 0u || playbackEndMs >= physicalLength)
+                    return;
+
+                uint rawPosition = sound.PlayPosition;
+                uint remaining = playbackEndMs > rawPosition ? playbackEndMs - rawPosition : 0u;
+                int dueTime = remaining > int.MaxValue ? int.MaxValue : (int)Math.Max(1u, remaining);
+                int generation = ++logicalEndGeneration;
+                logicalEndTimer = new Timer(OnLogicalEndTimer, new LogicalEndTimerState(sound, generation), dueTime, Timeout.Infinite);
+            }
+        }
+
+        private void OnLogicalEndTimer(object state) {
+            var timerState = state as LogicalEndTimerState;
+            if (timerState == null)
+                return;
+
+            lock (logicalEndTimerSync) {
+                if (timerState.Generation != logicalEndGeneration)
+                    return;
+                logicalEndTimer = null;
+            }
+
+            MiniAudioSound sound = timerState.Sound;
+            if (sound == null || !ReferenceEquals(Sound, sound))
+                return;
+
+            try {
+                if (sound.Paused || sound.Finished)
+                    return;
+
+                uint rawPosition = sound.PlayPosition;
+                if (rawPosition >= playbackEndMs) {
+                    // Keep automatic programme advancement on the same serialized audio
+                    // callback path as MiniAudioEx physical EOF events. Carry the timer
+                    // generation as well so a seek/pause that happens before the queued
+                    // callback runs cannot complete an obsolete logical boundary.
+                    int generation = timerState.Generation;
+                    sound.EnqueueCallback(() => SignalLogicalPlaybackEnded(sound, generation));
+                    return;
+                }
+
+                // Timer granularity/scheduling can wake slightly early. Re-arm for the
+                // measured remainder rather than treating an early wake as completion.
+                ScheduleLogicalEnd();
+            } catch (ObjectDisposedException) {
+                // The source was replaced while this one-shot callback was running.
+            } catch (Exception ex) {
+                Logger.Log("WARNING: Logical playback boundary check failed for '" + FileName + "': " + ex.Message);
+            }
+        }
+
+        private void SignalLogicalPlaybackEnded(MiniAudioSound sound, int generation) {
+            lock (logicalEndTimerSync) {
+                if (generation != logicalEndGeneration)
+                    return;
+            }
+
+            if (!ReferenceEquals(Sound, sound) || sound.Paused || sound.Finished)
+                return;
+
+            // A same-source seek can race the timer after it has queued this callback.
+            // Re-check the actual cursor before treating the old boundary as completion.
+            if (sound.PlayPosition < playbackEndMs) {
+                ScheduleLogicalEnd();
+                return;
+            }
+
+            SignalPlaybackEnded(sound);
+        }
+
+        private void SignalPlaybackEnded(MiniAudioSound sound) {
+            if (!ReferenceEquals(Sound, sound) || Interlocked.Exchange(ref playbackCompletionSignaled, 1) != 0)
+                return;
+
+            CancelLogicalEndTimer();
+            Action<SoundFile> handler = PlaybackEnded;
+            if (handler != null)
+                handler(this);
+        }
+
+        private void CancelLogicalEndTimer() {
+            lock (logicalEndTimerSync) {
+                logicalEndGeneration++;
+                DisposeLogicalEndTimerLocked();
+            }
+        }
+
+        private void DisposeLogicalEndTimerLocked() {
+            Timer timer = logicalEndTimer;
+            logicalEndTimer = null;
+            if (timer != null) {
+                try { timer.Dispose(); } catch { }
+            }
+        }
+
+        private sealed class LogicalEndTimerState {
+            internal LogicalEndTimerState(MiniAudioSound sound, int generation) {
+                Sound = sound;
+                Generation = generation;
+            }
+
+            internal MiniAudioSound Sound { get; }
+            internal int Generation { get; }
+        }
+
         private void RecalculatePlaybackBounds() {
             MediaPlaybackBounds bounds = MediaPlaybackBounds.Calculate(physicalLength, mediaSource.StartMs, mediaSource.EndMs,
                 mediaSource.Analysis, mediaSource.AllowAnalysisTrimWithinBounds);
@@ -328,34 +550,49 @@ namespace CustomRadioStations {
         }
 
         public void Seek(uint logicalPositionMs) {
-            if (Sound == null)
+            MiniAudioSound sound = Sound;
+            if (sound == null)
                 return;
             uint position = Length > 0u ? Math.Min(logicalPositionMs, Length - 1u) : 0u;
             ulong raw = (ulong)playbackStartMs + position;
             uint upper = playbackEndMs > 0u ? playbackEndMs - 1u : 0u;
-            Sound.PlayPosition = (uint)Math.Min((ulong)upper, raw);
+            sound.PlayPosition = (uint)Math.Min((ulong)upper, raw);
+            Interlocked.Exchange(ref playbackCompletionSignaled, 0);
+            ScheduleLogicalEnd();
         }
 
         public void StopSound() {
-            if (Sound == null)
+            CancelLogicalEndTimer();
+            MiniAudioSound sound = Sound;
+            if (sound == null)
                 return;
-            if (!Sound.Finished)
-                Sound.Stop();
+            if (!sound.Finished)
+                sound.Stop();
         }
 
         public void ReleaseSound() {
-            if (Sound == null)
+            CancelLogicalEndTimer();
+            MiniAudioSound sound = Sound;
+            if (sound == null)
                 return;
-            Sound.Dispose();
             Sound = null;
+            sound.Dispose();
         }
 
         public bool IsPaused {
-            get { return Sound != null && Sound.Paused; }
+            get {
+                MiniAudioSound sound = Sound;
+                return sound != null && sound.Paused;
+            }
             set {
-                if (Sound == null || Sound.Finished)
+                MiniAudioSound sound = Sound;
+                if (sound == null || sound.Finished)
                     return;
-                Sound.Paused = value;
+                sound.Paused = value;
+                if (value)
+                    CancelLogicalEndTimer();
+                else
+                    ScheduleLogicalEnd();
             }
         }
 
@@ -364,11 +601,13 @@ namespace CustomRadioStations {
         }
 
         public bool IsFinishedPlaying() {
-            if (Sound == null)
+            MiniAudioSound sound = Sound;
+            if (sound == null)
                 return true;
-            if (playbackEndMs > playbackStartMs && RawPlayPosition() >= playbackEndMs)
+            uint rawPosition = sound.PlayPosition;
+            if (playbackEndMs > playbackStartMs && rawPosition >= playbackEndMs)
                 return true;
-            return Sound.Finished;
+            return sound.Finished;
         }
 
         /// <summary>Returns the current logical playback position in milliseconds.</summary>
@@ -381,37 +620,57 @@ namespace CustomRadioStations {
         }
 
         private uint RawPlayPosition() {
-            return Sound == null ? 0u : Sound.PlayPosition;
+            MiniAudioSound sound = Sound;
+            return sound == null ? 0u : sound.PlayPosition;
         }
 
         public void Dispose() {
-            if (Sound != null) {
-                Sound.Dispose();
-                Sound = null;
-            }
-            if (Clip != null) {
-                Clip.Dispose();
-                Clip = null;
-            }
+            CancelLogicalEndTimer();
+            MiniAudioSound sound = Sound;
+            Sound = null;
+            if (sound != null)
+                sound.Dispose();
+            AudioClip clip = Clip;
+            MiniAudioEngine engine = owningEngine;
+            Clip = null;
+            owningEngine = null;
+            if (clip != null && engine != null)
+                engine.DisposeClip(clip);
+            PlaybackEnded = null;
         }
 
-        public static MiniAudioEngine SoundEngine = new MiniAudioEngine();
+        private static readonly object SoundEngineSync = new object();
+        private static MiniAudioEngine soundEngine;
 
-        public static void ManageSoundEngine() {
-            if (SoundEngine != null)
-                SoundEngine.Update();
+        public static MiniAudioEngine SoundEngine {
+            get {
+                lock (SoundEngineSync) {
+                    if (soundEngine == null)
+                        soundEngine = new MiniAudioEngine();
+                    return soundEngine;
+                }
+            }
         }
 
         public static void StepVolume(float step, int decimals) {
-            if (SoundEngine == null)
-                return;
-            float temp = (float)Math.Round(SoundEngine.SoundVolume + step, decimals, MidpointRounding.ToEven);
-            SoundEngine.SoundVolume = temp.LimitToRange(0f, 1f);
+            MiniAudioEngine engine = SoundEngine;
+            float temp = (float)Math.Round(engine.SoundVolume + step, decimals, MidpointRounding.ToEven);
+            engine.SoundVolume = temp.LimitToRange(0f, 1f);
         }
 
         public static void DisposeSoundEngine() {
-            if (SoundEngine != null)
-                SoundEngine.Dispose();
+            lock (SoundEngineSync) {
+                MiniAudioEngine engine = soundEngine;
+                if (engine == null)
+                    return;
+
+                // Keep the singleton reference stable while teardown is in progress so no
+                // concurrent caller can construct a second AudioContext before the first
+                // one has fully stopped and deinitialized.
+                engine.Dispose();
+                if (ReferenceEquals(soundEngine, engine))
+                    soundEngine = null;
+            }
         }
     }
 
@@ -427,121 +686,182 @@ namespace CustomRadioStations {
         private bool paused;
         private bool finished;
         private bool disposed;
+        private int playbackRevision;
 
-        internal MiniAudioSound(MiniAudioEngine engine, AudioClip clip, bool looped, bool startPaused) {
+        internal event Action<MiniAudioSound> PlaybackEnded;
+
+        internal MiniAudioSound(MiniAudioEngine engine, AudioClip clip, bool looped, bool startPaused,
+            Action<MiniAudioSound> playbackEnded) {
             this.engine = engine;
             this.clip = clip;
             this.looped = looped;
+            if (playbackEnded != null)
+                PlaybackEnded += playbackEnded;
 
             source = new AudioSource(1);
-            source.End += OnPlaybackEnded;
-            source.Volume = 0f;
-            source.Play(clip);
-            source.Loop = looped;
+            try {
+                source.End += OnPlaybackEnded;
+                source.Volume = 0f;
+                source.Play(clip);
+                source.Loop = looped;
 
-            // A zero-length, non-playing source means the decoder/open operation failed.
-            if (source.Length == 0 && !source.IsPlaying) {
-                source.Dispose();
-                throw new InvalidDataException("MiniAudioEx could not decode or open: " + clip.FilePath);
+                // A zero-length, non-playing source means the decoder/open operation failed.
+                if (source.Length == 0 && !source.IsPlaying)
+                    throw new InvalidDataException("MiniAudioEx could not decode or open: " + clip.FilePath);
+
+                if (startPaused) {
+                    source.Stop();
+                    source.Cursor = 0;
+                    paused = true;
+                }
+
+                source.Volume = 1f;
+            } catch {
+                try { source.End -= OnPlaybackEnded; } catch { }
+                try { source.Dispose(); } catch { }
+                throw;
             }
-
-            if (startPaused) {
-                source.Stop();
-                source.Cursor = 0;
-                paused = true;
-            }
-
-            source.Volume = 1f;
         }
 
         public uint PlayPosition {
             get {
-                return FramesToMilliseconds(source.Cursor);
+                return engine.WithContextLock(() => disposed ? 0u : FramesToMilliseconds(source.Cursor));
             }
             set {
-                ulong frame = MillisecondsToFrames(value);
-                ulong length = source.Length;
-                source.Cursor = length > 0 && frame >= length ? length - 1 : frame;
-                if (finished && (length == 0 || source.Cursor < length))
+                bool restarted = false;
+                engine.WithContextLock(() => {
+                    if (disposed)
+                        return;
+
+                    ulong frame = MillisecondsToFrames(value);
+                    ulong length = source.Length;
+                    ulong cursor = length > 0 && frame >= length ? length - 1 : frame;
+
+                    // A seek can race physical EOF before AudioContext.Update has had a
+                    // chance to set our managed finished flag. If the native source is
+                    // already non-playing and this is not an intentional pause, restart it
+                    // before applying the requested cursor. The revision increment below
+                    // also invalidates any End callback that was already queued.
+                    if (!paused && (finished || !source.IsPlaying)) {
+                        source.Play(clip);
+                        source.Loop = looped;
+                        restarted = true;
+                    }
+
+                    source.Cursor = cursor;
                     finished = false;
+                    playbackRevision++;
+                });
+                if (restarted)
+                    engine.WakeEventPump();
             }
         }
 
         public uint PlayLength {
             get {
-                return FramesToMilliseconds(source.Length);
+                return engine.WithContextLock(() => disposed ? 0u : FramesToMilliseconds(source.Length));
             }
         }
 
         public bool Paused {
-            get {
-                return paused;
-            }
+            get { return engine.WithContextLock(() => disposed || paused); }
             set {
-                if (disposed || finished || paused == value)
-                    return;
+                bool resumed = false;
+                engine.WithContextLock(() => {
+                    if (disposed || finished || paused == value)
+                        return;
 
-                if (value) {
-                    source.Stop();
-                    paused = true;
-                    return;
-                }
+                    if (value) {
+                        source.Stop();
+                        paused = true;
+                        playbackRevision++;
+                        return;
+                    }
 
-                // AudioSource.Stop() preserves the cursor. Re-issuing Play() is the
-                // MiniAudioEx continue path; restore the cursor explicitly as well so
-                // this remains correct even if the backend reopens the streamed file.
-                ulong cursor = source.Cursor;
-                source.Play(clip);
-                source.Loop = looped;
-                if (cursor > 0)
-                    source.Cursor = cursor;
-                paused = false;
-                finished = false;
+                    // AudioSource.Stop() preserves the cursor. Re-issuing Play() is the
+                    // MiniAudioEx continue path; restore the cursor explicitly as well so
+                    // this remains correct even if the backend reopens the streamed file.
+                    ulong cursor = source.Cursor;
+                    source.Play(clip);
+                    source.Loop = looped;
+                    if (cursor > 0)
+                        source.Cursor = cursor;
+                    paused = false;
+                    finished = false;
+                    playbackRevision++;
+                    resumed = true;
+                });
+                if (resumed)
+                    engine.WakeEventPump();
             }
+        }
+
+        internal bool RequiresEventPump => !disposed && !paused && !finished;
+
+        internal void EnqueueCallback(Action callback) {
+            if (!disposed)
+                engine.EnqueueCallback(callback);
         }
 
         public bool Finished {
-            get {
-                if (!finished && !paused && !looped && !source.IsPlaying) {
-                    ulong length = source.Length;
-                    if (length > 0 && source.Cursor >= length)
-                        finished = true;
-                }
-                return finished;
-            }
+            get { return engine.WithContextLock(() => disposed || finished); }
         }
 
         public float Volume {
-            get {
-                return source.Volume;
-            }
+            get { return engine.WithContextLock(() => disposed ? 0f : source.Volume); }
             set {
-                source.Volume = Math.Max(0f, value);
+                engine.WithContextLock(() => {
+                    if (!disposed)
+                        source.Volume = Math.Max(0f, value);
+                });
             }
         }
 
         public void Stop() {
-            if (disposed)
-                return;
-            source.Stop();
-            paused = false;
-            finished = true;
+            engine.WithContextLock(() => {
+                if (disposed)
+                    return;
+                source.Stop();
+                paused = false;
+                finished = true;
+                playbackRevision++;
+            });
         }
 
         private void OnPlaybackEnded() {
-            if (!looped) {
-                paused = false;
-                finished = true;
-            }
+            if (looped || disposed)
+                return;
+
+            paused = false;
+            finished = true;
+            int revisionAtEnd = playbackRevision;
+
+            // AudioContext.Update dispatches this callback while the engine context lock is
+            // held. Queue CRS work so track disposal/start happens after Update returns.
+            // A seek/stop performed before the queue drains changes playbackRevision and
+            // invalidates this exact EOF instead of letting a stale End skip the new cursor.
+            engine.EnqueueCallback(() => {
+                Action<MiniAudioSound> handler = null;
+                engine.WithContextLock(() => {
+                    if (!disposed && finished && playbackRevision == revisionAtEnd)
+                        handler = PlaybackEnded;
+                });
+                if (handler != null)
+                    handler(this);
+            });
         }
 
         public void Dispose() {
-            if (disposed)
-                return;
-            disposed = true;
-            source.End -= OnPlaybackEnded;
-            source.Dispose();
-            engine.Unregister(this);
+            engine.WithContextLock(() => {
+                if (disposed)
+                    return;
+                disposed = true;
+                playbackRevision++;
+                PlaybackEnded = null;
+                source.End -= OnPlaybackEnded;
+                source.Dispose();
+                engine.Unregister(this);
+            });
         }
 
         private static uint FramesToMilliseconds(ulong frames) {
@@ -561,59 +881,207 @@ namespace CustomRadioStations {
     }
 
     /// <summary>
-    /// Process-local MiniAudioEx owner. The public surface intentionally mirrors the
-    /// tiny engine surface that the rest of CRS historically used.
+    /// Process-local MiniAudioEx owner. AudioContext.Update is pumped independently of
+    /// GTA's script tick so MiniAudioEx End events continue to dispatch while GTA is
+    /// paused or unfocused. All Standard API access is serialized through contextSyncRoot.
     /// </summary>
     internal sealed class MiniAudioEngine : IDisposable {
         private const uint SampleRate = 48000;
         private const uint Channels = 2;
+        private const int UpdateIntervalMs = 10;
+
         private readonly List<MiniAudioSound> sounds = new List<MiniAudioSound>();
+        private readonly Queue<Action> callbackQueue = new Queue<Action>();
+        private readonly object contextSyncRoot = new object();
+        private readonly object callbackSyncRoot = new object();
+        private readonly AutoResetEvent updateWake = new AutoResetEvent(false);
+        private readonly Thread updateThread;
+        private volatile bool stopping;
         private bool disposed;
+        private DateTime lastUpdateFailureLogUtc = DateTime.MinValue;
+        private int suppressedUpdateFailures;
 
         internal MiniAudioEngine() {
             MiniAudioNativeLoader.LoadFromScriptDirectory();
             MiniAudioFrameworkCompatibility.Initialize(SampleRate, Channels);
+
+            try {
+                updateThread = new Thread(UpdateLoop) {
+                    IsBackground = true,
+                    Name = "CRS MiniAudio Event Pump"
+                };
+                updateThread.Start();
+            } catch {
+                // SoundEngine is assigned only after this constructor succeeds. If the
+                // worker cannot start, roll the process-global AudioContext back now or a
+                // later retry would fail with "MiniAudioEx is already initialized".
+                try { AudioContext.Deinitialize(); } catch { }
+                try { updateWake.Dispose(); } catch { }
+                disposed = true;
+                stopping = true;
+                throw;
+            }
         }
 
         public float SoundVolume {
-            get {
-                return disposed ? 0f : AudioContext.MasterVolume;
-            }
+            get { return WithContextLock(() => disposed ? 0f : AudioContext.MasterVolume); }
             set {
-                if (!disposed)
-                    AudioContext.MasterVolume = value.LimitToRange(0f, 1f);
+                WithContextLock(() => {
+                    if (!disposed)
+                        AudioContext.MasterVolume = value.LimitToRange(0f, 1f);
+                });
             }
         }
 
-        internal MiniAudioSound Play2D(AudioClip clip, bool looped, bool startPaused) {
-            if (disposed)
-                return null;
-            var sound = new MiniAudioSound(this, clip, looped, startPaused);
-            sounds.Add(sound);
+        internal AudioClip CreateClip(string filePath, bool streamFromDisk) {
+            return WithContextLock(() => {
+                if (disposed || stopping)
+                    throw new ObjectDisposedException(nameof(MiniAudioEngine));
+                return new AudioClip(filePath, streamFromDisk);
+            });
+        }
+
+        internal void DisposeClip(AudioClip clip) {
+            if (clip == null)
+                return;
+            WithContextLock(() => {
+                // AudioContext.Deinitialize() releases every registered clip handle. A
+                // late owner cleanup after engine teardown must not ask AudioClip to touch
+                // that already-deinitialized global context again.
+                if (!disposed)
+                    clip.Dispose();
+            });
+        }
+
+        internal MiniAudioSound Play2D(AudioClip clip, bool looped, bool startPaused,
+            Action<MiniAudioSound> playbackEnded) {
+            MiniAudioSound sound = WithContextLock(() => {
+                if (disposed || stopping)
+                    return null;
+                var created = new MiniAudioSound(this, clip, looped, startPaused, playbackEnded);
+                sounds.Add(created);
+                return created;
+            });
+            if (sound != null)
+                updateWake.Set();
             return sound;
         }
 
-        internal void Update() {
-            if (!disposed)
-                AudioContext.Update();
+        internal T WithContextLock<T>(Func<T> action) {
+            lock (contextSyncRoot)
+                return action();
+        }
+
+        internal void WithContextLock(Action action) {
+            lock (contextSyncRoot)
+                action();
+        }
+
+        internal void EnqueueCallback(Action callback) {
+            if (callback == null || stopping)
+                return;
+            lock (callbackSyncRoot)
+                callbackQueue.Enqueue(callback);
+            updateWake.Set();
+        }
+
+        internal void WakeEventPump() {
+            if (!stopping)
+                updateWake.Set();
         }
 
         internal void Unregister(MiniAudioSound sound) {
-            sounds.Remove(sound);
+            lock (contextSyncRoot)
+                sounds.Remove(sound);
+        }
+
+        private void UpdateLoop() {
+            while (!stopping) {
+                bool hasActiveSounds = false;
+                try {
+                    lock (contextSyncRoot) {
+                        if (!disposed) {
+                            hasActiveSounds = sounds.Any(sound => sound.RequiresEventPump);
+                            if (hasActiveSounds)
+                                AudioContext.Update();
+                        }
+                    }
+                } catch (Exception ex) {
+                    LogUpdateFailure(ex);
+                }
+
+                // Do not let an AudioContext.Update failure starve callbacks that were
+                // already queued by a valid EOF/logical-boundary event. Callback failures
+                // are isolated individually inside DrainCallbacks().
+                DrainCallbacks();
+
+                if (stopping)
+                    break;
+
+                // Paused/finished sources cannot produce a new End event. Sleep until
+                // Play2D, resume, or a queued callback wakes us instead of burning a 100 Hz
+                // idle poll while a station is stopped or background playback is suspended.
+                updateWake.WaitOne(hasActiveSounds ? UpdateIntervalMs : Timeout.Infinite);
+            }
+        }
+
+        private void LogUpdateFailure(Exception ex) {
+            DateTime now = DateTime.UtcNow;
+            if ((now - lastUpdateFailureLogUtc).TotalSeconds < 5d) {
+                suppressedUpdateFailures++;
+                return;
+            }
+
+            string suppressed = suppressedUpdateFailures > 0
+                ? " (" + suppressedUpdateFailures + " repeated failures suppressed)"
+                : string.Empty;
+            suppressedUpdateFailures = 0;
+            lastUpdateFailureLogUtc = now;
+            try { Logger.Log("WARNING: MiniAudioEx event pump failed: " + ex.Message + suppressed); } catch { }
+        }
+
+        private void DrainCallbacks() {
+            while (true) {
+                Action callback;
+                lock (callbackSyncRoot) {
+                    if (callbackQueue.Count == 0)
+                        return;
+                    callback = callbackQueue.Dequeue();
+                }
+
+                try { callback(); }
+                catch (Exception ex) {
+                    try { Logger.Log("WARNING: MiniAudioEx playback callback failed: " + ex.Message); } catch { }
+                }
+            }
         }
 
         public void Dispose() {
             if (disposed)
                 return;
 
-            // Dispose a copy because MiniAudioSound.Dispose unregisters itself.
-            foreach (MiniAudioSound sound in sounds.ToArray()) {
-                try { sound.Dispose(); } catch { }
-            }
-            sounds.Clear();
+            stopping = true;
+            updateWake.Set();
+            if (Thread.CurrentThread != updateThread)
+                updateThread.Join();
 
-            AudioContext.Deinitialize();
-            disposed = true;
+            lock (contextSyncRoot) {
+                if (disposed)
+                    return;
+
+                // Dispose a copy because MiniAudioSound.Dispose unregisters itself.
+                foreach (MiniAudioSound sound in sounds.ToArray()) {
+                    try { sound.Dispose(); } catch { }
+                }
+                sounds.Clear();
+
+                AudioContext.Deinitialize();
+                disposed = true;
+            }
+
+            updateWake.Dispose();
+            lock (callbackSyncRoot)
+                callbackQueue.Clear();
         }
     }
 

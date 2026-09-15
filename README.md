@@ -15,6 +15,30 @@ The settings footer now adapts to constrained 4:3 / safe-zone layouts. Wide layo
 The settings UI and settings model now share one canonical set of built-in defaults. Default indicators, per-item reset actions, **Reset Settings to Defaults**, newly-created `settings.json` files, and runtime startup defaults all resolve through the same values, preventing UI/default drift when defaults are changed in future versions.
 
 
+## Track rating notes
+
+The custom radio wheel now includes a metadata-only five-star rating row beneath the selected song. Ratings support half-star increments from 0.5 through 5.0; an empty rating is treated as unrated. While the custom wheel is open, the two face-button controls shown around the stars lower or raise the highlighted song by 0.5. Tapping changes one half-star; holding repeats after a short delay so large changes do not require ten separate presses. The displayed control tokens follow GTA's active input mapping, so the same interaction works with keyboard or controller without hard-coded button art. The RATE label, numeric value, and input tokens are always rendered by GTA's native text path so `~INPUT_*~` tokens remain real controller/key glyphs even when Unicode bitmap mode is forced; only the star row uses the custom Unicode renderer.
+
+Ratings are stored separately in `scripts\Custom Radio Stations\track-ratings.json`. They do not affect shuffle, broadcast scheduling, station selection, replay frequency, or any other playback weighting. Ratings use the same `sample-v1:` sampled-content identity as `audio-analysis.json`, so renaming or moving a file does not lose its rating. The saved `file` field is only a human-readable hint for where that audio lived when it was last rated and is refreshed whenever the song is rated again. Manually bounded/split sources keep the analyzer `|segment:` suffix, while individual songs inside continuous CUE/tracklist recordings add `|subtrack:<startMs>` so each logical song remains independently rateable. Lowering a 0.5-star rating once more clears it back to unrated.
+
+Example rating entry:
+
+```json
+{
+  "version": 2,
+  "ratings": {
+    "sample-v1:123456:0123456789abcdef...": {
+      "file": "D:\\Music\\Artist\\Song.mp3",
+      "artist": "Artist",
+      "title": "Song",
+      "rating": 3.5,
+      "updatedUtc": "2026-09-14T20:00:00Z"
+    }
+  }
+}
+```
+
+
 # Custom Radio Stations for GTA V
 
 > **Enhanced compatibility port v0.6 (2026):** GTA V Enhanced, ScriptHookVDotNet Enhanced, the ScriptHookVDotNet3 API, .NET Framework 4.8, and MiniAudioEx 3.3.6.
@@ -166,6 +190,8 @@ return CRSAPI.CurrentStation;
 return CRSAPI.CurrentTrack;
 return CRSAPI.Position;
 return CRSAPI.Duration;
+return CRSAPI.CurrentRating;
+return CRSAPI.CurrentRatingKey;
 
 CRSAPI.NextSong();
 CRSAPI.PreviousSong();
@@ -177,6 +203,11 @@ CRSAPI.SeekPercent(50);
 CRSAPI.Pause();
 CRSAPI.Play();
 CRSAPI.TogglePause();
+
+CRSAPI.RateUp();
+CRSAPI.RateDown();
+CRSAPI.SetRating(3.5);
+CRSAPI.ClearRating();
 
 CRSAPI.NextStation();
 CRSAPI.PreviousStation();
@@ -191,7 +222,7 @@ return CRSAPI.DumpProgramme();
 return CRSAPI.Stations();
 ```
 
-`CRSAPI.Position` and `CRSAPI.Duration` refer to the current logical song. For a continuous CUE/tracklist source this means the current sub-track, not the full backing mix. `CRSAPI.Track.MediaPosition` / `MediaDuration` and `BoundsInfo()` expose the containing trimmed media source when lower-level debugging is needed. Public `CRSTrackInfo` and `CRSStationInfo` objects are immutable snapshots; the API intentionally does not expose mutable `RadioStation`, `SoundFile` or MiniAudio objects.
+`CRSAPI.Position` and `CRSAPI.Duration` refer to the current logical song. For a continuous CUE/tracklist source this means the current sub-track, not the full backing mix. `CRSAPI.CurrentRating`, `CRSAPI.Track.Rating`, and `CRSAPI.CurrentRatingKey` expose the same metadata-only rating and stable sampled-content identity used by the wheel. `RateUp()`, `RateDown()`, `SetRating(value)`, and `ClearRating()` are queued through the normal main-thread API command path. `CRSAPI.Track.MediaPosition` / `MediaDuration` and `BoundsInfo()` expose the containing trimmed media source when lower-level debugging is needed. Public `CRSTrackInfo` and `CRSStationInfo` objects are immutable snapshots; the API intentionally does not expose mutable `RadioStation`, `SoundFile` or MiniAudio objects.
 
 Commands return a short `Queued: ...` string immediately. The actual mutation is processed on the next Custom Radio Stations tick (normally within the script's 10 ms interval), and `CRSAPI.LastResult` contains the most recent execution result.
 
@@ -205,6 +236,7 @@ A custom wheel opens only after GTA accepts the radio-wheel input and activates 
 All application-owned configuration is JSON going forward:
 
 - `settings.json` stores global volume, startup, display, graphics, keyboard and gamepad settings. It is created with defaults on first run and runtime volume changes are persisted.
+- `track-ratings.json` stores optional per-song 0.5–5.0 star ratings keyed by the same stable `sample-v1:` content fingerprints used by audio analysis; `file` is only the last-rated location hint. This metadata is informational only and never affects playback selection or ordering.
 - Optional `wheel.json` inside a wheel folder overrides `iconWidth`, `iconHeight`, and `radius` for that custom wheel.
 - Optional `native-wheels.json` organizes GTA's built-in stations. It fails open: absent or invalid configuration leaves the stock wheel usable.
 - `station.json` defines new custom stations.
@@ -224,7 +256,7 @@ Example `wheel.json`:
 
 Custom wheel labels use GTA's native text renderer whenever the active Western font can represent the text. `graphics.unicodeTextMode` defaults to `Auto`; when a label contains characters outside the known-safe Western set, CRS renders the complete label once into a transparent texture and reuses the cached texture. This avoids the missing-glyph boxes GTA shows for titles such as `好き？ Suki!` while preserving the original native path for ordinary English/Latin titles.
 
-The bitmap fallback first looks for `graphics.unicodeFont`, then for a supported font in `scripts\Custom Radio Stations\Fonts`, and finally for suitable CJK fonts already installed by Windows. A bundled/private font is preferred because it gives consistent coverage without installing anything globally. TTF is the safest format for the .NET Framework/GDI+ renderer. Private font candidates are probed with the actual vector-outline operation before use, so an unsupported OpenType/CFF font is skipped in favour of the next usable font instead of failing title-by-title. See `Fonts\README.txt` for suggested filenames and licensing notes.
+The bitmap fallback first looks for `graphics.unicodeFont`, then for a supported font in `scripts\Custom Radio Stations\Fonts`, and finally for suitable installed system fonts. The system list includes Windows CJK families, Segoe UI Symbol, Noto Sans Symbols 2, and Wine-friendly DejaVu/Liberation families. A bundled/private font is preferred because it gives consistent coverage without installing anything globally. TTF is the safest format for the .NET Framework/GDI+ renderer. Private font candidates are probed with the actual vector-outline operation before use, so an unsupported OpenType/CFF font is skipped in favour of the next usable font instead of failing title-by-title. See `Fonts\README.txt` for suggested filenames and licensing notes.
 
 The fallback keeps GDI+'s alternate-font fallback enabled, so an uncommon glyph missing from the
 primary family can still be sourced from another installed Windows font while the complete label is
@@ -426,4 +458,11 @@ Mouse slider and scrollbar drags now retain pointer capture when the cursor leav
 ## Settings UI v48
 
 Settings footer status messages now distinguish errors visually: failed save/reload/reset/actions use the restrained danger treatment, while successful and informational statuses retain the normal CRS/GTA accent.
+## Audio playback lifecycle
+
+CRS no longer relies on the GTA/SHVDN frame tick to notice that a media source ended. MiniAudioEx is pumped by a lightweight background event service, physical EOF advances through `AudioSource.End`, and analysis/manual end trims use a one-shot logical-boundary timer routed through the same serialized audio callback queue. Continuous CUE/tracklist display changes also use one-shot boundary timers instead of checking a timestamp every GTA tick; those timers only request a game-thread wheel refresh. The MiniAudio event pump sleeps indefinitely when there are no actively playing sources (paused sources do not keep it awake), so an idle or suspended radio does not create a 100 Hz background poll. Physical and logical completion callbacks are generation/revision checked before station advancement, and station playback transitions are serialized, preventing a late EOF from skipping a track after a seek, restart, manual skip, or source replacement. The GTA tick remains responsible only for game-thread work such as applying pending wheel metadata and GTA audio flags.
+
+Shutdown tears down station timers, sources, and clips before MiniAudio's global context is deinitialized. The global engine reference is then cleared so a later script reload can construct a fresh MiniAudio context instead of reusing a disposed singleton.
+
+While the custom radio wheel is open, CRS disables both frontend input group 2 and player input group 0, then restores only the wheel's existing movement/driving whitelist on both groups. Frontend X/Y therefore remain readable through GTA's disabled-control path for rating while every gameplay alias of the same physical X/Y buttons stays suppressed (including jump, enter/exit, vehicle weapon selection, and other context-specific bindings).
 
